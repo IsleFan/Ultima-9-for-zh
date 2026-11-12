@@ -22,6 +22,10 @@ inline constexpr uint32_t DrawStringUnbounded = 0xFFFFFFFF;
 // 0x4260F1 builds the bestiary title from misctext 255: text[0] becomes a "\x0C\x11%c" drop cap and text+1 the
 // title. Its marked cache gets a sacrificial leading space so the whole Chinese title stays in text+1.
 inline constexpr uint32_t MiscDropCapEntry = 0xC000 + 255;
+// Plan entries of misctext strings start here (runtime_pack.py "misc_entry_base").
+inline constexpr uint32_t MiscEntryBase = 0xC000;
+// 0x42E0C0 writes the diary's "Day N:" header from named text 0x63, so diary.txt keeps its marker (session-28).
+inline constexpr uint32_t MiscDiaryDayEntry = MiscEntryBase + 0x63;
 // 0x41F2C3/0x41F300: the message box builds its text rectangle (0x1C,0x26,0x9C,0x50) on its own stack and passes
 // {1,&rect} to the flow initializer (return 0x41F305). Chinese fills every line to the frame edge, so a flow
 // holding misctext Chinese is inset by this many raster pixels on both sides.

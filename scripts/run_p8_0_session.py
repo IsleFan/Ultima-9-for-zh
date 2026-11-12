@@ -26,6 +26,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ("Options.ini", "dxcfg.ini", "Default.kmp")
 TEST_KEYMAP = "U9CHT-TEST.kmp"
+DEFAULT_GAME = ROOT / ".local/runtime-game"
 WRAPPER_SHA256 = "f045795c50eb1e5bf93853a32ca00ebe58d47b94da61842558aeecd3f755a502"
 FAILURE_EVENTS = {"runtime_fail", "launcher_fail", "runtime_restore_failed", "handshake_fail"}
 ZERO_COUNTERS = ("errors", "first_error", "lifecycle_dropped", "lock_failures", "unlock_failures")
@@ -35,8 +36,17 @@ def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+# Steam release: the GOG u9.exe plus an EA Authenticode signature, code identical (version_manifest.h SteamExeHash).
+STEAM_EXE_SHA256 = "339a5ba8683546363ab8b95c53d3e980dfbd959afe8719b11f2666c4dbd0e152"
+
+
 def baseline():
     return json.loads((ROOT / "reports/P0_HASHES.json").read_text(encoding="utf-8"))["assets"]
+
+
+def matches_baseline(game, asset):
+    actual = sha(game / asset["filename"])
+    return actual == asset["sha256"] or (asset["filename"] == "u9.exe" and actual == STEAM_EXE_SHA256)
 
 
 def write_json(path, value):
@@ -66,13 +76,27 @@ def start(args):
     if subprocess.check_output(["git", "diff", "--cached", "--name-only"], cwd=ROOT).strip():
         raise SystemExit("STOP: staged files present")
     for asset in baseline():
-        if sha(game / asset["filename"]) != asset["sha256"]:
+        if not matches_baseline(game, asset):
             raise SystemExit(f"STOP: {asset['filename']} differs from the P0 baseline")
     if sha(game / "ddraw.dll") != WRAPPER_SHA256:
         raise SystemExit("STOP: wrapper differs from baseline")
     manifest = json.loads((args.build / "build-manifest.json").read_text(encoding="utf-8"))
     pack = args.pack or args.build / "runtime/allowlist.u9ct"
     exe, dll = args.runtime / "U9ChtLauncher.exe", args.runtime / "U9ChtRuntime.dll"
+    # Everything is checked before the first write, so a STOP never leaves the copy half installed.
+    for name, digest in manifest["resource_output_sha256"].items():
+        if sha(args.build / "static" / name) != digest:
+            raise SystemExit(f"STOP: {name} differs from its build manifest")
+    # The Steam release ships presentation=application (full screen). Sessions run windowed;
+    # dxcfg.ini is restored from the backup at finish.
+    wrapper = re.sub(rb"display=[^\r\n]+", b"display=1600x1200@120", (game / "dxcfg.ini").read_bytes())
+    wrapper = re.sub(rb"presentation=[^\r\n]+", b"presentation=windowed", wrapper)
+    if b"presentation=windowed" not in wrapper:
+        raise SystemExit("STOP: wrapper has no presentation setting")
+    if args.keymap and not re.search(rb"Current_Keymap=[^\r\n]+", (game / "Options.ini").read_bytes()):
+        raise SystemExit("STOP: Options.ini has no Current_Keymap")
+    if (args.diary_fixture or args.seed_saves) and not args.preserve_saves:
+        raise SystemExit("--diary-fixture/--seed-saves require --preserve-saves")
     session.mkdir(parents=True)
     (session / "backup").mkdir()
     for name in CONFIG:
@@ -80,8 +104,6 @@ def start(args):
     installed = {}
     for name, digest in manifest["resource_output_sha256"].items():
         source = args.build / "static" / name
-        if sha(source) != digest:
-            raise SystemExit(f"STOP: {name} differs from its build manifest")
         target = game / "static" / name
         shutil.copyfile(target, session / "backup" / name)
         shutil.copyfile(source, target)
@@ -90,12 +112,9 @@ def start(args):
     options = re.sub(rb"GameScreenWidth=\d+", b"GameScreenWidth=1600", options)
     options = re.sub(rb"GameScreenHeight=\d+", b"GameScreenHeight=1200", options)
     (game / "Options.ini").write_bytes(options)
-    wrapper = re.sub(rb"display=[^\r\n]+", b"display=1600x1200@120", (game / "dxcfg.ini").read_bytes())
-    if b"presentation=windowed" not in wrapper:
-        raise SystemExit("STOP: wrapper is not windowed")
     (game / "dxcfg.ini").write_bytes(wrapper)
     receipt = {
-        "phase": "P8-0", "label": args.label, "status": "ACTIVE",
+        "phase": "P8-0", "label": args.label, "status": "ACTIVE", "game_dir": rel(game),
         "head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
         "runtime_sha256": sha(dll), "launcher_sha256": sha(exe), "pack_sha256": sha(pack),
         "font_sha256": sha(args.font), "settings_sha256": sha(args.config) if args.config else None,
@@ -165,7 +184,7 @@ def restore(session, game, receipt):
     if "test_keymap_sha256" in receipt and (game / TEST_KEYMAP).exists():
         shutil.copyfile(game / TEST_KEYMAP, session / "final-test-keymap.kmp")
         (game / TEST_KEYMAP).unlink()
-    mismatched = [a["filename"] for a in baseline() if sha(game / a["filename"]) != a["sha256"]]
+    mismatched = [a["filename"] for a in baseline() if not matches_baseline(game, a)]
     keymap_same = sha(game / "Default.kmp") == sha(session / "backup/Default.kmp")
     saves_restored = None
     if "moved_saves" in receipt:
@@ -240,8 +259,12 @@ def summarize(session, args, receipt):
 
 
 def finish(args):
-    session, game = args.session, args.game_dir
+    session = args.session
     receipt = json.loads((session / "launch.json").read_text(encoding="utf-8"))
+    # Restore the copy the session was started on (session-28 was finished against the default copy by mistake).
+    game = ROOT / receipt["game_dir"] if "game_dir" in receipt else args.game_dir or DEFAULT_GAME
+    if args.game_dir and args.game_dir != game.resolve():
+        raise SystemExit(f"STOP: session was started on {receipt.get('game_dir')}, not {rel(args.game_dir)}")
     if receipt["status"] != "ACTIVE":
         raise SystemExit("session already closed")
     rows = read_log(session)
@@ -317,7 +340,7 @@ def main(argv=None):
     parser.add_argument("command", choices=("start", "finish", "stress"))
     parser.add_argument("--session", required=True, type=Path)
     parser.add_argument("--label", default="")
-    parser.add_argument("--game-dir", type=Path, default=ROOT / ".local/runtime-game")
+    parser.add_argument("--game-dir", type=Path, help="private copy (default .local/runtime-game; finish uses the copy recorded at start)")
     parser.add_argument("--build", type=Path, help="build_localization.py output")
     parser.add_argument("--pack", type=Path, help="pack to load instead of the build's own")
     parser.add_argument("--runtime", type=Path, help="directory holding the launcher and runtime DLL")
@@ -339,7 +362,10 @@ def main(argv=None):
                         help="test keymap installed as U9CHT-TEST.kmp and selected for this session only; "
                              "Default.kmp is never modified")
     args = parser.parse_args(argv)
-    args.session, args.game_dir = args.session.resolve(), args.game_dir.resolve()
+    args.session = args.session.resolve()
+    if args.command != "finish":
+        args.game_dir = args.game_dir or DEFAULT_GAME
+    args.game_dir = args.game_dir.resolve() if args.game_dir else None
     args.font = args.font.resolve()
     if args.config:
         args.config = args.config.resolve()

@@ -1127,8 +1127,31 @@ bool Engine::expand_journal(uintptr_t text_ref, uintptr_t text, uint32_t length)
     try {
         const auto* s = reinterpret_cast<const char*>(text);
         std::string out; out.reserve(size_t(length)+512);
-        std::vector<JournalSegment> segments; uint32_t count = 0, unknown = 0, dropped = 0, kept = 0;
+        std::vector<JournalSegment> segments; uint32_t count = 0, unknown = 0, dropped = 0, kept = 0, headers = 0;
+        const auto* u = reinterpret_cast<const uint8_t*>(text);
+        const int header_plan = plan_for_entry(MiscDiaryDayEntry);
         for (uint32_t i = 0; i < length;) {
+            // The "Day N:" header (0x42E0C0) is written from the marked misctext object, so diary.txt holds
+            // `marker + slots`. The marker's plan index is only valid for the build that wrote it, so a marker
+            // whose index no longer names a misctext plan with these slots binds to the current header plan.
+            uint32_t marked = 0;
+            if (u[i] == MiscMarkerLead && decode_misc_marker(u+i,length-i,marked)) {
+                const auto fits = [&](int plan) {
+                    if (plan < 0 || uint32_t(plan) >= pack.count) return false;
+                    const auto& p = pack.plans[size_t(plan)];
+                    if (p.is_name() || p.is_book() || p.entry < MiscEntryBase || !p.length ||
+                        i+MiscMarkerSize+p.length > length) return false;
+                    return std::memcmp(u+i+MiscMarkerSize,p.slots.data(),p.length) == 0;
+                };
+                const int plan = fits(int(marked)) ? int(marked) : fits(header_plan) ? header_plan : -1;
+                if (plan >= 0) {
+                    const auto& p = pack.plans[size_t(plan)];
+                    segments.push_back({uint32_t(out.size()),uint32_t(plan),0,p.length});
+                    out.append(reinterpret_cast<const char*>(p.slots.data()),p.length);
+                    i += MiscMarkerSize+p.length; ++headers; continue;
+                }
+                ++unknown;
+            }
             if ((i == 0 || s[i-1] == ' ' || s[i-1] == '\n') && i+3 < length && s[i] == 'U' && s[i+1] == '9' && s[i+2] == 'J') {
                 uint32_t j = i+3, id = 0, digits = 0;
                 while (j < length && s[j] >= '0' && s[j] <= '9' && digits < 6) { id = id*10+uint32_t(s[j]-'0'); ++j; ++digits; }
@@ -1155,7 +1178,7 @@ bool Engine::expand_journal(uintptr_t text_ref, uintptr_t text, uint32_t length)
             }
             out += s[i++];
         }
-        if (!count) { if (unknown) { Exclusive lock(mutex); journal_unknown_markers += unknown; } return false; }
+        if (!count && !headers) { if (unknown) { Exclusive lock(mutex); journal_unknown_markers += unknown; } return false; }
         auto* copy = reinterpret_cast<char*(__cdecl*)(size_t)>(0x7108F0)(out.size()+1);
         if (!copy) { Exclusive lock(mutex); ++journal_alloc_failures; return false; }
         std::memcpy(copy,out.data(),out.size()); copy[out.size()] = 0;
@@ -1165,7 +1188,7 @@ bool Engine::expand_journal(uintptr_t text_ref, uintptr_t text, uint32_t length)
         auto& b = journal_buffers[journal_next++ % journal_buffers.size()];
         b = {}; b.base = reinterpret_cast<uintptr_t>(copy); b.size = uint32_t(out.size()+1); b.entries = count;
         b.segments = std::move(segments);
-        ++journal_expansions; journal_spans += count; journal_unknown_markers += unknown; journal_breaks_dropped += dropped; journal_spaces_kept += kept;
+        ++journal_expansions; journal_spans += count; journal_day_headers += headers; journal_unknown_markers += unknown; journal_breaks_dropped += dropped; journal_spaces_kept += kept;
         return true;
     } catch (...) { Exclusive lock(mutex); ++journal_alloc_failures; }
     return false;
@@ -1842,7 +1865,7 @@ void Engine::snapshot(const char* event) noexcept {
           fields += ",\"caller_overflow\":"+std::to_string(caller_overflow)+"}";
           fields += ",\"texture\":{\"enabled\":"+std::string(texture_enabled?"true":"false")+
               ",\"markers\":"+std::to_string(journal_markers)+",\"marker_short\":"+std::to_string(journal_marker_short)+
-              ",\"expansions\":"+std::to_string(journal_expansions)+",\"spans\":"+std::to_string(journal_spans)+",\"width_overrides\":"+std::to_string(journal_width_overrides)+",\"breaks_dropped\":"+std::to_string(journal_breaks_dropped)+",\"book_converts\":"+std::to_string(book_converts)+",\"book_short\":"+std::to_string(book_short)+
+              ",\"expansions\":"+std::to_string(journal_expansions)+",\"spans\":"+std::to_string(journal_spans)+",\"day_headers\":"+std::to_string(journal_day_headers)+",\"width_overrides\":"+std::to_string(journal_width_overrides)+",\"breaks_dropped\":"+std::to_string(journal_breaks_dropped)+",\"book_converts\":"+std::to_string(book_converts)+",\"book_short\":"+std::to_string(book_short)+
               ",\"book_bound\":"+std::to_string(book_bound)+",\"book_mismatch\":"+std::to_string(book_mismatch)+
               ",\"book_width_overrides\":"+std::to_string(book_width_overrides)+",\"spaces_kept\":"+std::to_string(journal_spaces_kept)+",\"leading_applied\":"+std::to_string(journal_leading_applied)+
               ",\"unknown_markers\":"+std::to_string(journal_unknown_markers)+",\"stale\":"+std::to_string(journal_stale)+

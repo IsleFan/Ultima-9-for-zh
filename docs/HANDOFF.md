@@ -109,7 +109,12 @@
   - 私人副本 `.local/steam-game` 已在遊戲內實測，中文化正常（2026-11-12）。
   - **測試時也不要按「切換版本」**：它會指到使用者原本的安裝。
 - 「讀檔後再開新遊戲，世界沒有重置」：原版 bug，英文原版也會（CONFIRMED）。只記錄，見 `docs/research/U9_NEW_GAME_AFTER_LOAD.md`。說明檔要提醒玩家先重新啟動遊戲。
-- 目前最新建置是 `out-m24`，存檔在 `.local/p10-misc/session-27/final-savegame`。
+- session 28（Steam 副本，作弊鍵走流程）發現兩個問題，已修正（runtime 0.2.44、建置 `out-m25`），尚未進遊戲驗證：
+  - 日誌開頭出現「!mH」：日期標頭「Day N:」由介面字串 misctext 0x63 寫入 `diary.txt`，帶著介面記號；顯示日誌時現在也展開這個記號。記號編號跨建置會變，對不上時改用目前的標頭字串（計數 `day_headers`）。
+  - 背包藍色書名「Game Controls」沒翻：TYPENAME 5737 原本沒有翻譯紀錄，已補「冒險日誌」。
+- session 工具：可用 Steam 副本（接受 Steam 版 u9.exe，執行時改為視窗模式）；所有檢查在寫入前完成；finish 自動使用 start 時記錄的副本。
+  - session 28 的 finish 曾誤用預設的 GOG 副本，兩個副本都已復原並驗證；GOG 副本原本的存檔保留在 `session-28/gog-savegame-before-wrong-finish`。
+- 目前最新建置是 `out-m25`，存檔在 `.local/p10-misc/session-28/final-savegame`（Steam 副本）。
 
 ## 4. 用中文手冊校對文本（2026-11-11 完成）
 

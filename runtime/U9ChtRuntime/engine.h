@@ -181,7 +181,7 @@ struct Engine {
     bool input_hooks_enabled = false;  // input probe / wheel pages / hover names (see input_hooks.h)
     uint32_t movie_cue_rejects = 0;
     uint32_t journal_next = 0;
-    uint64_t journal_markers = 0, journal_marker_short = 0, journal_expansions = 0, journal_spans = 0;
+    uint64_t journal_markers = 0, journal_marker_short = 0, journal_expansions = 0, journal_spans = 0, journal_day_headers = 0;
     uint64_t journal_width_overrides = 0, journal_breaks_dropped = 0, journal_spaces_kept = 0, journal_leading_applied = 0;
     uint32_t journal_letter = 0, journal_line = 0;
     uint32_t journal_advance(uint8_t previous, uint32_t base, uint32_t& lead) const noexcept;
