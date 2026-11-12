@@ -158,11 +158,16 @@ void update_hover() {
     hover_active = true; last_repeat = now; ++hover_presses;
 }
 
+bool transforming() { return options.wheel || options.zoom || options.hover || options.on_key; }
 bool in_filter(const MSG& m, UINT min, UINT max) { return (!min && !max) || (m.message >= min && m.message <= max); }
 
 // Rewrites a removed message for the features. Returns the message to hand to the game.
 void transform(MSG& m) {
     track_modifiers(m);
+    if (options.on_key && (m.message == WM_KEYDOWN || m.message == WM_SYSKEYDOWN) && !synthetic(m) && !(m.lParam & (1 << 30))) {
+        const UINT mods = (key_state_down(VK_CONTROL) ? 1U : 0U) | (key_state_down(VK_SHIFT) ? 2U : 0U) | (key_state_down(VK_MENU) ? 4U : 0U);
+        options.on_key(UINT(m.wParam), mods);
+    }
     if (options.hover) {
         if (m.message == WM_MOUSEMOVE || (m.message >= WM_LBUTTONDOWN && m.message <= WM_MBUTTONDBLCLK)) game_window = m.hwnd;
         if (m.message == WM_CHAR && synthetic(m)) { m.message = WM_NULL; m.wParam = 0; m.lParam = 0; ++chars_suppressed; return; }
@@ -212,11 +217,11 @@ std::string table(const char* key, std::atomic<long>* values) {
 }
 
 void configure(const Options& o) { options = o; }
-bool any_enabled() { return options.probe || options.wheel || options.zoom || options.hover; }
+bool any_enabled() { return options.probe || transforming(); }
 
 BOOL WINAPI peek_hook(LPMSG msg, HWND hwnd, UINT min, UINT max, UINT remove) {
     if (options.probe) ++peek_calls;
-    if (msg && (options.wheel || options.zoom || options.hover)) {
+    if (msg && transforming()) {
         update_hover();
         if (!pending.empty() && in_filter(pending.front(),min,max)) {
             *msg = pending.front();
@@ -227,12 +232,12 @@ BOOL WINAPI peek_hook(LPMSG msg, HWND hwnd, UINT min, UINT max, UINT remove) {
     const BOOL got = peek_original(msg,hwnd,min,max,remove);
     if (got && msg && (remove & PM_REMOVE)) {
         if (options.probe) observe(*msg);
-        if (options.wheel || options.zoom || options.hover) transform(*msg);
+        if (transforming()) transform(*msg);
     }
     return got;
 }
 BOOL WINAPI get_hook(LPMSG msg, HWND hwnd, UINT min, UINT max) {
-    if (msg && (options.wheel || options.zoom || options.hover) && !pending.empty() && in_filter(pending.front(),min,max)) {
+    if (msg && transforming() && !pending.empty() && in_filter(pending.front(),min,max)) {
         *msg = pending.front(); pending.pop_front();
         if (options.probe) observe(*msg);
         return TRUE;
@@ -241,7 +246,7 @@ BOOL WINAPI get_hook(LPMSG msg, HWND hwnd, UINT min, UINT max) {
     if (options.probe) ++get_calls;
     if (got > 0 && msg) {
         if (options.probe) observe(*msg);
-        if (options.wheel || options.zoom || options.hover) transform(*msg);
+        if (transforming()) transform(*msg);
     }
     return got;
 }

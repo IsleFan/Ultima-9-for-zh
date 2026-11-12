@@ -14,6 +14,7 @@ namespace u9cht {
 Engine* engine = nullptr;
 namespace {
 void* ctor_gateway = nullptr;
+void* cast_gateway = nullptr;
 void* copy_gateway = nullptr;
 void* layout_after = reinterpret_cast<void*>(0x5C7BBA);
 void* bounds_after = reinterpret_cast<void*>(0x5C5F62);
@@ -707,7 +708,7 @@ uintptr_t __fastcall flip_hook(uintptr_t self, void*) {
         DWORD zero = 0; e.render_thread.compare_exchange_strong(zero,GetCurrentThreadId());
         if (e.render_thread.load() != GetCurrentThreadId()) e.fail(15);
         ++e.flips;
-        if (e.render) e.compose(self);
+        if (e.render) { if (!e.cheat_bindings.empty()) e.update_notice(self); e.compose(self); }
         for (const auto& q : e.queues) if (q.address && q.last_frame == e.frame)
             if (const auto* r = e.raster(q.raster)) for (uint32_t i = 0; i < r->runs.size(); ++i)
                 if (r->runs.first_plan(i)) ++e.stats[r->runs.at(i).plan].presentations;
@@ -1384,6 +1385,129 @@ Binding* Engine::bind_buffer(uintptr_t address, uint32_t length, uint32_t plan, 
     if (b) trace(kind,plan,address,b->identity,b->generation,related);
     return b;
 }
+// ---- Developer cheat notices (cheat_notice.h) ----
+namespace {
+// Toggle state as the game holds it (addresses in cheat_notice.h); -1 when unreadable.
+int read_toggle(cheat::Kind kind) noexcept {
+    __try {
+        if (kind == cheat::Kind::Invulnerable) {
+            const auto player = word(0x98F31C);
+            return player ? int(word(player+0x48) & 1) : -1;
+        }
+        if (kind == cheat::Kind::Fly) {
+            auto p = word(0x850228); if (!p) return -1;
+            p = word(p+0xD0); if (!p) return -1;
+            p = word(p+0xE8); if (!p) return -1;
+            return int((word(p+0xD8) >> 9) & 1);
+        }
+        if (kind == cheat::Kind::Fast) return *reinterpret_cast<const float*>(0x7944EC) != 1.0f ? 1 : 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    return -1;
+}
+void cheat_key(UINT vk, UINT mods) { if (engine) engine->on_cheat_key(vk,mods); }
+constexpr uint64_t NoticeMs = 2500, ToggleWaitMs = 600;
+}
+// Spell cast 0x5ED950 (thiscall on the spell registry [0x84F810]; args: caster handle, spell id 1..47, target
+// handle; callee pops 12 bytes; CONFIRMED by disassembly 2026-11-12). A handle indexes the object table
+// [0x8515D0] (12-byte rows, object at +8). The Avatar object is [[[0x850228]+0xD0]+0xE8] (the fly toggle's object).
+bool caster_is_avatar(uint32_t caster) noexcept {
+    __try {
+        const auto table = word(0x8515D0), world = word(0x850228);
+        if (!table || !world || caster > 0x100000) return false;
+        const auto object = word(table + uintptr_t(caster)*12 + 8);
+        const auto a = word(world+0xD0); if (!a) return false;
+        return object && object == word(a+0xE8);
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
+uintptr_t __fastcall cast_hook(uintptr_t self, void*, uint32_t caster, uint32_t spell, uint32_t target) {
+    const auto fn = reinterpret_cast<uintptr_t(__thiscall*)(uintptr_t,uint32_t,uint32_t,uint32_t)>(cast_gateway);
+    {
+        Guard guard;
+        if (guard.state && caster_is_avatar(caster)) guard.state->on_spell_cast(spell);
+    }
+    return fn(self,caster,spell,target);
+}
+void Engine::on_spell_cast(uint32_t spell) noexcept {
+    // Spell names: misctext 0x65+id for ids 1..36 ("地－投石術"), 0x71+id for the rituals 37..45 (0x5ECC60).
+    const uint32_t entry = spell >= 1 && spell <= 36 ? 0x65+spell : spell >= 37 && spell <= 45 ? 0x71+spell : 0;
+    Exclusive lock(mutex);
+    ++spell_casts;
+    const int plan = entry ? plan_for_entry(MiscEntryBase+entry) : -1;
+    try {
+        std::wstring name;
+        if (plan >= 0) {
+            const auto& p = pack.plans[size_t(plan)];
+            for (uint32_t i = 0; i < p.length; ++i) name += wchar_t(p.wide[i]);
+            if (const auto dash = name.find(L'－'); dash != std::wstring::npos) name.erase(0,dash+1);
+        }
+        show_notice(name.empty() ? L"聖者施展法術 #" + std::to_wstring(spell) : L"聖者施展「" + name + L"」");
+        last_spell = spell;
+    } catch (...) {}
+}
+void Engine::on_cheat_key(UINT vk, UINT mods) noexcept {
+    Exclusive lock(mutex);
+    for (size_t i = 0; i < cheat_bindings.size(); ++i) {
+        const auto& b = cheat_bindings[i];
+        if (b.vk != vk || b.mods != mods) continue;
+        const auto t = cheat::text_for(b.command);
+        if (!t) return;
+        ++cheat_presses;
+        // The game acts on the key after this returns; the state before it decides when the toggle took effect.
+        pending_cheat = {int(i),GetTickCount64(),t->kind == cheat::Kind::Message ? -1 : read_toggle(t->kind)};
+        return;
+    }
+}
+void Engine::show_notice(std::wstring text) noexcept {
+    try { notice = std::move(text); notice_until = GetTickCount64()+NoticeMs; ++cheat_notices; }
+    catch (...) { notice.clear(); }
+}
+void Engine::update_notice(uintptr_t backend) noexcept {
+    const auto now = GetTickCount64();
+    if (pending_cheat.binding >= 0 && size_t(pending_cheat.binding) < cheat_bindings.size()) {
+        const auto t = cheat::text_for(cheat_bindings[size_t(pending_cheat.binding)].command);
+        if (!t) pending_cheat = {};
+        else if (t->kind == cheat::Kind::Message) { show_notice(t->text); pending_cheat = {}; }
+        else {
+            const int state = read_toggle(t->kind);
+            if ((state >= 0 && state != pending_cheat.before) || now-pending_cheat.tick > ToggleWaitMs) {
+                try { show_notice(cheat::toggle_text(*t,state)); } catch (...) {}
+                pending_cheat = {};
+            }
+        }
+    }
+    if (notice.empty() || now > notice_until) return;
+    const auto width = word(backend+0x44), height = word(backend+0x48);
+    const auto em = width == 800 && height == 600 ? 20U : width == 1600 && height == 1200 ? 40U : 0U;
+    auto& list = draw_list;
+    const auto back = word(backend+0x3FC3C4);
+    if (!em || !back || list.epoch != frame) return;
+    if (list.count || list.records) { if (list.backend != backend || list.backbuffer != back) return; }
+    else { list.backend = backend; list.backbuffer = back; list.width = width; list.height = height; }
+    // Centred near the top, where narration subtitles appear; black outline under a pale fill.
+    int32_t total = 0;
+    for (const auto c : notice) if (const auto* g = glyphs.get(uint32_t(c),em)) total += g->advance; else ++notice_glyph_misses;
+    const Rect screen{0,0,int32_t(width),int32_t(height)};
+    const int32_t baseline = int32_t(height)*7/100 + int32_t(em);
+    const int32_t r = std::max<int32_t>(1,int32_t(em)/16);
+    for (int pass = 0; pass < 2; ++pass) {
+        int32_t x = (int32_t(width)-total)/2;
+        for (const auto c : notice) {
+            const auto* g = glyphs.get(uint32_t(c),em);
+            if (!g) continue;
+            const auto put = [&](int32_t dx, int32_t dy, std::array<uint8_t,3> rgb) {
+                const int32_t left = x+g->bearing_x+dx, top = baseline-g->bearing_y+dy;
+                const auto bounds = intersect(screen,{left,top,left+int32_t(g->width),top+int32_t(g->height)});
+                return empty(bounds) || list.add({g,left,top,bounds,rgb});
+            };
+            bool ok = true;
+            if (pass == 0) { for (int dy = -r; dy <= r && ok; dy += r) for (int dx = -r; dx <= r && ok; dx += r) if (dx || dy) ok = put(dx,dy,{0,0,0}); }
+            else ok = put(0,0,{248,240,214});
+            if (!ok) return;   // command list full: the notice is skipped this frame, Chinese text keeps priority
+            x += g->advance;
+        }
+    }
+    ++notice_frames;
+}
 void Engine::compose(uintptr_t backend) noexcept {
     auto& list = draw_list;
     if (!list.count) return;
@@ -1578,6 +1702,27 @@ void Engine::install(const Config& config, Logger& logger) {
             o.zoom = (config.features & FeatureWheelZoom) != 0;
             o.hover = (config.features & FeatureHoverNames) && !exists(L"hover_names.off");
             o.hover_delay_ms = config.hover_delay_ms;
+            // Developer cheat notices: only when the active keymap (Options.ini Current_Keymap) binds cheat
+            // commands, which only the test keymap does. Their characters are warmed at both screen ems.
+            if (render) {
+                const auto game = config_path(config.game_dir);
+                const auto read_all = [](const std::filesystem::path& path) {
+                    std::ifstream f(path, std::ios::binary); std::ostringstream d; d << f.rdbuf(); return d.str();
+                };
+                const auto keymap = cheat::current_keymap(read_all(game / L"Options.ini"));
+                if (!keymap.empty() && keymap.find_first_of("/\\:") == std::string::npos) {
+                    cheat_bindings = cheat::parse_bindings(read_all(game / std::filesystem::path(keymap)));
+                    std::erase_if(cheat_bindings,[](const cheat::Binding& b) { return !cheat::text_for(b.command); });
+                }
+                if (!cheat_bindings.empty()) {
+                    std::wstring chars = cheat::all_notice_characters() + L"聖者施展法術#0123456789";
+                    for (uint32_t entry = 0x66; entry <= 0x71+45; ++entry) if (const int plan = plan_for_entry(MiscEntryBase+entry); plan >= 0)
+                        for (uint32_t i = 0; i < pack.plans[size_t(plan)].length; ++i) chars += wchar_t(pack.plans[size_t(plan)].wide[i]);
+                    for (const auto c : chars) if (c > 0x20) { glyphs.warm(uint32_t(c),20); glyphs.warm(uint32_t(c),40); }
+                    o.on_key = cheat_key;
+                }
+                log->event("cheat_notices","\"keymap\":\""+keymap+"\",\"bindings\":"+std::to_string(cheat_bindings.size()));
+            }
             input_hooks::configure(o);
             input_hooks_enabled = input_hooks::any_enabled();
             log->event("input_hooks","\"probe\":"+std::string(o.probe?"true":"false")+",\"wheel_pages\":"+
@@ -1672,6 +1817,8 @@ void Engine::install(const Config& config, Logger& logger) {
     draw_gateway = prepare("draw_string",0x5C5C00,draw_hook,{0x8B,0x44,0x24,0x08,0x53},{4,1});
     measure_gateway = prepare("string_width",0x5C6240,measure_hook,{0x57,0x8B,0x7C,0x24,0x08,0x33,0xC0},{1,4,2});
     flip_gateway = prepare("pre_flip",0x597B00,flip_hook,{0x56,0x8B,0xF1,0x8A,0x86,9,0xC5,0x3F,0},{1,2,6});
+    // Developer notices only: the Avatar's spell casts (see cast_hook).
+    if (!cheat_bindings.empty()) cast_gateway = prepare("spell_cast",0x5ED950,cast_hook,{0x6A,0xFF,0x68,0x15,0x3E,0x73,0},{2,5});
     wide_original = &WideCharToMultiByte;
     exit_original = &ExitProcess;
     hooks.prepare_pointer("wide_conversion",reinterpret_cast<uintptr_t*>(0x74010C),
@@ -1879,7 +2026,7 @@ void Engine::snapshot(const char* event) noexcept {
               ",\"leaks\":"+std::to_string(misc_leaks)+",\"draw_strips\":"+std::to_string(misc_draw_strips)+
               ",\"bounded\":"+std::to_string(misc_bounded)+",\"book_overwritten\":"+std::to_string(book_overwritten)+
               ",\"measures\":"+std::to_string(misc_measures)+",\"measure_faults\":"+std::to_string(misc_measure_faults)+
-              ",\"message_insets\":"+std::to_string(message_insets)+",\"small_em_glyphs\":"+std::to_string(small_em_glyphs)+",\"book_messages\":"+std::to_string(book_messages)+
+              ",\"message_insets\":"+std::to_string(message_insets)+",\"cheat_presses\":"+std::to_string(cheat_presses)+",\"cheat_notices\":"+std::to_string(cheat_notices)+",\"notice_frames\":"+std::to_string(notice_frames)+",\"notice_glyph_misses\":"+std::to_string(notice_glyph_misses)+",\"spell_casts\":"+std::to_string(spell_casts)+",\"last_spell\":"+std::to_string(last_spell)+",\"small_em_glyphs\":"+std::to_string(small_em_glyphs)+",\"book_messages\":"+std::to_string(book_messages)+
               ",\"name_count_labels\":"+std::to_string(name_count_labels)+
               ",\"misc_message_strips\":"+std::to_string(misc_message_strips)+",\"shop_converts\":"+std::to_string(shop_converts)+
               ",\"shop_short\":"+std::to_string(shop_short)+",\"clock_rewrites\":"+std::to_string(clock_rewrites)+

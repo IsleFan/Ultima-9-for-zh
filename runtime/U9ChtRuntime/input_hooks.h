@@ -29,6 +29,9 @@ struct Options {
     bool hover = false;
     bool zoom = false;               // Ctrl+wheel -> zoom (independent of wheel paging)
     DWORD hover_delay_ms = 250;
+    // Called on the game thread for each real (non-synthetic, non-repeat) key press, before the game sees it.
+    // mods: cheat_notice.h ModCtrl|ModShift|ModAlt. Used for the developer cheat notices.
+    void (*on_key)(UINT vk, UINT mods) = nullptr;
 };
 void configure(const Options& options);
 bool any_enabled();

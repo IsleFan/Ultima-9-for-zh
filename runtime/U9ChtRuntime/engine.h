@@ -7,6 +7,7 @@
 #include "misc_marker.h"
 #include "clock_text.h"
 #include "movie_graph.h"
+#include "cheat_notice.h"
 #include <atomic>
 
 namespace u9cht {
@@ -227,6 +228,17 @@ struct Engine {
     Binding* bind_buffer(uintptr_t address, uint32_t length, uint32_t plan, uint64_t identity, Life kind, uintptr_t related) noexcept;
     LifeEvent* trace(Life kind, uint32_t plan, uintptr_t address, uint64_t identity, uint64_t generation, uintptr_t related = 0) noexcept;
     void compose(uintptr_t backend) noexcept;
+    // Developer cheat notices (cheat_notice.h): bindings of the active keymap, the press waiting for the game to
+    // act on it, and the line shown at the top of the screen until `notice_until`.
+    std::vector<cheat::Binding> cheat_bindings;
+    struct PendingCheat { int binding = -1; uint64_t tick = 0; int before = -1; } pending_cheat;
+    std::wstring notice;
+    uint64_t notice_until = 0, cheat_presses = 0, cheat_notices = 0, notice_frames = 0, notice_glyph_misses = 0;
+    void on_cheat_key(UINT vk, UINT mods) noexcept;    // game thread, from input_hooks
+    void on_spell_cast(uint32_t spell) noexcept;       // game thread, the Avatar's casts (cast_hook)
+    uint64_t spell_casts = 0; uint32_t last_spell = 0;
+    void show_notice(std::wstring text) noexcept;      // caller holds `mutex`
+    void update_notice(uintptr_t backend) noexcept;    // caller holds `mutex`; flip, before compose
     void add_occluder(uintptr_t node, Rect area, uint32_t caller, float sx, float sy) noexcept;
     const FontStyle& font_style(uintptr_t record) noexcept;
 };
