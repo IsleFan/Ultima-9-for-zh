@@ -264,6 +264,13 @@ struct Engine {
     uint32_t floater_next = 0;
     uint64_t floaters_spawned = 0, floater_frames = 0, floater_misses = 0;
     void spawn_floater(std::wstring text, int32_t x_units, std::array<uint8_t,3> rgb) noexcept;
+    // Target probe (research for the target health bar, 2026-11-13; read-only). Combat manager [0x98F324]:
+    // +0x1008 target handle (-1 none), +0x100C lock. Distinct targets seen: handle, lock, object type (+0xA), and the
+    // stats record values hp/max (+0x34/+0x36) when the type is a record index (< 0x200), else 0xFFFF.
+    struct TargetSeen { uint32_t handle = 0, lock = 0, type = 0, hp = 0, max = 0, min_hp = 0xFFFF; uint64_t frames = 0; };
+    std::array<TargetSeen,8> targets_seen{};
+    uint64_t target_frames = 0, target_overflow = 0;
+    void probe_target() noexcept;
     void add_occluder(uintptr_t node, Rect area, uint32_t caller, float sx, float sy) noexcept;
     const FontStyle& font_style(uintptr_t record) noexcept;
 };

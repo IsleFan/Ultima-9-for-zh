@@ -1592,6 +1592,7 @@ void Engine::update_status(uintptr_t backend) noexcept {
     const auto width = word(backend+0x44), height = word(backend+0x48);
     const uint32_t scale = width == 800 && height == 600 ? 1 : width == 1600 && height == 1200 ? 2 : 0;
     if (!scale) return;
+    probe_target();
     StatusRead s;
     if (!read_status(s)) { ++status_unreadable; status_synced = false; return; }
     std::copy(std::begin(s.v),std::end(s.v),std::begin(status_last));
@@ -1633,6 +1634,37 @@ void Engine::update_status(uintptr_t backend) noexcept {
             if (drawn) ++floater_frames;
         }
     } catch (...) {}
+}
+struct TargetRead { uint32_t handle = 0, lock = 0, type = 0, hp = 0xFFFF, max = 0xFFFF; };
+bool read_target(TargetRead& t) noexcept {
+    __try {
+        const auto p = word(0x98F324);
+        if (!p) return false;
+        const auto handle = uint32_t(word(p+0x1008));
+        if (handle == 0xFFFFFFFF || !handle) return false;
+        t.handle = handle; t.lock = uint32_t(word(p+0x100C));
+        const auto object = handle_object(handle);
+        if (!object) return false;
+        t.type = *reinterpret_cast<const uint16_t*>(uintptr_t(object)+0xA);
+        const auto records = word(0x98F31C);
+        if (t.type < 0x200 && records) {
+            const auto s = records + uintptr_t(t.type)*0x13C;
+            t.hp = *reinterpret_cast<const uint16_t*>(s+0x34); t.max = *reinterpret_cast<const uint16_t*>(s+0x36);
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
+void Engine::probe_target() noexcept {
+    TargetRead t;
+    if (!read_target(t)) return;
+    ++target_frames;
+    for (auto& s : targets_seen) {
+        if (s.frames && (s.handle != t.handle || s.type != t.type)) continue;
+        if (!s.frames) { s.handle = t.handle; s.type = t.type; }
+        s.lock = t.lock; s.hp = t.hp; s.max = t.max; s.min_hp = std::min(s.min_hp,t.hp); ++s.frames;
+        return;
+    }
+    ++target_overflow;
 }
 void Engine::spawn_floater(std::wstring text, int32_t x_units, std::array<uint8_t,3> rgb) noexcept {
     try {
@@ -2187,7 +2219,7 @@ void Engine::snapshot(const char* event) noexcept {
               ",\"leaks\":"+std::to_string(misc_leaks)+",\"draw_strips\":"+std::to_string(misc_draw_strips)+
               ",\"bounded\":"+std::to_string(misc_bounded)+",\"book_overwritten\":"+std::to_string(book_overwritten)+
               ",\"measures\":"+std::to_string(misc_measures)+",\"measure_faults\":"+std::to_string(misc_measure_faults)+
-              ",\"message_insets\":"+std::to_string(message_insets)+",\"cheat_presses\":"+std::to_string(cheat_presses)+",\"cheat_notices\":"+std::to_string(cheat_notices)+",\"notice_frames\":"+std::to_string(notice_frames)+",\"notice_glyph_misses\":"+std::to_string(notice_glyph_misses)+",\"misc_label_binds\":"+std::to_string(misc_label_binds)+",\"floaters\":"+std::to_string(floaters_spawned)+",\"floater_frames\":"+std::to_string(floater_frames)+",\"floater_misses\":"+std::to_string(floater_misses)+",\"status_frames\":"+std::to_string(status_frames)+",\"status_misses\":"+std::to_string(status_misses)+",\"status_unreadable\":"+std::to_string(status_unreadable)+",\"status_last\":["+std::to_string(status_last[0])+","+std::to_string(status_last[1])+","+std::to_string(status_last[2])+","+std::to_string(status_last[3])+","+std::to_string(status_last[4])+"],\"cast_calls\":"+std::to_string(cast_calls)+",\"recent_casts\":"+[&]{ std::string r="["; for (const auto& x : recent_casts) if (x.spell) r += (r.size()>1?",":"")+std::string("[")+std::to_string(x.caster)+","+std::to_string(x.avatar)+","+std::to_string(x.spell)+"]"; return r+"]"; }()+",\"spell_casts\":"+std::to_string(spell_casts)+",\"last_spell\":"+std::to_string(last_spell)+",\"small_em_glyphs\":"+std::to_string(small_em_glyphs)+",\"book_messages\":"+std::to_string(book_messages)+
+              ",\"message_insets\":"+std::to_string(message_insets)+",\"cheat_presses\":"+std::to_string(cheat_presses)+",\"cheat_notices\":"+std::to_string(cheat_notices)+",\"notice_frames\":"+std::to_string(notice_frames)+",\"notice_glyph_misses\":"+std::to_string(notice_glyph_misses)+",\"misc_label_binds\":"+std::to_string(misc_label_binds)+",\"target_frames\":"+std::to_string(target_frames)+",\"target_overflow\":"+std::to_string(target_overflow)+",\"targets_seen\":"+[&]{ std::string r="["; for (const auto& t : targets_seen) if (t.frames) r += (r.size()>1?",":"")+std::string("[")+std::to_string(t.handle)+","+std::to_string(t.lock)+","+std::to_string(t.type)+","+std::to_string(t.hp)+","+std::to_string(t.max)+","+std::to_string(t.min_hp)+","+std::to_string(t.frames)+"]"; return r+"]"; }()+",\"floaters\":"+std::to_string(floaters_spawned)+",\"floater_frames\":"+std::to_string(floater_frames)+",\"floater_misses\":"+std::to_string(floater_misses)+",\"status_frames\":"+std::to_string(status_frames)+",\"status_misses\":"+std::to_string(status_misses)+",\"status_unreadable\":"+std::to_string(status_unreadable)+",\"status_last\":["+std::to_string(status_last[0])+","+std::to_string(status_last[1])+","+std::to_string(status_last[2])+","+std::to_string(status_last[3])+","+std::to_string(status_last[4])+"],\"cast_calls\":"+std::to_string(cast_calls)+",\"recent_casts\":"+[&]{ std::string r="["; for (const auto& x : recent_casts) if (x.spell) r += (r.size()>1?",":"")+std::string("[")+std::to_string(x.caster)+","+std::to_string(x.avatar)+","+std::to_string(x.spell)+"]"; return r+"]"; }()+",\"spell_casts\":"+std::to_string(spell_casts)+",\"last_spell\":"+std::to_string(last_spell)+",\"small_em_glyphs\":"+std::to_string(small_em_glyphs)+",\"book_messages\":"+std::to_string(book_messages)+
               ",\"name_count_labels\":"+std::to_string(name_count_labels)+
               ",\"misc_message_strips\":"+std::to_string(misc_message_strips)+",\"shop_converts\":"+std::to_string(shop_converts)+
               ",\"shop_short\":"+std::to_string(shop_short)+",\"clock_rewrites\":"+std::to_string(clock_rewrites)+
