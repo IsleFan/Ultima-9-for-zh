@@ -15,7 +15,7 @@ int wmain(int argc, wchar_t** argv) {
         c.protocol++; require(!valid_protocol(c), "wrong protocol accepted"); c.protocol--;
         c.size--; require(!valid_protocol(c), "wrong ABI size accepted"); c.size++;
         c.flags = 8; require(!valid_protocol(c), "unknown flags accepted"); c.flags = 0;
-        c.features = 128; require(!valid_protocol(c), "unknown feature accepted"); c.features = AllFeatures;
+        c.features = 256; require(!valid_protocol(c), "unknown feature accepted"); c.features = AllFeatures;
         require(valid_protocol(c), "all features rejected"); c.features = DefaultFeatures;
         c.hover_delay_ms = MinHoverDelayMs-1; require(!valid_protocol(c), "short hover delay accepted");
         c.hover_delay_ms = MaxHoverDelayMs+1; require(!valid_protocol(c), "long hover delay accepted");

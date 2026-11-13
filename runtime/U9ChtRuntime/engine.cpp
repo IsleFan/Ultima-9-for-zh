@@ -713,7 +713,7 @@ uintptr_t __fastcall flip_hook(uintptr_t self, void*) {
         DWORD zero = 0; e.render_thread.compare_exchange_strong(zero,GetCurrentThreadId());
         if (e.render_thread.load() != GetCurrentThreadId()) e.fail(15);
         ++e.flips;
-        if (e.render) { if (!e.cheat_bindings.empty()) e.update_notice(self); if (e.status_numbers || e.floating_numbers) e.update_status(self); e.compose(self); }
+        if (e.render) { if (!e.cheat_bindings.empty()) e.update_notice(self); if (e.status_numbers || e.floating_numbers || e.target_bar) e.update_status(self); e.compose(self); }
         for (const auto& q : e.queues) if (q.address && q.last_frame == e.frame)
             if (const auto* r = e.raster(q.raster)) for (uint32_t i = 0; i < r->runs.size(); ++i)
                 if (r->runs.first_plan(i)) ++e.stats[r->runs.at(i).plan].presentations;
@@ -1440,6 +1440,9 @@ constexpr uint32_t StatusEm = 11;   // status numbers: em at 800x600, doubled at
 constexpr uint32_t FloatEm = 15;    // floating numbers: em at 800x600, doubled at 1600x1200
 constexpr uint64_t FloatMs = 1300;  // a floating number rises for this long, then disappears
 constexpr int32_t ManaBarX = 401, HealthBarX = 1188, BarY = 1177;   // 1600x1200 units (session-30 screenshot)
+// Target frame, 1600x1200 units: centred under the two top bars (they end near y 38).
+constexpr int32_t TargetX = 800, TargetY = 76, TargetW = 360, TargetH = 18, TargetBorder = 3;
+constexpr uint64_t TargetZeroMs = 1500;   // a target at 0 HP stays shown this long
 }
 // Spell cast 0x5ED950 (thiscall on the spell registry [0x84F810]). SIX stack arguments, `ret 0x18` at 0x5EF75A
 // (CONFIRMED 2026-11-13; the 2026-11-12 reading of three arguments was wrong and crashed the first cast in
@@ -1606,8 +1609,9 @@ void Engine::update_status(uintptr_t backend) noexcept {
         std::copy(std::begin(s.v),std::end(s.v),std::begin(status_previous));
         status_synced = true;
     }
-    if (!s.health && !s.mana) return;
+    if (!s.health && !s.mana) { target_record = 0xFFFFFFFF; return; }
     try {
+        draw_target(backend,scale);
         if (status_numbers) {
             const uint32_t em = StatusEm*scale;
             const int32_t baseline = int32_t(BarY*int32_t(scale)/2) + int32_t(em)*36/100;
@@ -1628,7 +1632,7 @@ void Engine::update_status(uintptr_t backend) noexcept {
                 // Starts just above the bar and rises 70 units (1600x1200) at a slowing pace.
                 const double t = double(now-f.start)/double(FloatMs);
                 const int32_t rise = int32_t(70.0*(1.0-(1.0-t)*(1.0-t)));
-                const int32_t baseline = (BarY-24-rise)*int32_t(scale)/2;
+                const int32_t baseline = (f.y-int32_t(double(f.rise)/70.0*rise))*int32_t(scale)/2;
                 drawn |= overlay_text(backend,f.text,f.x*int32_t(scale)/2,baseline,em,f.rgb,floater_misses);
             }
             if (drawn) ++floater_frames;
@@ -1667,12 +1671,66 @@ void Engine::probe_target() noexcept {
     }
     ++target_overflow;
 }
-void Engine::spawn_floater(std::wstring text, int32_t x_units, std::array<uint8_t,3> rgb) noexcept {
+void Engine::build_bar_glyphs() noexcept {
+    try {
+        for (uint32_t scale = 1; scale <= 2; ++scale) {
+            const uint32_t w = TargetW*scale/2, h = TargetH*scale/2, b = std::max<uint32_t>(1,TargetBorder*scale/2);
+            const std::array<std::array<uint32_t,3>,3> spec{{{w+2*b,h+2*b,190},{w,h,255},{w,h,255}}};
+            for (size_t i = 0; i < 3; ++i) {
+                auto& g = bar_glyphs[scale-1][i];
+                g.width = spec[i][0]; g.height = spec[i][1];
+                g.alpha.assign(size_t(g.width)*g.height,uint8_t(spec[i][2]));
+            }
+        }
+        target_bar = true;
+    } catch (...) { target_bar = false; }
+}
+// The combat target (read_target): frame at the top centre, red fill clipped to hp/max, "hp/max" on it. An HP drop of
+// the same target spawns a floating number under the frame (FeatureFloatingNumbers). Hidden with the HUD.
+void Engine::draw_target(uintptr_t backend, uint32_t scale) noexcept {
+    TargetRead t;
+    const bool have = read_target(t) && t.max && t.max != 0xFFFF && t.hp <= t.max;
+    if (!have) { target_record = 0xFFFFFFFF; return; }
+    const auto now = GetTickCount64();
+    if (t.type != target_record) { target_record = t.type; target_previous_hp = t.hp; target_zero_since = 0; }
+    else if (t.hp < target_previous_hp) {
+        if (floating_numbers) spawn_floater(L"-"+std::to_wstring(target_previous_hp-t.hp),TargetX+TargetW/2+50,{255,96,72},TargetY+30,40);
+        target_previous_hp = t.hp;
+    } else target_previous_hp = t.hp;
+    if (!t.hp) { if (!target_zero_since) target_zero_since = now; if (now-target_zero_since > TargetZeroMs) return; }
+    else target_zero_since = 0;
+    if (!target_bar) return;
+    auto& list = draw_list;
+    const auto back = word(backend+0x3FC3C4);
+    if (!back || list.epoch != frame) return;
+    if (list.count || list.records) { if (list.backend != backend || list.backbuffer != back) return; }
+    else { list.backend = backend; list.backbuffer = back; list.width = word(backend+0x44); list.height = word(backend+0x48); }
+    const auto& g = bar_glyphs[scale-1];
+    const int32_t s = int32_t(scale);
+    const int32_t w = int32_t(g[1].width), h = int32_t(g[1].height), b = (int32_t(g[0].width)-w)/2;
+    const int32_t left = TargetX*s/2 - w/2, top = TargetY*s/2 - h/2;
+    const int32_t fill = int32_t(int64_t(w)*t.hp/t.max);
+    const Rect screen{0,0,int32_t(list.width),int32_t(list.height)};
+    const auto rect = [&](const Glyph& glyph, int32_t x, int32_t y, int32_t cw, std::array<uint8_t,3> rgb) {
+        const auto clip = intersect(screen,{x,y,x+cw,y+int32_t(glyph.height)});
+        return empty(clip) || list.add({&glyph,x,y,clip,rgb});
+    };
+    if (!rect(g[0],left-b,top-b,w+2*b,{0,0,0}) || !rect(g[1],left,top,w,{58,12,10}) ||
+        (fill > 0 && !rect(g[2],left,top,fill,{196,34,26}))) return;
+    try {
+        const uint32_t em = StatusEm*scale;
+        overlay_text(backend,std::to_wstring(t.hp)+L"/"+std::to_wstring(t.max),TargetX*s/2,top+h/2+int32_t(em)*36/100,em,{255,255,255},status_misses);
+    } catch (...) {}
+    ++target_bar_frames;
+}
+void Engine::spawn_floater(std::wstring text, int32_t x_units, std::array<uint8_t,3> rgb, int32_t y_units,
+                           int32_t rise_units) noexcept {
     try {
         // Consecutive numbers on one bar step sideways so they do not cover each other.
         static constexpr int32_t offsets[4] = {0,-60,60,-120};
         auto& f = floaters[floater_next++ % floaters.size()];
         f.text = std::move(text); f.start = GetTickCount64(); f.rgb = rgb;
+        f.y = y_units ? y_units : BarY-24; f.rise = rise_units;
         f.x = x_units + offsets[floaters_spawned % 4];
         ++floaters_spawned;
     } catch (...) {}
@@ -1917,6 +1975,14 @@ void Engine::install(const Config& config, Logger& logger) {
                 }
                 floating_numbers = warmed;
                 log->event("floating_numbers","\"enabled\":"+std::string(floating_numbers?"true":"false"));
+            }
+            if (render && (config.features & FeatureTargetBar)) {
+                bool warmed = true;   // the bar's "hp/max" uses the status number glyphs
+                for (const wchar_t c : std::wstring_view(L"0123456789/")) for (const uint32_t em : {StatusEm,StatusEm*2}) {
+                    try { glyphs.warm(uint32_t(c),em,true); } catch (const std::exception&) { warmed = false; }
+                }
+                if (warmed) build_bar_glyphs();
+                log->event("target_bar","\"enabled\":"+std::string(target_bar?"true":"false"));
             }
             input_hooks_enabled = input_hooks::any_enabled();
             log->event("input_hooks","\"probe\":"+std::string(o.probe?"true":"false")+",\"wheel_pages\":"+
@@ -2220,7 +2286,7 @@ void Engine::snapshot(const char* event) noexcept {
               ",\"leaks\":"+std::to_string(misc_leaks)+",\"draw_strips\":"+std::to_string(misc_draw_strips)+
               ",\"bounded\":"+std::to_string(misc_bounded)+",\"book_overwritten\":"+std::to_string(book_overwritten)+
               ",\"measures\":"+std::to_string(misc_measures)+",\"measure_faults\":"+std::to_string(misc_measure_faults)+
-              ",\"message_insets\":"+std::to_string(message_insets)+",\"cheat_presses\":"+std::to_string(cheat_presses)+",\"cheat_notices\":"+std::to_string(cheat_notices)+",\"notice_frames\":"+std::to_string(notice_frames)+",\"notice_glyph_misses\":"+std::to_string(notice_glyph_misses)+",\"misc_label_binds\":"+std::to_string(misc_label_binds)+",\"target_misses\":"+std::to_string(target_misses)+",\"target_lock_frames\":"+std::to_string(target_lock_frames)+",\"last_target_raw\":"+std::to_string(last_target_raw)+",\"target_frames\":"+std::to_string(target_frames)+",\"target_overflow\":"+std::to_string(target_overflow)+",\"targets_seen\":"+[&]{ std::string r="["; for (const auto& t : targets_seen) if (t.frames) r += (r.size()>1?",":"")+std::string("[")+std::to_string(t.handle)+","+std::to_string(t.lock)+","+std::to_string(t.type)+","+std::to_string(t.hp)+","+std::to_string(t.max)+","+std::to_string(t.min_hp)+","+std::to_string(t.frames)+"]"; return r+"]"; }()+",\"floaters\":"+std::to_string(floaters_spawned)+",\"floater_frames\":"+std::to_string(floater_frames)+",\"floater_misses\":"+std::to_string(floater_misses)+",\"status_frames\":"+std::to_string(status_frames)+",\"status_misses\":"+std::to_string(status_misses)+",\"status_unreadable\":"+std::to_string(status_unreadable)+",\"status_last\":["+std::to_string(status_last[0])+","+std::to_string(status_last[1])+","+std::to_string(status_last[2])+","+std::to_string(status_last[3])+","+std::to_string(status_last[4])+"],\"cast_calls\":"+std::to_string(cast_calls)+",\"recent_casts\":"+[&]{ std::string r="["; for (const auto& x : recent_casts) if (x.spell) r += (r.size()>1?",":"")+std::string("[")+std::to_string(x.caster)+","+std::to_string(x.avatar)+","+std::to_string(x.spell)+"]"; return r+"]"; }()+",\"spell_casts\":"+std::to_string(spell_casts)+",\"last_spell\":"+std::to_string(last_spell)+",\"small_em_glyphs\":"+std::to_string(small_em_glyphs)+",\"book_messages\":"+std::to_string(book_messages)+
+              ",\"message_insets\":"+std::to_string(message_insets)+",\"cheat_presses\":"+std::to_string(cheat_presses)+",\"cheat_notices\":"+std::to_string(cheat_notices)+",\"notice_frames\":"+std::to_string(notice_frames)+",\"notice_glyph_misses\":"+std::to_string(notice_glyph_misses)+",\"misc_label_binds\":"+std::to_string(misc_label_binds)+",\"target_misses\":"+std::to_string(target_misses)+",\"target_lock_frames\":"+std::to_string(target_lock_frames)+",\"last_target_raw\":"+std::to_string(last_target_raw)+",\"target_bar_frames\":"+std::to_string(target_bar_frames)+",\"target_frames\":"+std::to_string(target_frames)+",\"target_overflow\":"+std::to_string(target_overflow)+",\"targets_seen\":"+[&]{ std::string r="["; for (const auto& t : targets_seen) if (t.frames) r += (r.size()>1?",":"")+std::string("[")+std::to_string(t.handle)+","+std::to_string(t.lock)+","+std::to_string(t.type)+","+std::to_string(t.hp)+","+std::to_string(t.max)+","+std::to_string(t.min_hp)+","+std::to_string(t.frames)+"]"; return r+"]"; }()+",\"floaters\":"+std::to_string(floaters_spawned)+",\"floater_frames\":"+std::to_string(floater_frames)+",\"floater_misses\":"+std::to_string(floater_misses)+",\"status_frames\":"+std::to_string(status_frames)+",\"status_misses\":"+std::to_string(status_misses)+",\"status_unreadable\":"+std::to_string(status_unreadable)+",\"status_last\":["+std::to_string(status_last[0])+","+std::to_string(status_last[1])+","+std::to_string(status_last[2])+","+std::to_string(status_last[3])+","+std::to_string(status_last[4])+"],\"cast_calls\":"+std::to_string(cast_calls)+",\"recent_casts\":"+[&]{ std::string r="["; for (const auto& x : recent_casts) if (x.spell) r += (r.size()>1?",":"")+std::string("[")+std::to_string(x.caster)+","+std::to_string(x.avatar)+","+std::to_string(x.spell)+"]"; return r+"]"; }()+",\"spell_casts\":"+std::to_string(spell_casts)+",\"last_spell\":"+std::to_string(last_spell)+",\"small_em_glyphs\":"+std::to_string(small_em_glyphs)+",\"book_messages\":"+std::to_string(book_messages)+
               ",\"name_count_labels\":"+std::to_string(name_count_labels)+
               ",\"misc_message_strips\":"+std::to_string(misc_message_strips)+",\"shop_converts\":"+std::to_string(shop_converts)+
               ",\"shop_short\":"+std::to_string(shop_short)+",\"clock_rewrites\":"+std::to_string(clock_rewrites)+

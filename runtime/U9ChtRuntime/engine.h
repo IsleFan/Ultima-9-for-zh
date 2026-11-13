@@ -259,11 +259,20 @@ struct Engine {
     // maximum (load, level up), only resynchronises.
     bool floating_numbers = false, status_synced = false;
     uint32_t status_previous[5]{};
-    struct Floater { std::wstring text; uint64_t start = 0; int32_t x = 0; std::array<uint8_t,3> rgb{}; };
+    struct Floater { std::wstring text; uint64_t start = 0; int32_t x = 0, y = 0, rise = 70; std::array<uint8_t,3> rgb{}; };
     std::array<Floater,8> floaters{};
     uint32_t floater_next = 0;
     uint64_t floaters_spawned = 0, floater_frames = 0, floater_misses = 0;
-    void spawn_floater(std::wstring text, int32_t x_units, std::array<uint8_t,3> rgb) noexcept;
+    void spawn_floater(std::wstring text, int32_t x_units, std::array<uint8_t,3> rgb, int32_t y_units = 0,
+                       int32_t rise_units = 70) noexcept;
+    // Target bar (FeatureTargetBar, 2026-11-13): the combat target's hp/max in a frame at the top centre. Solid
+    // rectangles are runtime-owned glyphs (alpha only), index [scale-1]: shade, trough, fill; the fill is clipped to hp.
+    bool target_bar = false;
+    std::array<std::array<Glyph,3>,2> bar_glyphs{};
+    uint32_t target_record = 0xFFFFFFFF, target_previous_hp = 0;
+    uint64_t target_zero_since = 0, target_bar_frames = 0;
+    void build_bar_glyphs() noexcept;
+    void draw_target(uintptr_t backend, uint32_t scale) noexcept;
     // Target probe (research for the target health bar, 2026-11-13; read-only). Combat manager [0x98F324]:
     // +0x1008 target handle (-1 none), +0x100C lock. Distinct targets seen: handle, lock, object type (+0xA), and the
     // stats record values hp/max (+0x34/+0x36) when the type is a record index (< 0x200), else 0xFFFF.
