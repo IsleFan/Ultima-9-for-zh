@@ -236,8 +236,10 @@ struct Engine {
     uint64_t notice_until = 0, cheat_presses = 0, cheat_notices = 0, notice_frames = 0, notice_glyph_misses = 0;
     std::vector<uint32_t> unwarmed;   // notice characters the font could not warm (logged at start)
     void on_cheat_key(UINT vk, UINT mods) noexcept;    // game thread, from input_hooks
-    void on_spell_cast(uint32_t spell) noexcept;       // game thread, the Avatar's casts (cast_hook)
+    void on_spell_cast(uint32_t caster, uint32_t avatar, uint32_t spell) noexcept;       // game thread, the Avatar's casts (cast_hook)
     uint64_t spell_casts = 0; uint32_t last_spell = 0;
+    struct CastRecord { uint32_t caster = 0, avatar = 0, spell = 0; };
+    std::array<CastRecord,8> recent_casts{}; uint64_t cast_calls = 0;   // every caster, newest last
     void show_notice(std::wstring text) noexcept;      // caller holds `mutex`
     void update_notice(uintptr_t backend) noexcept;    // caller holds `mutex`; flip, before compose
     void add_occluder(uintptr_t node, Rect area, uint32_t caller, float sx, float sy) noexcept;

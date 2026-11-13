@@ -1410,16 +1410,13 @@ constexpr uint64_t NoticeMs = 2500, ToggleWaitMs = 600;
 // Spell cast 0x5ED950 (thiscall on the spell registry [0x84F810]). SIX stack arguments, `ret 0x18` at 0x5EF75A
 // (CONFIRMED 2026-11-13; the 2026-11-12 reading of three arguments was wrong and crashed the first cast in
 // session-30): [1] caster handle (read via [0x8515D0]), [2] spell id 1..47 (indexes [0x84F810]), [3] target handle,
-// [4..6] forwarded unread (copied at 0x5EDAB4). Every argument is passed through unchanged. A handle indexes the object table
-// [0x8515D0] (12-byte rows, object at +8). The Avatar object is [[[0x850228]+0xD0]+0xE8] (the fly toggle's object).
-bool caster_is_avatar(uint32_t caster) noexcept {
-    __try {
-        const auto table = word(0x8515D0), world = word(0x850228);
-        if (!table || !world || caster > 0x100000) return false;
-        const auto object = word(table + uintptr_t(caster)*12 + 8);
-        const auto a = word(world+0xD0); if (!a) return false;
-        return object && object == word(a+0xE8);
-    } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+// [4..6] forwarded unread (copied at 0x5EDAB4). Every argument is passed through unchanged.
+// The Avatar's handle is the player record's: [[0x98F320]+4] for player 0, as 0x4F1DE0 (ecx = 0) reads it before its
+// creation fallback (CONFIRMED by disassembly 2026-11-13). The 2026-11-12 check compared the object of
+// [[[0x850228]+0xD0]+0xE8], which is the movement controller the fly cheat drives, so it never matched (session-31).
+uint32_t avatar_handle() noexcept {
+    __try { const auto table = word(0x98F320); return table ? uint32_t(word(table+4)) : 0; }
+    __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
 }
 uintptr_t __fastcall cast_hook(uintptr_t self, void*, uint32_t caster, uint32_t spell, uint32_t target,
                                uint32_t a4, uint32_t a5, uint32_t a6) {
@@ -1427,14 +1424,18 @@ uintptr_t __fastcall cast_hook(uintptr_t self, void*, uint32_t caster, uint32_t 
     const auto fn = reinterpret_cast<Cast>(cast_gateway);
     {
         Guard guard;
-        if (guard.state && caster_is_avatar(caster)) guard.state->on_spell_cast(spell);
+        if (guard.state) guard.state->on_spell_cast(caster,avatar_handle(),spell);
     }
     return fn(self,caster,spell,target,a4,a5,a6);
 }
-void Engine::on_spell_cast(uint32_t spell) noexcept {
+void Engine::on_spell_cast(uint32_t caster, uint32_t avatar, uint32_t spell) noexcept {
     // Spell names: misctext 0x65+id for ids 1..36 ("地－投石術"), 0x71+id for the rituals 37..45 (0x5ECC60).
     const uint32_t entry = spell >= 1 && spell <= 36 ? 0x65+spell : spell >= 37 && spell <= 45 ? 0x71+spell : 0;
     Exclusive lock(mutex);
+    ++cast_calls;
+    std::rotate(recent_casts.begin(),recent_casts.begin()+1,recent_casts.end());
+    recent_casts.back() = {caster,avatar,spell};
+    if (!caster || caster != avatar) return;
     ++spell_casts;
     const int plan = entry ? plan_for_entry(MiscEntryBase+entry) : -1;
     try {
@@ -2038,7 +2039,7 @@ void Engine::snapshot(const char* event) noexcept {
               ",\"leaks\":"+std::to_string(misc_leaks)+",\"draw_strips\":"+std::to_string(misc_draw_strips)+
               ",\"bounded\":"+std::to_string(misc_bounded)+",\"book_overwritten\":"+std::to_string(book_overwritten)+
               ",\"measures\":"+std::to_string(misc_measures)+",\"measure_faults\":"+std::to_string(misc_measure_faults)+
-              ",\"message_insets\":"+std::to_string(message_insets)+",\"cheat_presses\":"+std::to_string(cheat_presses)+",\"cheat_notices\":"+std::to_string(cheat_notices)+",\"notice_frames\":"+std::to_string(notice_frames)+",\"notice_glyph_misses\":"+std::to_string(notice_glyph_misses)+",\"spell_casts\":"+std::to_string(spell_casts)+",\"last_spell\":"+std::to_string(last_spell)+",\"small_em_glyphs\":"+std::to_string(small_em_glyphs)+",\"book_messages\":"+std::to_string(book_messages)+
+              ",\"message_insets\":"+std::to_string(message_insets)+",\"cheat_presses\":"+std::to_string(cheat_presses)+",\"cheat_notices\":"+std::to_string(cheat_notices)+",\"notice_frames\":"+std::to_string(notice_frames)+",\"notice_glyph_misses\":"+std::to_string(notice_glyph_misses)+",\"cast_calls\":"+std::to_string(cast_calls)+",\"recent_casts\":"+[&]{ std::string r="["; for (const auto& x : recent_casts) if (x.spell) r += (r.size()>1?",":"")+std::string("[")+std::to_string(x.caster)+","+std::to_string(x.avatar)+","+std::to_string(x.spell)+"]"; return r+"]"; }()+",\"spell_casts\":"+std::to_string(spell_casts)+",\"last_spell\":"+std::to_string(last_spell)+",\"small_em_glyphs\":"+std::to_string(small_em_glyphs)+",\"book_messages\":"+std::to_string(book_messages)+
               ",\"name_count_labels\":"+std::to_string(name_count_labels)+
               ",\"misc_message_strips\":"+std::to_string(misc_message_strips)+",\"shop_converts\":"+std::to_string(shop_converts)+
               ",\"shop_short\":"+std::to_string(shop_short)+",\"clock_rewrites\":"+std::to_string(clock_rewrites)+
