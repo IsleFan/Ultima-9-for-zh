@@ -123,7 +123,9 @@
   - 提示的字預熱失敗時只跳過並記錄（`unwarmed`），不會讓初始化失敗（session 30 第一次啟動曾因此 error 9）。「#」與數字 0～9 目前預熱不起來，原因未查，只影響「法術 #N」備用文字。
 - session 29 的「施法後聖者掉進地板、走幾步就閃退（0xC0000005）」：session 32～33 試過多種法術都無法重現，法術仍 UNKNOWN。當時還沒有施法攔截，所以與攔截無關。
 - 飛行作弊開了再關，聖者無法移動（session 31）：提示只讀不寫，推測是遊戲內建作弊本身的問題（`0x49B7F0` 關閉時把移動模式設為 0），HYPOTHESIS。待用原版 exe、同一按鍵檔確認。可能與之前不明的「無法移動」有關。
-- 法力條上的法術名被截斷（只顯示「地－投」）：標籤寬度按英文字算，放不下中文。待研究繪製路徑。
+- 法力條上的法術名被截斷（只顯示「地－投」）：已修正並在 session 34 實測完整顯示（CONFIRMED）。
+  - 標籤建構函式 `0x41ACE0` 的 strdup（呼叫點 `0x41AD54`）拿到帶記號的 misctext，按記號位元組和窄字位量寬度。
+  - 現在複製時換成字位並登記（同 TYPENAME 標籤），寬度由 layout/bounds 點給貼圖寬度。計數 `misc_label_binds`（session 34：23 次，全部來自 `0x41AD54`）。
 - 測試時是視窗化（session 工具改的），但無法拖動視窗：U9 用 `ClipCursor`／`SetCursorPos` 把游標鎖在視窗內，原版行為。可用 Alt+Tab 後 Win+方向鍵移動。
 - 目前最新建置是 `out-m26`（runtime 由 `.local/p10-misc/build/Release` 提供），存檔在 `.local/p10-misc/session-29/final-savegame`（Steam 副本；session 30～33 都從它開始，沒有改動存檔）。
 
