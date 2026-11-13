@@ -126,6 +126,10 @@
 - 法力條上的法術名被截斷（只顯示「地－投」）：已修正並在 session 34 實測完整顯示（CONFIRMED）。
   - 標籤建構函式 `0x41ACE0` 的 strdup（呼叫點 `0x41AD54`）拿到帶記號的 misctext，按記號位元組和窄字位量寬度。
   - 現在複製時換成字位並登記（同 TYPENAME 標籤），寬度由 layout/bounds 點給貼圖寬度。計數 `misc_label_binds`（session 34：23 次，全部來自 `0x41AD54`）。
+- 體力／法力數值顯示（2026-11-13，玩家功能 `status_numbers`，預設開啟）：session 35 實測位置與數值正確（CONFIRMED）。
+  - 讀聖者屬性記錄 `[0x98F31C]+type*0x13C`：`+0x34/+0x36` 體力、`+0x3A/+0x3C` 法力（鍵名來自 0x555E47 的屬性寫出程式）。
+  - 只在介面管理器回報橫條顯示中（`M+0x0B+i`，0 體力、1 法力）時畫；對話／選單時是否隱藏還沒專門確認。
+  - 首頁還沒有對應的勾選框。
 - 測試時是視窗化（session 工具改的），但無法拖動視窗：U9 用 `ClipCursor`／`SetCursorPos` 把游標鎖在視窗內，原版行為。可用 Alt+Tab 後 Win+方向鍵移動。
 - 目前最新建置是 `out-m26`（runtime 由 `.local/p10-misc/build/Release` 提供），存檔在 `.local/p10-misc/session-29/final-savegame`（Steam 副本；session 30～33 都從它開始，沒有改動存檔）。
 
