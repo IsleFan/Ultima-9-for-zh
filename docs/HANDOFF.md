@@ -212,6 +212,19 @@ python scripts/run_p8_0_session.py finish --session .local/p10-misc/session-12
   - GitHub 上沒找到 U9 專用的效能專案；社群建議都是 `Options.ini` 調整（`StreamDuration=3000`、`DeadPoolSize=3200`、裁切距離），未驗證。
   - 我們的 runtime 會寫大量診斷紀錄（一場約 1.4 萬筆 `glyph_cache_warm`），可能有負擔。
   - 下一步：同一存檔、同一路線比較三種情況：原版、中文化、中文化但降低紀錄量。先問清楚是低幀率、規律頓挫，還是轉視角卡。
+- 平台支援（2026-11-13 使用者提出，只記錄，之後再決定）：
+  - U9 本身只有 Windows 版（GOG／Steam 都是），從未出過 Mac 版。
+  - 中文化（`U9Cht.exe`、launcher、注入 DLL、x86 inline hook、GDI／waveOut）也只能在 Windows 上執行。
+  - Release 說明暫定寫「支援 Windows 10/11（GOG／Steam 版）」。
+  - Mac 可能的路徑（皆未驗證，HYPOTHESIS）：
+    - Parallels + Windows 11 ARM（x86 模擬）：機會最高。
+    - CrossOver／Wine：DLL 注入、hook、ddraw/Glide 包裝、影片與音效要逐項驗證。
+    - 原生 Mac 版：不可行（需重寫引擎，超出專案範圍）。
+  - 若有 Mac 測試者：先在 Parallels 跑完整檢查（首頁、啟動、對話、日誌、影片字幕、存讀檔），通過才標成「已驗證」。
+- 手把（2026-11-13 確認，STRONG EVIDENCE）：U9 原生不支援搖桿／手把。
+  - `u9.exe` 雖載入 DirectInput，但沒有任何搖桿相關字串；keymap 只能設定鍵盤與滑鼠。
+  - 替代方案：Steam Input，或 JoyToKey／AntiMicroX 把手把對應成鍵盤與滑鼠（未實測）。
+  - 自己加手把支援需要新 hook，暫不建議。
 - 避頭點（行首標點）規則、英文單字中途斷行。
 - 用 ✕ 關窗時的 0xC000041D 與原版比對。
 - 商店清單 QA：還有 14 個物品和 7 個註解的加註警告（見 P10 文件）。
