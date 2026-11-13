@@ -245,6 +245,15 @@ struct Engine {
     std::array<CastRecord,8> recent_casts{}; uint64_t cast_calls = 0;   // every caster, newest last
     void show_notice(std::wstring text) noexcept;      // caller holds `mutex`
     void update_notice(uintptr_t backend) noexcept;    // caller holds `mutex`; flip, before compose
+    // Overlay text (notices, status numbers): centred on center_x, black outline under `fill`. False when the frame's
+    // command list cannot take it (wrong frame/backend or full). Caller holds `mutex`.
+    bool overlay_text(uintptr_t backend, std::wstring_view text, int32_t center_x, int32_t baseline, uint32_t em,
+                      std::array<uint8_t,3> fill, uint64_t& misses) noexcept;
+    // Status numbers on the health and mana bars ("35/98"), requested 2026-11-13 (FeatureStatusNumbers).
+    bool status_numbers = false;
+    uint64_t status_frames = 0, status_misses = 0, status_unreadable = 0;
+    uint32_t status_last[5]{};   // hp, max hp, mana, max mana (+0x3C), mana cap (+0x3E)
+    void update_status(uintptr_t backend) noexcept;    // caller holds `mutex`; flip, before compose
     void add_occluder(uintptr_t node, Rect area, uint32_t caller, float sx, float sy) noexcept;
     const FontStyle& font_style(uintptr_t record) noexcept;
 };

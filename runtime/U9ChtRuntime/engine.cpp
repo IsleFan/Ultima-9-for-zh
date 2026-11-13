@@ -713,7 +713,7 @@ uintptr_t __fastcall flip_hook(uintptr_t self, void*) {
         DWORD zero = 0; e.render_thread.compare_exchange_strong(zero,GetCurrentThreadId());
         if (e.render_thread.load() != GetCurrentThreadId()) e.fail(15);
         ++e.flips;
-        if (e.render) { if (!e.cheat_bindings.empty()) e.update_notice(self); e.compose(self); }
+        if (e.render) { if (!e.cheat_bindings.empty()) e.update_notice(self); if (e.status_numbers) e.update_status(self); e.compose(self); }
         for (const auto& q : e.queues) if (q.address && q.last_frame == e.frame)
             if (const auto* r = e.raster(q.raster)) for (uint32_t i = 0; i < r->runs.size(); ++i)
                 if (r->runs.first_plan(i)) ++e.stats[r->runs.at(i).plan].presentations;
@@ -1436,6 +1436,7 @@ int read_toggle(cheat::Kind kind) noexcept {
 }
 void cheat_key(UINT vk, UINT mods) { if (engine) engine->on_cheat_key(vk,mods); }
 constexpr uint64_t NoticeMs = 2500, ToggleWaitMs = 600;
+constexpr uint32_t StatusEm = 11;   // status numbers: em at 800x600, doubled at 1600x1200
 }
 // Spell cast 0x5ED950 (thiscall on the spell registry [0x84F810]). SIX stack arguments, `ret 0x18` at 0x5EF75A
 // (CONFIRMED 2026-11-13; the 2026-11-12 reading of three arguments was wrong and crashed the first cast in
@@ -1518,20 +1519,26 @@ void Engine::update_notice(uintptr_t backend) noexcept {
     if (notice.empty() || now > notice_until) return;
     const auto width = word(backend+0x44), height = word(backend+0x48);
     const auto em = width == 800 && height == 600 ? 20U : width == 1600 && height == 1200 ? 40U : 0U;
+    if (!em) return;
+    // Centred near the top, where narration subtitles appear.
+    if (overlay_text(backend,notice,int32_t(width)/2,int32_t(height)*7/100+int32_t(em),em,{248,240,214},notice_glyph_misses))
+        ++notice_frames;
+}
+bool Engine::overlay_text(uintptr_t backend, std::wstring_view text, int32_t center_x, int32_t baseline, uint32_t em,
+                          std::array<uint8_t,3> fill, uint64_t& misses) noexcept {
+    const auto width = word(backend+0x44), height = word(backend+0x48);
     auto& list = draw_list;
     const auto back = word(backend+0x3FC3C4);
-    if (!em || !back || list.epoch != frame) return;
-    if (list.count || list.records) { if (list.backend != backend || list.backbuffer != back) return; }
+    if (!em || !back || list.epoch != frame) return false;
+    if (list.count || list.records) { if (list.backend != backend || list.backbuffer != back) return false; }
     else { list.backend = backend; list.backbuffer = back; list.width = width; list.height = height; }
-    // Centred near the top, where narration subtitles appear; black outline under a pale fill.
     int32_t total = 0;
-    for (const auto c : notice) if (const auto* g = glyphs.get(uint32_t(c),em)) total += g->advance; else ++notice_glyph_misses;
+    for (const auto c : text) if (const auto* g = glyphs.get(uint32_t(c),em)) total += g->advance; else ++misses;
     const Rect screen{0,0,int32_t(width),int32_t(height)};
-    const int32_t baseline = int32_t(height)*7/100 + int32_t(em);
     const int32_t r = std::max<int32_t>(1,int32_t(em)/16);
     for (int pass = 0; pass < 2; ++pass) {
-        int32_t x = (int32_t(width)-total)/2;
-        for (const auto c : notice) {
+        int32_t x = center_x-total/2;
+        for (const auto c : text) {
             const auto* g = glyphs.get(uint32_t(c),em);
             if (!g) continue;
             const auto put = [&](int32_t dx, int32_t dy, std::array<uint8_t,3> rgb) {
@@ -1541,12 +1548,61 @@ void Engine::update_notice(uintptr_t backend) noexcept {
             };
             bool ok = true;
             if (pass == 0) { for (int dy = -r; dy <= r && ok; dy += r) for (int dx = -r; dx <= r && ok; dx += r) if (dx || dy) ok = put(dx,dy,{0,0,0}); }
-            else ok = put(0,0,{248,240,214});
-            if (!ok) return;   // command list full: the notice is skipped this frame, Chinese text keeps priority
+            else ok = put(0,0,fill);
+            if (!ok) return false;   // command list full: skipped this frame, Chinese text keeps priority
             x += g->advance;
         }
     }
-    ++notice_frames;
+    return true;
+}
+// Status numbers (FeatureStatusNumbers). Evidence (u9.exe, disassembly 2026-11-13):
+//  - Stats of an object of type < 0x200 live at [0x98F31C] + type*0x13C (0x4BF6A0); the Avatar's type is 0.
+//    +0x34 CurrentHP, +0x36 MaxHP, +0x3A CurrentMana, +0x3C MaxMana: the key names the stats writer at 0x555E47..
+//    0x555EDD uses (CONFIRMED). Full-mana code sets current = min(+0x3C, +0x3E) (0x62C76A, 0x65D5DC); +0x3E is logged.
+//  - Interface manager M = [[0x13259C4]->0x5C3FA0 + 0xD8]. 0x5AE490 keeps element i's shown state in byte M+0x0B+i and
+//    its widget at M+0x20+i*4; the options loader at 0x555246 maps HealthBar to element 0, ManaBar to element 1.
+//  - Bar centres measured on a 1600x1200 screenshot (session-30): mana x 401, health x 1188, y 1177; scaled by height/600.
+struct StatusRead { uint32_t v[5]{}; bool health = false, mana = false; };
+bool read_status(StatusRead& out) noexcept {
+    __try {
+        const auto avatar = avatar_object();
+        if (!avatar) return false;
+        const uint16_t type = *reinterpret_cast<const uint16_t*>(uintptr_t(avatar)+0xA);
+        const auto records = word(0x98F31C);
+        if (type >= 0x200 || !records) return false;
+        const auto s = records + uintptr_t(type)*0x13C;
+        const uint32_t at[5] = {0x34,0x36,0x3A,0x3C,0x3E};
+        for (int i = 0; i < 5; ++i) out.v[i] = *reinterpret_cast<const uint16_t*>(s+at[i]);
+        const auto root = word(0x13259C4);
+        if (!root) return false;
+        const int32_t index = int32_t(word(root+0x60)); const auto table = word(root+0x3C);
+        if (index < 0 || !table) return false;
+        const auto owner = word(table+uintptr_t(index)*4);
+        const auto m = owner ? word(owner+0xD8) : 0;
+        if (!m) return false;
+        out.health = *reinterpret_cast<const uint8_t*>(m+0x0B) && word(m+0x20);
+        out.mana = *reinterpret_cast<const uint8_t*>(m+0x0C) && word(m+0x24);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
+void Engine::update_status(uintptr_t backend) noexcept {
+    const auto width = word(backend+0x44), height = word(backend+0x48);
+    const uint32_t scale = width == 800 && height == 600 ? 1 : width == 1600 && height == 1200 ? 2 : 0;
+    if (!scale) return;
+    StatusRead s;
+    if (!read_status(s)) { ++status_unreadable; return; }
+    std::copy(std::begin(s.v),std::end(s.v),std::begin(status_last));
+    if (!s.health && !s.mana) return;
+    const uint32_t em = StatusEm*scale;
+    const int32_t baseline = int32_t(1177*scale/2) + int32_t(em)*36/100;
+    try {
+        bool drawn = false;
+        if (s.mana && s.v[3])
+            drawn |= overlay_text(backend,std::to_wstring(s.v[2])+L"/"+std::to_wstring(s.v[3]),int32_t(401*scale/2),baseline,em,{255,255,255},status_misses);
+        if (s.health && s.v[1])
+            drawn |= overlay_text(backend,std::to_wstring(s.v[0])+L"/"+std::to_wstring(s.v[1]),int32_t(1188*scale/2),baseline,em,{255,255,255},status_misses);
+        if (drawn) ++status_frames;
+    } catch (...) {}
 }
 void Engine::compose(uintptr_t backend) noexcept {
     auto& list = draw_list;
@@ -1761,7 +1817,7 @@ void Engine::install(const Config& config, Logger& logger) {
                     // A developer notice must never stop the game: a character the font cannot warm is skipped
                     // (drawn as a miss) and logged, instead of failing initialization (session-30 error 9).
                     for (const auto c : chars) if (c > 0x20) for (const uint32_t em : {20u,40u}) {
-                        try { glyphs.warm(uint32_t(c),em); }
+                        try { glyphs.warm(uint32_t(c),em,c < 0x80); }
                         catch (const std::exception&) { if (unwarmed.size() < 16) unwarmed.push_back(uint32_t(c)); }
                     }
                     o.on_key = cheat_key;
@@ -1772,6 +1828,15 @@ void Engine::install(const Config& config, Logger& logger) {
                            ",\"unwarmed\":["+skipped+"]");
             }
             input_hooks::configure(o);
+            // Status numbers: digits and '/' at both screen sizes, proportional (not CJK cells).
+            if (render && (config.features & FeatureStatusNumbers)) {
+                bool warmed = true;
+                for (const wchar_t c : std::wstring_view(L"0123456789/")) for (const uint32_t em : {StatusEm,StatusEm*2}) {
+                    try { glyphs.warm(uint32_t(c),em,true); } catch (const std::exception&) { warmed = false; }
+                }
+                status_numbers = warmed;
+                log->event("status_numbers","\"enabled\":"+std::string(status_numbers?"true":"false"));
+            }
             input_hooks_enabled = input_hooks::any_enabled();
             log->event("input_hooks","\"probe\":"+std::string(o.probe?"true":"false")+",\"wheel_pages\":"+
                 std::string(o.wheel?"true":"false")+",\"wheel_zoom\":"+std::string(o.zoom?"true":"false")+
@@ -2074,7 +2139,7 @@ void Engine::snapshot(const char* event) noexcept {
               ",\"leaks\":"+std::to_string(misc_leaks)+",\"draw_strips\":"+std::to_string(misc_draw_strips)+
               ",\"bounded\":"+std::to_string(misc_bounded)+",\"book_overwritten\":"+std::to_string(book_overwritten)+
               ",\"measures\":"+std::to_string(misc_measures)+",\"measure_faults\":"+std::to_string(misc_measure_faults)+
-              ",\"message_insets\":"+std::to_string(message_insets)+",\"cheat_presses\":"+std::to_string(cheat_presses)+",\"cheat_notices\":"+std::to_string(cheat_notices)+",\"notice_frames\":"+std::to_string(notice_frames)+",\"notice_glyph_misses\":"+std::to_string(notice_glyph_misses)+",\"misc_label_binds\":"+std::to_string(misc_label_binds)+",\"cast_calls\":"+std::to_string(cast_calls)+",\"recent_casts\":"+[&]{ std::string r="["; for (const auto& x : recent_casts) if (x.spell) r += (r.size()>1?",":"")+std::string("[")+std::to_string(x.caster)+","+std::to_string(x.avatar)+","+std::to_string(x.spell)+"]"; return r+"]"; }()+",\"spell_casts\":"+std::to_string(spell_casts)+",\"last_spell\":"+std::to_string(last_spell)+",\"small_em_glyphs\":"+std::to_string(small_em_glyphs)+",\"book_messages\":"+std::to_string(book_messages)+
+              ",\"message_insets\":"+std::to_string(message_insets)+",\"cheat_presses\":"+std::to_string(cheat_presses)+",\"cheat_notices\":"+std::to_string(cheat_notices)+",\"notice_frames\":"+std::to_string(notice_frames)+",\"notice_glyph_misses\":"+std::to_string(notice_glyph_misses)+",\"misc_label_binds\":"+std::to_string(misc_label_binds)+",\"status_frames\":"+std::to_string(status_frames)+",\"status_misses\":"+std::to_string(status_misses)+",\"status_unreadable\":"+std::to_string(status_unreadable)+",\"status_last\":["+std::to_string(status_last[0])+","+std::to_string(status_last[1])+","+std::to_string(status_last[2])+","+std::to_string(status_last[3])+","+std::to_string(status_last[4])+"],\"cast_calls\":"+std::to_string(cast_calls)+",\"recent_casts\":"+[&]{ std::string r="["; for (const auto& x : recent_casts) if (x.spell) r += (r.size()>1?",":"")+std::string("[")+std::to_string(x.caster)+","+std::to_string(x.avatar)+","+std::to_string(x.spell)+"]"; return r+"]"; }()+",\"spell_casts\":"+std::to_string(spell_casts)+",\"last_spell\":"+std::to_string(last_spell)+",\"small_em_glyphs\":"+std::to_string(small_em_glyphs)+",\"book_messages\":"+std::to_string(book_messages)+
               ",\"name_count_labels\":"+std::to_string(name_count_labels)+
               ",\"misc_message_strips\":"+std::to_string(misc_message_strips)+",\"shop_converts\":"+std::to_string(shop_converts)+
               ",\"shop_short\":"+std::to_string(shop_short)+",\"clock_rewrites\":"+std::to_string(clock_rewrites)+

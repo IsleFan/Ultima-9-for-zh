@@ -75,7 +75,9 @@ public:
     ~GlyphCache() { close(); }
     void open(const std::filesystem::path& font);
     const Glyph* get(uint32_t scalar, uint32_t em) noexcept;
-    void warm(uint32_t scalar, uint32_t em);
+    // proportional: skip the CJK cell contract (advance*16 divisible by em). Only for overlay text drawn by the
+    // runtime itself (notices, status numbers), never for glyphs that stand in for native engine slots.
+    void warm(uint32_t scalar, uint32_t em, bool proportional = false);
     uint32_t size() const noexcept { return size_; }
     uint64_t alpha_bytes() const noexcept { return alpha_bytes_; }
     const std::wstring& font_sha256() const noexcept { return hash_; }

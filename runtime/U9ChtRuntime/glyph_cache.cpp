@@ -69,7 +69,7 @@ const Glyph* GlyphCache::get(uint32_t scalar, uint32_t em) noexcept {
     if (slot >= 0) { ++hits; return &entries_[size_t(slot)]; }
     ++misses; return nullptr;
 }
-void GlyphCache::warm(uint32_t scalar, uint32_t em) {
+void GlyphCache::warm(uint32_t scalar, uint32_t em, bool proportional) {
     if (get(scalar,em)) return;
     require(registered_ && size_ < entries_.size() && scalar <= 0xFFFF &&
         !(scalar >= 0xD800 && scalar <= 0xDFFF) && em && em <= 256, "invalid glyph key/capacity");
@@ -113,7 +113,7 @@ void GlyphCache::warm(uint32_t scalar, uint32_t em) {
         require(coverage <= 64, "invalid gray8 coverage");
         g.alpha[size_t(y)*g.width+x] = static_cast<uint8_t>((coverage*255+32)/64);
     }
-    require(g.advance > 0 && g.advance*16%int(em) == 0 && g.advance*16/int(em) <= 255,
+    require(g.advance > 0 && (proportional || g.advance*16%int(em) == 0) && g.advance*16/int(em) <= 255,
         "non-integral engine logical metric");
     alpha_bytes_ += g.alpha.size();
     index_.insert(scalar,em,size_);

@@ -46,7 +46,7 @@ std::vector<std::wstring> ini_list(const wchar_t* section, const std::filesystem
 std::map<std::wstring, std::wstring> read_settings(const std::filesystem::path& file) {
     static const std::map<std::wstring, std::vector<std::wstring>> known = {
         {L"font", {L"file"}}, {L"journal", {L"letter_spacing", L"line_spacing"}},
-        {L"features", {L"hover_names", L"hover_delay_ms", L"wheel_pages", L"wheel_zoom", L"movie_subtitles", L"input_probe"}}};
+        {L"features", {L"hover_names", L"hover_delay_ms", L"wheel_pages", L"wheel_zoom", L"movie_subtitles", L"input_probe", L"status_numbers"}}};
     need(std::filesystem::is_regular_file(file), "settings file not found");
     std::map<std::wstring, std::wstring> values;
     for (const auto& section : ini_list(nullptr, file)) {
@@ -151,6 +151,7 @@ int wmain(int argc, wchar_t** argv) {
             toggle(L"features.wheel_zoom", FeatureWheelZoom);
             toggle(L"features.movie_subtitles", FeatureMovieSubtitles);
             toggle(L"features.input_probe", FeatureInputProbe);
+            toggle(L"features.status_numbers", FeatureStatusNumbers);
             if (settings.count(L"features.hover_delay_ms")) {
                 const auto& text = settings.at(L"features.hover_delay_ms");
                 need(!text.empty() && text.size() <= 4 && std::all_of(text.begin(), text.end(), iswdigit),
