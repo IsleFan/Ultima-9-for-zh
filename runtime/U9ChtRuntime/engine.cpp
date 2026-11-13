@@ -1407,8 +1407,10 @@ int read_toggle(cheat::Kind kind) noexcept {
 void cheat_key(UINT vk, UINT mods) { if (engine) engine->on_cheat_key(vk,mods); }
 constexpr uint64_t NoticeMs = 2500, ToggleWaitMs = 600;
 }
-// Spell cast 0x5ED950 (thiscall on the spell registry [0x84F810]; args: caster handle, spell id 1..47, target
-// handle; callee pops 12 bytes; CONFIRMED by disassembly 2026-11-12). A handle indexes the object table
+// Spell cast 0x5ED950 (thiscall on the spell registry [0x84F810]). SIX stack arguments, `ret 0x18` at 0x5EF75A
+// (CONFIRMED 2026-11-13; the 2026-11-12 reading of three arguments was wrong and crashed the first cast in
+// session-30): [1] caster handle (read via [0x8515D0]), [2] spell id 1..47 (indexes [0x84F810]), [3] target handle,
+// [4..6] forwarded unread (copied at 0x5EDAB4). Every argument is passed through unchanged. A handle indexes the object table
 // [0x8515D0] (12-byte rows, object at +8). The Avatar object is [[[0x850228]+0xD0]+0xE8] (the fly toggle's object).
 bool caster_is_avatar(uint32_t caster) noexcept {
     __try {
@@ -1419,13 +1421,15 @@ bool caster_is_avatar(uint32_t caster) noexcept {
         return object && object == word(a+0xE8);
     } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
 }
-uintptr_t __fastcall cast_hook(uintptr_t self, void*, uint32_t caster, uint32_t spell, uint32_t target) {
-    const auto fn = reinterpret_cast<uintptr_t(__thiscall*)(uintptr_t,uint32_t,uint32_t,uint32_t)>(cast_gateway);
+uintptr_t __fastcall cast_hook(uintptr_t self, void*, uint32_t caster, uint32_t spell, uint32_t target,
+                               uint32_t a4, uint32_t a5, uint32_t a6) {
+    using Cast = uintptr_t(__thiscall*)(uintptr_t,uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,uint32_t);
+    const auto fn = reinterpret_cast<Cast>(cast_gateway);
     {
         Guard guard;
         if (guard.state && caster_is_avatar(caster)) guard.state->on_spell_cast(spell);
     }
-    return fn(self,caster,spell,target);
+    return fn(self,caster,spell,target,a4,a5,a6);
 }
 void Engine::on_spell_cast(uint32_t spell) noexcept {
     // Spell names: misctext 0x65+id for ids 1..36 ("地－投石術"), 0x71+id for the rituals 37..45 (0x5ECC60).
@@ -1718,10 +1722,18 @@ void Engine::install(const Config& config, Logger& logger) {
                     std::wstring chars = cheat::all_notice_characters() + L"聖者施展法術#0123456789";
                     for (uint32_t entry = 0x66; entry <= 0x71+45; ++entry) if (const int plan = plan_for_entry(MiscEntryBase+entry); plan >= 0)
                         for (uint32_t i = 0; i < pack.plans[size_t(plan)].length; ++i) chars += wchar_t(pack.plans[size_t(plan)].wide[i]);
-                    for (const auto c : chars) if (c > 0x20) { glyphs.warm(uint32_t(c),20); glyphs.warm(uint32_t(c),40); }
+                    // A developer notice must never stop the game: a character the font cannot warm is skipped
+                    // (drawn as a miss) and logged, instead of failing initialization (session-30 error 9).
+                    for (const auto c : chars) if (c > 0x20) for (const uint32_t em : {20u,40u}) {
+                        try { glyphs.warm(uint32_t(c),em); }
+                        catch (const std::exception&) { if (unwarmed.size() < 16) unwarmed.push_back(uint32_t(c)); }
+                    }
                     o.on_key = cheat_key;
                 }
-                log->event("cheat_notices","\"keymap\":\""+keymap+"\",\"bindings\":"+std::to_string(cheat_bindings.size()));
+                std::string skipped;
+                for (const auto c : unwarmed) skipped += (skipped.empty()?"":",")+std::to_string(c);
+                log->event("cheat_notices","\"keymap\":\""+keymap+"\",\"bindings\":"+std::to_string(cheat_bindings.size())+
+                           ",\"unwarmed\":["+skipped+"]");
             }
             input_hooks::configure(o);
             input_hooks_enabled = input_hooks::any_enabled();

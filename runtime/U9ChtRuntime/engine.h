@@ -234,6 +234,7 @@ struct Engine {
     struct PendingCheat { int binding = -1; uint64_t tick = 0; int before = -1; } pending_cheat;
     std::wstring notice;
     uint64_t notice_until = 0, cheat_presses = 0, cheat_notices = 0, notice_frames = 0, notice_glyph_misses = 0;
+    std::vector<uint32_t> unwarmed;   // notice characters the font could not warm (logged at start)
     void on_cheat_key(UINT vk, UINT mods) noexcept;    // game thread, from input_hooks
     void on_spell_cast(uint32_t spell) noexcept;       // game thread, the Avatar's casts (cast_hook)
     uint64_t spell_casts = 0; uint32_t last_spell = 0;
