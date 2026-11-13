@@ -1411,11 +1411,16 @@ constexpr uint64_t NoticeMs = 2500, ToggleWaitMs = 600;
 // (CONFIRMED 2026-11-13; the 2026-11-12 reading of three arguments was wrong and crashed the first cast in
 // session-30): [1] caster handle (read via [0x8515D0]), [2] spell id 1..47 (indexes [0x84F810]), [3] target handle,
 // [4..6] forwarded unread (copied at 0x5EDAB4). Every argument is passed through unchanged.
-// The Avatar's handle is the player record's: [[0x98F320]+4] for player 0, as 0x4F1DE0 (ecx = 0) reads it before its
-// creation fallback (CONFIRMED by disassembly 2026-11-13). The 2026-11-12 check compared the object of
-// [[[0x850228]+0xD0]+0xE8], which is the movement controller the fly cheat drives, so it never matched (session-31).
-uint32_t avatar_handle() noexcept {
+// The Avatar: player 0's record value [[0x98F320]+4], which 0x4F1DE0 (ecx = 0) returns. Session-32 showed it is an
+// object pointer, not a handle (every Avatar cast had caster handle 1, the record value 0x08BEC...), so the caster's
+// handle is resolved to its object ([0x8515D0] row +8) and compared with it. Earlier checks compared the fly cheat's
+// movement controller (session-31) and the raw handle (session-32); neither matched.
+uint32_t avatar_object() noexcept {
     __try { const auto table = word(0x98F320); return table ? uint32_t(word(table+4)) : 0; }
+    __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
+}
+uint32_t handle_object(uint32_t handle) noexcept {
+    __try { const auto table = word(0x8515D0); return table && handle && handle < 0x100000 ? uint32_t(word(table+uintptr_t(handle)*12+8)) : 0; }
     __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
 }
 uintptr_t __fastcall cast_hook(uintptr_t self, void*, uint32_t caster, uint32_t spell, uint32_t target,
@@ -1424,7 +1429,7 @@ uintptr_t __fastcall cast_hook(uintptr_t self, void*, uint32_t caster, uint32_t 
     const auto fn = reinterpret_cast<Cast>(cast_gateway);
     {
         Guard guard;
-        if (guard.state) guard.state->on_spell_cast(caster,avatar_handle(),spell);
+        if (guard.state) guard.state->on_spell_cast(handle_object(caster),avatar_object(),spell);
     }
     return fn(self,caster,spell,target,a4,a5,a6);
 }
