@@ -1568,7 +1568,7 @@ bool Engine::overlay_text(uintptr_t backend, std::wstring_view text, int32_t cen
 //  - Interface manager M = [[0x13259C4]->0x5C3FA0 + 0xD8]. 0x5AE490 keeps element i's shown state in byte M+0x0B+i and
 //    its widget at M+0x20+i*4; the options loader at 0x555246 maps HealthBar to element 0, ManaBar to element 1.
 //  - Bar centres measured on a 1600x1200 screenshot (session-30): mana x 401, health x 1188, y 1177; scaled by height/600.
-struct StatusRead { uint32_t v[5]{}; bool health = false, mana = false; };
+struct StatusRead { uint32_t v[5]{}; bool health = false, mana = false; uint32_t record = 0xFFFFFFFF; };
 bool read_status(StatusRead& out) noexcept {
     __try {
         const auto avatar = avatar_object();
@@ -1576,6 +1576,7 @@ bool read_status(StatusRead& out) noexcept {
         const uint16_t type = *reinterpret_cast<const uint16_t*>(uintptr_t(avatar)+0xA);
         const auto records = word(0x98F31C);
         if (type >= 0x200 || !records) return false;
+        out.record = type;
         const auto s = records + uintptr_t(type)*0x13C;
         const uint32_t at[5] = {0x34,0x36,0x3A,0x3C,0x3E};
         for (int i = 0; i < 5; ++i) out.v[i] = *reinterpret_cast<const uint16_t*>(s+at[i]);
@@ -1609,9 +1610,9 @@ void Engine::update_status(uintptr_t backend) noexcept {
         std::copy(std::begin(s.v),std::end(s.v),std::begin(status_previous));
         status_synced = true;
     }
-    if (!s.health && !s.mana) { target_record = 0xFFFFFFFF; return; }
+    if (!s.health && !s.mana) { records_synced = false; return; }   // HUD hidden: rescan from scratch later
     try {
-        draw_target(backend,scale);
+        draw_combat(backend,scale,s.record);
         if (status_numbers) {
             const uint32_t em = StatusEm*scale;
             const int32_t baseline = int32_t(BarY*int32_t(scale)/2) + int32_t(em)*36/100;
@@ -1685,21 +1686,79 @@ void Engine::build_bar_glyphs() noexcept {
         target_bar = true;
     } catch (...) { target_bar = false; }
 }
-// The combat target (read_target): frame at the top centre, red fill clipped to hp/max, "hp/max" on it. An HP drop of
-// the same target spawns a floating number under the frame (FeatureFloatingNumbers). Hidden with the HUD.
-void Engine::draw_target(uintptr_t backend, uint32_t scale) noexcept {
-    TargetRead t;
-    const bool have = read_target(t) && t.max && t.max != 0xFFFF && t.hp <= t.max;
-    if (!have) { target_record = 0xFFFFFFFF; return; }
+constexpr uint32_t MaxBars = 3, ResyncChanges = 12;
+constexpr uint64_t CombatantMs = 8000;
+constexpr int32_t BarRowStep = 34;   // 1600x1200 units between stacked bars
+// Copies hp/max of all 512 records; false when the table is absent or unreadable.
+bool read_records(uintptr_t& base, std::array<uint16_t,512>& hp, std::array<uint16_t,512>& max) noexcept {
+    __try {
+        base = word(0x98F31C);
+        if (!base) return false;
+        for (uint32_t i = 0; i < 512; ++i) {
+            const auto r = base + uintptr_t(i)*0x13C;
+            hp[i] = *reinterpret_cast<const uint16_t*>(r+0x34); max[i] = *reinterpret_cast<const uint16_t*>(r+0x36);
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
+void Engine::scan_combatants(uint32_t avatar_record, uint32_t locked) noexcept {
+    uintptr_t base = 0;
+    std::array<uint16_t,512> hp{}, max{};
+    if (!read_records(base,hp,max)) { records_synced = false; return; }
     const auto now = GetTickCount64();
-    if (t.type != target_record) { target_record = t.type; target_previous_hp = t.hp; target_zero_since = 0; }
-    else if (t.hp < target_previous_hp) {
-        if (floating_numbers) spawn_floater(L"-"+std::to_wstring(target_previous_hp-t.hp),TargetX+TargetW/2+50,{255,96,72},TargetY+30,40);
-        target_previous_hp = t.hp;
-    } else target_previous_hp = t.hp;
-    if (!t.hp) { if (!target_zero_since) target_zero_since = now; if (now-target_zero_since > TargetZeroMs) return; }
-    else target_zero_since = 0;
-    if (!target_bar) return;
+    if (records_synced && base == record_base) {
+        uint32_t changes = 0;
+        for (uint32_t i = 0; i < 512; ++i) changes += hp[i] != record_hp[i] || max[i] != record_max[i];
+        if (changes > ResyncChanges) ++combat_resyncs;
+        else for (uint32_t i = 0; i < 512; ++i) {
+            if (i == avatar_record || max[i] != record_max[i] || !max[i] || hp[i] >= record_hp[i]) continue;
+            ++combat_hits;
+            Combatant* c = nullptr;
+            for (auto& k : combatants) if (k.record == i) { c = &k; break; }
+            if (!c) {   // a free slot, else the one hit longest ago (never the locked target)
+                for (auto& k : combatants) if (k.record == 0xFFFFFFFF) { c = &k; break; }
+                if (!c) for (auto& k : combatants) if (k.record != locked && (!c || k.last_hit < c->last_hit)) c = &k;
+                if (c) *c = {i,0,0,0};
+            }
+            if (c) c->last_hit = now;
+            if (floating_numbers) floater_for(i,record_hp[i]-hp[i]);
+        }
+    } else if (records_synced) ++combat_resyncs;
+    record_base = base; record_hp = hp; record_max = max; records_synced = true;
+}
+void Engine::draw_combat(uintptr_t backend, uint32_t scale, uint32_t avatar_record) noexcept {
+    TargetRead t;
+    const uint32_t locked = read_target(t) && t.max && t.max != 0xFFFF ? t.type : 0xFFFFFFFF;
+    scan_combatants(avatar_record,locked);
+    const auto now = GetTickCount64();
+    // Rows: the locked target first, then the most recently hit; expired or long-dead ones leave.
+    std::array<uint32_t,MaxBars> rows; rows.fill(0xFFFFFFFF);
+    uint32_t count = 0;
+    if (locked != 0xFFFFFFFF && locked < 512) rows[count++] = locked;
+    for (auto& k : combatants) {
+        if (k.record == 0xFFFFFFFF) continue;
+        if (k.record != locked && now-k.last_hit > CombatantMs) { k = {}; continue; }
+        if (k.record < 512 && !record_hp[k.record]) { if (!k.zero_since) k.zero_since = now; if (now-k.zero_since > TargetZeroMs) { k = {}; continue; } }
+        else k.zero_since = 0;
+    }
+    if (locked < 512) {   // a locked target at 0 HP also leaves after TargetZeroMs
+        Combatant* c = nullptr;
+        for (auto& k : combatants) if (k.record == locked) c = &k;
+        if (!c) for (auto& k : combatants) if (k.record == 0xFFFFFFFF) { k = {locked,now,0,0}; c = &k; break; }
+        if (c && !record_hp[locked]) { if (!c->zero_since) c->zero_since = now; if (now-c->zero_since > TargetZeroMs) count = 0; }
+    }
+    while (count < MaxBars) {
+        const Combatant* best = nullptr;
+        for (const auto& k : combatants) {
+            if (k.record >= 512 || k.record == locked) continue;
+            bool used = false; for (uint32_t r = 0; r < count; ++r) used |= rows[r] == k.record;
+            if (!used && (!best || k.last_hit > best->last_hit)) best = &k;
+        }
+        if (!best) break;
+        rows[count++] = best->record;
+    }
+    for (auto& k : combatants) { k.row = -1; for (uint32_t r = 0; r < count; ++r) if (rows[r] == k.record) k.row = int32_t(r); }
+    if (!target_bar || !count) return;
     auto& list = draw_list;
     const auto back = word(backend+0x3FC3C4);
     if (!back || list.epoch != frame) return;
@@ -1708,20 +1767,35 @@ void Engine::draw_target(uintptr_t backend, uint32_t scale) noexcept {
     const auto& g = bar_glyphs[scale-1];
     const int32_t s = int32_t(scale);
     const int32_t w = int32_t(g[1].width), h = int32_t(g[1].height), b = (int32_t(g[0].width)-w)/2;
-    const int32_t left = TargetX*s/2 - w/2, top = TargetY*s/2 - h/2;
-    const int32_t fill = int32_t(int64_t(w)*t.hp/t.max);
     const Rect screen{0,0,int32_t(list.width),int32_t(list.height)};
     const auto rect = [&](const Glyph& glyph, int32_t x, int32_t y, int32_t cw, std::array<uint8_t,3> rgb) {
         const auto clip = intersect(screen,{x,y,x+cw,y+int32_t(glyph.height)});
         return empty(clip) || list.add({&glyph,x,y,clip,rgb});
     };
-    if (!rect(g[0],left-b,top-b,w+2*b,{0,0,0}) || !rect(g[1],left,top,w,{58,12,10}) ||
-        (fill > 0 && !rect(g[2],left,top,fill,{196,34,26}))) return;
-    try {
-        const uint32_t em = StatusEm*scale;
-        overlay_text(backend,std::to_wstring(t.hp)+L"/"+std::to_wstring(t.max),TargetX*s/2,top+h/2+int32_t(em)*36/100,em,{255,255,255},status_misses);
-    } catch (...) {}
-    ++target_bar_frames;
+    bool drawn = false;
+    for (uint32_t r = 0; r < count; ++r) {
+        const auto record = rows[r];
+        const uint32_t hp = record_hp[record], max = record_max[record];
+        if (!max || hp > max) continue;
+        const int32_t left = TargetX*s/2 - w/2, top = (TargetY+int32_t(r)*BarRowStep)*s/2 - h/2;
+        const int32_t fill = int32_t(int64_t(w)*hp/max);
+        // The locked target is red; others hit recently are a duller red.
+        const std::array<uint8_t,3> colour = record == locked ? std::array<uint8_t,3>{196,34,26} : std::array<uint8_t,3>{150,60,40};
+        if (!rect(g[0],left-b,top-b,w+2*b,{0,0,0}) || !rect(g[1],left,top,w,{58,12,10}) ||
+            (fill > 0 && !rect(g[2],left,top,fill,colour))) break;
+        try {
+            const uint32_t em = StatusEm*scale;
+            overlay_text(backend,std::to_wstring(hp)+L"/"+std::to_wstring(max),TargetX*s/2,top+h/2+int32_t(em)*36/100,em,{255,255,255},status_misses);
+        } catch (...) {}
+        drawn = true;
+    }
+    if (drawn) ++target_bar_frames;
+}
+// A hit record's damage floats beside its bar row (or the first row when it has none yet).
+void Engine::floater_for(uint32_t record, uint32_t damage) noexcept {
+    int32_t row = 0;
+    for (const auto& k : combatants) if (k.record == record && k.row >= 0) row = k.row;
+    try { spawn_floater(L"-"+std::to_wstring(damage),TargetX+TargetW/2+60,{255,96,72},TargetY+row*BarRowStep+30,40); } catch (...) {}
 }
 void Engine::spawn_floater(std::wstring text, int32_t x_units, std::array<uint8_t,3> rgb, int32_t y_units,
                            int32_t rise_units) noexcept {
@@ -2286,7 +2360,7 @@ void Engine::snapshot(const char* event) noexcept {
               ",\"leaks\":"+std::to_string(misc_leaks)+",\"draw_strips\":"+std::to_string(misc_draw_strips)+
               ",\"bounded\":"+std::to_string(misc_bounded)+",\"book_overwritten\":"+std::to_string(book_overwritten)+
               ",\"measures\":"+std::to_string(misc_measures)+",\"measure_faults\":"+std::to_string(misc_measure_faults)+
-              ",\"message_insets\":"+std::to_string(message_insets)+",\"cheat_presses\":"+std::to_string(cheat_presses)+",\"cheat_notices\":"+std::to_string(cheat_notices)+",\"notice_frames\":"+std::to_string(notice_frames)+",\"notice_glyph_misses\":"+std::to_string(notice_glyph_misses)+",\"misc_label_binds\":"+std::to_string(misc_label_binds)+",\"target_misses\":"+std::to_string(target_misses)+",\"target_lock_frames\":"+std::to_string(target_lock_frames)+",\"last_target_raw\":"+std::to_string(last_target_raw)+",\"target_bar_frames\":"+std::to_string(target_bar_frames)+",\"target_frames\":"+std::to_string(target_frames)+",\"target_overflow\":"+std::to_string(target_overflow)+",\"targets_seen\":"+[&]{ std::string r="["; for (const auto& t : targets_seen) if (t.frames) r += (r.size()>1?",":"")+std::string("[")+std::to_string(t.handle)+","+std::to_string(t.lock)+","+std::to_string(t.type)+","+std::to_string(t.hp)+","+std::to_string(t.max)+","+std::to_string(t.min_hp)+","+std::to_string(t.frames)+"]"; return r+"]"; }()+",\"floaters\":"+std::to_string(floaters_spawned)+",\"floater_frames\":"+std::to_string(floater_frames)+",\"floater_misses\":"+std::to_string(floater_misses)+",\"status_frames\":"+std::to_string(status_frames)+",\"status_misses\":"+std::to_string(status_misses)+",\"status_unreadable\":"+std::to_string(status_unreadable)+",\"status_last\":["+std::to_string(status_last[0])+","+std::to_string(status_last[1])+","+std::to_string(status_last[2])+","+std::to_string(status_last[3])+","+std::to_string(status_last[4])+"],\"cast_calls\":"+std::to_string(cast_calls)+",\"recent_casts\":"+[&]{ std::string r="["; for (const auto& x : recent_casts) if (x.spell) r += (r.size()>1?",":"")+std::string("[")+std::to_string(x.caster)+","+std::to_string(x.avatar)+","+std::to_string(x.spell)+"]"; return r+"]"; }()+",\"spell_casts\":"+std::to_string(spell_casts)+",\"last_spell\":"+std::to_string(last_spell)+",\"small_em_glyphs\":"+std::to_string(small_em_glyphs)+",\"book_messages\":"+std::to_string(book_messages)+
+              ",\"message_insets\":"+std::to_string(message_insets)+",\"cheat_presses\":"+std::to_string(cheat_presses)+",\"cheat_notices\":"+std::to_string(cheat_notices)+",\"notice_frames\":"+std::to_string(notice_frames)+",\"notice_glyph_misses\":"+std::to_string(notice_glyph_misses)+",\"misc_label_binds\":"+std::to_string(misc_label_binds)+",\"target_misses\":"+std::to_string(target_misses)+",\"target_lock_frames\":"+std::to_string(target_lock_frames)+",\"last_target_raw\":"+std::to_string(last_target_raw)+",\"combat_hits\":"+std::to_string(combat_hits)+",\"combat_resyncs\":"+std::to_string(combat_resyncs)+",\"target_bar_frames\":"+std::to_string(target_bar_frames)+",\"target_frames\":"+std::to_string(target_frames)+",\"target_overflow\":"+std::to_string(target_overflow)+",\"targets_seen\":"+[&]{ std::string r="["; for (const auto& t : targets_seen) if (t.frames) r += (r.size()>1?",":"")+std::string("[")+std::to_string(t.handle)+","+std::to_string(t.lock)+","+std::to_string(t.type)+","+std::to_string(t.hp)+","+std::to_string(t.max)+","+std::to_string(t.min_hp)+","+std::to_string(t.frames)+"]"; return r+"]"; }()+",\"floaters\":"+std::to_string(floaters_spawned)+",\"floater_frames\":"+std::to_string(floater_frames)+",\"floater_misses\":"+std::to_string(floater_misses)+",\"status_frames\":"+std::to_string(status_frames)+",\"status_misses\":"+std::to_string(status_misses)+",\"status_unreadable\":"+std::to_string(status_unreadable)+",\"status_last\":["+std::to_string(status_last[0])+","+std::to_string(status_last[1])+","+std::to_string(status_last[2])+","+std::to_string(status_last[3])+","+std::to_string(status_last[4])+"],\"cast_calls\":"+std::to_string(cast_calls)+",\"recent_casts\":"+[&]{ std::string r="["; for (const auto& x : recent_casts) if (x.spell) r += (r.size()>1?",":"")+std::string("[")+std::to_string(x.caster)+","+std::to_string(x.avatar)+","+std::to_string(x.spell)+"]"; return r+"]"; }()+",\"spell_casts\":"+std::to_string(spell_casts)+",\"last_spell\":"+std::to_string(last_spell)+",\"small_em_glyphs\":"+std::to_string(small_em_glyphs)+",\"book_messages\":"+std::to_string(book_messages)+
               ",\"name_count_labels\":"+std::to_string(name_count_labels)+
               ",\"misc_message_strips\":"+std::to_string(misc_message_strips)+",\"shop_converts\":"+std::to_string(shop_converts)+
               ",\"shop_short\":"+std::to_string(shop_short)+",\"clock_rewrites\":"+std::to_string(clock_rewrites)+

@@ -250,7 +250,9 @@ python scripts/run_p8_0_session.py finish --session .local/p10-misc/session-12
   - `u9.exe` 雖載入 DirectInput，但沒有任何搖桿相關字串；keymap 只能設定鍵盤與滑鼠。
   - 替代方案：Steam Input，或 JoyToKey／AntiMicroX 把手把對應成鍵盤與滑鼠（未實測）。
   - 自己加手把支援需要新 hook，暫不建議。
-- 被怪物打敗後讀檔閃退（session 38，0xC0000005）：session 39 重現不出來，原因不明（UNKNOWN）。已加當機記錄（vectored handler，只記錄不攔截，`exception` 事件，最多 64 筆），再遇到時看最後一筆的模組與位址。
+- 被怪物打敗後讀檔閃退（session 38，0xC0000005）：session 39 重現不出來，原因不明（UNKNOWN）。
+  - session 40 再次發生（聖者死亡後讀檔）。當機記錄：`u9.exe+0x1E0C15`（`0x5E0C15`，鏈結串列尾端插入，寫入損壞節點 `[eax+4]`，eax=0x2EE70E20），堆疊 0x55FA40、0x4CBB2E、0x4C9B6C、0x574EF1…。當機點在遊戲程式內、不在 runtime 或任何 hook 內；損壞來源未知。
+  - 讀檔時遊戲會釋放並重新配置屬性記錄表（0x4F2270）。下一步：用原版 exe 重現「死亡後讀檔」以判斷是否原版問題。已加當機記錄（vectored handler，只記錄不攔截，`exception` 事件，最多 64 筆），再遇到時看最後一筆的模組與位址。
 - 對話時直接跳到下一句（2026-11-13 使用者提出，只記錄，待研究）：先查原版有沒有跳過鍵或滑鼠點擊跳過，再看語音／字幕的推進點能否安全提前。
 - 避頭點（行首標點）規則、英文單字中途斷行。
 - 用 ✕ 關窗時的 0xC000041D 與原版比對。

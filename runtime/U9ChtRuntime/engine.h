@@ -260,7 +260,7 @@ struct Engine {
     bool floating_numbers = false, status_synced = false;
     uint32_t status_previous[5]{};
     struct Floater { std::wstring text; uint64_t start = 0; int32_t x = 0, y = 0, rise = 70; std::array<uint8_t,3> rgb{}; };
-    std::array<Floater,8> floaters{};
+    std::array<Floater,16> floaters{};
     uint32_t floater_next = 0;
     uint64_t floaters_spawned = 0, floater_frames = 0, floater_misses = 0;
     void spawn_floater(std::wstring text, int32_t x_units, std::array<uint8_t,3> rgb, int32_t y_units = 0,
@@ -269,10 +269,22 @@ struct Engine {
     // rectangles are runtime-owned glyphs (alpha only), index [scale-1]: shade, trough, fill; the fill is clipped to hp.
     bool target_bar = false;
     std::array<std::array<Glyph,3>,2> bar_glyphs{};
-    uint32_t target_record = 0xFFFFFFFF, target_previous_hp = 0;
-    uint64_t target_zero_since = 0, target_bar_frames = 0;
+    uint64_t target_bar_frames = 0;
     void build_bar_glyphs() noexcept;
-    void draw_target(uintptr_t backend, uint32_t scale) noexcept;
+    // Combatants (2026-11-14): every frame the 512 stats records ([0x98F31C], 0x27800 bytes, allocated at 0x4F1F68 and
+    // re-allocated on load at 0x4F2270) are compared with the previous frame. A record other than the Avatar's whose HP
+    // dropped (same max) was hit: it floats its damage and joins the combatant list for CombatantMs. The locked target
+    // is always first. Up to MaxBars bars are stacked under the top bars. A changed table address, an unreadable frame or
+    // more than ResyncChanges records changing at once (a load) only resynchronises.
+    struct Combatant { uint32_t record = 0xFFFFFFFF; uint64_t last_hit = 0, zero_since = 0; int32_t row = 0; };
+    std::array<Combatant,8> combatants{};
+    std::array<uint16_t,512> record_hp{}, record_max{};
+    uintptr_t record_base = 0;
+    bool records_synced = false;
+    uint64_t combat_hits = 0, combat_resyncs = 0;
+    void scan_combatants(uint32_t avatar_record, uint32_t locked) noexcept;
+    void draw_combat(uintptr_t backend, uint32_t scale, uint32_t avatar_record) noexcept;
+    void floater_for(uint32_t record, uint32_t damage) noexcept;
     // Target probe (research for the target health bar, 2026-11-13; read-only). Combat manager [0x98F324]:
     // +0x1008 target handle (-1 none), +0x100C lock. Distinct targets seen: handle, lock, object type (+0xA), and the
     // stats record values hp/max (+0x34/+0x36) when the type is a record index (< 0x200), else 0xFFFF.

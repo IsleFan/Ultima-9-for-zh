@@ -41,7 +41,7 @@ struct FrameList {
     uintptr_t backend = 0, backbuffer = 0;
     uint32_t width = 0, height = 0, count = 0, records = 0;
     Rect bounds{}; // Union of pending command clips; meaningful while count != 0.
-    std::array<DrawCommand,512> commands{};
+    std::array<DrawCommand,1024> commands{};
     std::array<DrawRecord,64> sources{};
     std::array<OccluderMask,4> masks{};
     uint32_t mask_count = 0;
