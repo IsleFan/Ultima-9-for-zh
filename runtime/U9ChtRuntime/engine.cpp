@@ -673,7 +673,11 @@ uintptr_t __cdecl name_copy_hook(const char* text) {
     const auto caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
     uint32_t lead = 0;
     const int plan = guard.state ? guard.state->pack.match_name(text,caller,&lead) : -1;
-    if (plan < 0) return fn(text);
+    if (plan < 0) {
+        if (guard.state && text && static_cast<uint8_t>(text[0]) == MiscMarkerLead)
+            if (const auto copy = guard.state->copy_misc_label(text,caller,fn)) return copy;
+        return fn(text);
+    }
     auto& e = *guard.state;
     const auto& p = e.pack.plans[size_t(plan)];
     // The game still allocates/owns/frees the strdup result. Register before
@@ -695,7 +699,8 @@ uintptr_t __fastcall name_destroy_hook(uintptr_t self, void*) {
         auto copy = word(self+0x6C);
         if (copy) copy += count_prefix(reinterpret_cast<const char*>(copy)); // "(27) " labels bind after the count
         const auto located = e.registry.locate(copy);
-        if (located.binding && located.offset == 0 && e.pack.plans[located.binding->plan].is_name()) {
+        const auto bound = located.binding ? &e.pack.plans[located.binding->plan] : nullptr;
+        if (bound && located.offset == 0 && (bound->is_name() || (!bound->is_book() && bound->entry >= MiscEntryBase))) {
             ++e.stats[located.binding->plan].freed; e.retire_buffer(copy);
         }
     }
@@ -1300,6 +1305,31 @@ bool Engine::rewrite_clock(uintptr_t dest, uint32_t length) noexcept {
         b = {}; b.base = dest; b.size = uint32_t(slots.size()+1); b.entries = 1; b.segments = std::move(segments);
         return true;
     } catch (...) { ++journal_alloc_failures; return false; }
+}
+// A label constructor 0x41ACE0 (strdup at 0x41AD54) given a marked misctext: the belt's spell examine label on the
+// mana bar ("地－投石術", session-30). The native copy kept the marker, so the constructor measured four ASCII marker
+// bytes plus narrow slots and the Chinese name was clipped. As for TYPENAME labels, the copy becomes the plan's slots
+// and is bound before the constructor measures it, so the layout/bounds points give each slot its texture width.
+// Other callers are only counted (misc_copy_callers) and copied unchanged.
+uintptr_t Engine::copy_misc_label(const char* text, uintptr_t caller, uintptr_t (__cdecl* copy)(const char*)) noexcept {
+    if (!render || !texture_enabled) return 0;
+    const auto n = uint32_t(strnlen(text,0x400));
+    uint32_t plan = 0;
+    if (!decode_misc_marker(reinterpret_cast<const uint8_t*>(text),n,plan) || plan >= pack.count) return 0;
+    const auto& p = pack.plans[plan];
+    if (p.is_name() || p.is_book() || !p.length) return 0;
+    { Exclusive lock(mutex); count_caller(misc_copy_callers,caller); }
+    if (caller != NameCopyCaller || n != MiscMarkerSize+p.length ||
+        std::memcmp(text+MiscMarkerSize,p.slots.data(),p.length) != 0) return 0;
+    try {
+        const std::string label(reinterpret_cast<const char*>(p.slots.data()),p.length);
+        const auto result = copy(label.c_str());
+        Exclusive lock(mutex);
+        if (!result || std::memcmp(reinterpret_cast<void*>(result),label.c_str(),label.size()+1) != 0 ||
+            !bind_buffer(result,p.length+1,plan,0,Life::Cache,reinterpret_cast<uintptr_t>(text))) fail(29);
+        else { ++stats[plan].cache; ++misc_label_binds; }
+        return result;
+    } catch (...) { return 0; }
 }
 void Engine::count_caller(std::array<CallerCount,32>& table, uintptr_t caller) noexcept {
     for (auto& c : table) {
@@ -2026,7 +2056,7 @@ void Engine::snapshot(const char* event) noexcept {
               fields += ']';
           };
           fields += ']';
-          callers("glyph_callers",glyph_callers); callers("paint_callers",paint_callers); callers("queue_callers",queue_callers);
+          callers("glyph_callers",glyph_callers); callers("misc_copy_callers",misc_copy_callers); callers("paint_callers",paint_callers); callers("queue_callers",queue_callers);
           fields += ",\"caller_overflow\":"+std::to_string(caller_overflow)+"}";
           fields += ",\"texture\":{\"enabled\":"+std::string(texture_enabled?"true":"false")+
               ",\"markers\":"+std::to_string(journal_markers)+",\"marker_short\":"+std::to_string(journal_marker_short)+
@@ -2044,7 +2074,7 @@ void Engine::snapshot(const char* event) noexcept {
               ",\"leaks\":"+std::to_string(misc_leaks)+",\"draw_strips\":"+std::to_string(misc_draw_strips)+
               ",\"bounded\":"+std::to_string(misc_bounded)+",\"book_overwritten\":"+std::to_string(book_overwritten)+
               ",\"measures\":"+std::to_string(misc_measures)+",\"measure_faults\":"+std::to_string(misc_measure_faults)+
-              ",\"message_insets\":"+std::to_string(message_insets)+",\"cheat_presses\":"+std::to_string(cheat_presses)+",\"cheat_notices\":"+std::to_string(cheat_notices)+",\"notice_frames\":"+std::to_string(notice_frames)+",\"notice_glyph_misses\":"+std::to_string(notice_glyph_misses)+",\"cast_calls\":"+std::to_string(cast_calls)+",\"recent_casts\":"+[&]{ std::string r="["; for (const auto& x : recent_casts) if (x.spell) r += (r.size()>1?",":"")+std::string("[")+std::to_string(x.caster)+","+std::to_string(x.avatar)+","+std::to_string(x.spell)+"]"; return r+"]"; }()+",\"spell_casts\":"+std::to_string(spell_casts)+",\"last_spell\":"+std::to_string(last_spell)+",\"small_em_glyphs\":"+std::to_string(small_em_glyphs)+",\"book_messages\":"+std::to_string(book_messages)+
+              ",\"message_insets\":"+std::to_string(message_insets)+",\"cheat_presses\":"+std::to_string(cheat_presses)+",\"cheat_notices\":"+std::to_string(cheat_notices)+",\"notice_frames\":"+std::to_string(notice_frames)+",\"notice_glyph_misses\":"+std::to_string(notice_glyph_misses)+",\"misc_label_binds\":"+std::to_string(misc_label_binds)+",\"cast_calls\":"+std::to_string(cast_calls)+",\"recent_casts\":"+[&]{ std::string r="["; for (const auto& x : recent_casts) if (x.spell) r += (r.size()>1?",":"")+std::string("[")+std::to_string(x.caster)+","+std::to_string(x.avatar)+","+std::to_string(x.spell)+"]"; return r+"]"; }()+",\"spell_casts\":"+std::to_string(spell_casts)+",\"last_spell\":"+std::to_string(last_spell)+",\"small_em_glyphs\":"+std::to_string(small_em_glyphs)+",\"book_messages\":"+std::to_string(book_messages)+
               ",\"name_count_labels\":"+std::to_string(name_count_labels)+
               ",\"misc_message_strips\":"+std::to_string(misc_message_strips)+",\"shop_converts\":"+std::to_string(shop_converts)+
               ",\"shop_short\":"+std::to_string(shop_short)+",\"clock_rewrites\":"+std::to_string(clock_rewrites)+

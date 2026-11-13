@@ -156,6 +156,9 @@ struct Engine {
     std::array<FlowProbe,32> flows{};
     uint64_t flow_overflow = 0;
     std::array<CallerCount,32> glyph_callers{}, paint_callers{}, queue_callers{};
+    std::array<CallerCount,32> misc_copy_callers{};   // strdup 0x714CD0 callers given a marked misctext
+    uint64_t misc_label_binds = 0;
+    uintptr_t copy_misc_label(const char* text, uintptr_t caller, uintptr_t (__cdecl* copy)(const char*)) noexcept;
     uint64_t caller_overflow = 0;
     bool texture_enabled = false;
     std::array<InkProbe,16> inks{};
