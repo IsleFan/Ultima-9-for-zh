@@ -1636,22 +1636,22 @@ void Engine::update_status(uintptr_t backend) noexcept {
     } catch (...) {}
 }
 struct TargetRead { uint32_t handle = 0, lock = 0, type = 0, hp = 0xFFFF, max = 0xFFFF; };
+// Combat manager P = [0x98F324]: +0x1008 is an index into P's own entry array (-1 none), not a handle (0x4F8FD0).
+// Entry [P+i*4] +0xC points straight at the target's stats record inside [0x98F31C] (0x4F1D90 divides by 0x13C to get
+// its record index). So: hp/max = record +0x34/+0x36; `type` holds the record index. (Corrected after session-37.)
 bool read_target(TargetRead& t) noexcept {
     __try {
         const auto p = word(0x98F324);
         if (!p) return false;
-        const auto handle = uint32_t(word(p+0x1008));
-        t.handle = handle; t.lock = uint32_t(word(p+0x100C));
-        if (handle == 0xFFFFFFFF || !handle) return false;
-        t.handle = handle; t.lock = uint32_t(word(p+0x100C));
-        const auto object = handle_object(handle);
-        if (!object) return false;
-        t.type = *reinterpret_cast<const uint16_t*>(uintptr_t(object)+0xA);
-        const auto records = word(0x98F31C);
-        if (t.type < 0x200 && records) {
-            const auto s = records + uintptr_t(t.type)*0x13C;
-            t.hp = *reinterpret_cast<const uint16_t*>(s+0x34); t.max = *reinterpret_cast<const uint16_t*>(s+0x36);
-        }
+        const auto index = uint32_t(word(p+0x1008));
+        t.handle = index; t.lock = uint32_t(word(p+0x100C));
+        if (index == 0xFFFFFFFF || index >= 0x400) return false;
+        const auto entry = word(p+uintptr_t(index)*4);
+        const auto record = entry ? word(entry+0xC) : 0;
+        const auto base = word(0x98F31C);
+        if (!record || !base || record < base || (record-base) % 0x13C) return false;
+        t.type = uint32_t((record-base)/0x13C);
+        t.hp = *reinterpret_cast<const uint16_t*>(record+0x34); t.max = *reinterpret_cast<const uint16_t*>(record+0x36);
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
 }
