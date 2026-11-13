@@ -254,6 +254,16 @@ struct Engine {
     uint64_t status_frames = 0, status_misses = 0, status_unreadable = 0;
     uint32_t status_last[5]{};   // hp, max hp, mana, max mana (+0x3C), mana cap (+0x3E)
     void update_status(uintptr_t backend) noexcept;    // caller holds `mutex`; flip, before compose
+    // Floating numbers (FeatureFloatingNumbers, 2026-11-13): HP lost (-N), HP healed by 3 or more (+N) and mana spent
+    // (-N) rise from the bars. Values are polled each frame; a jump with no readable frame before it, or a changed
+    // maximum (load, level up), only resynchronises.
+    bool floating_numbers = false, status_synced = false;
+    uint32_t status_previous[5]{};
+    struct Floater { std::wstring text; uint64_t start = 0; int32_t x = 0; std::array<uint8_t,3> rgb{}; };
+    std::array<Floater,8> floaters{};
+    uint32_t floater_next = 0;
+    uint64_t floaters_spawned = 0, floater_frames = 0, floater_misses = 0;
+    void spawn_floater(std::wstring text, int32_t x_units, std::array<uint8_t,3> rgb) noexcept;
     void add_occluder(uintptr_t node, Rect area, uint32_t caller, float sx, float sy) noexcept;
     const FontStyle& font_style(uintptr_t record) noexcept;
 };

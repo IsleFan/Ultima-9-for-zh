@@ -713,7 +713,7 @@ uintptr_t __fastcall flip_hook(uintptr_t self, void*) {
         DWORD zero = 0; e.render_thread.compare_exchange_strong(zero,GetCurrentThreadId());
         if (e.render_thread.load() != GetCurrentThreadId()) e.fail(15);
         ++e.flips;
-        if (e.render) { if (!e.cheat_bindings.empty()) e.update_notice(self); if (e.status_numbers) e.update_status(self); e.compose(self); }
+        if (e.render) { if (!e.cheat_bindings.empty()) e.update_notice(self); if (e.status_numbers || e.floating_numbers) e.update_status(self); e.compose(self); }
         for (const auto& q : e.queues) if (q.address && q.last_frame == e.frame)
             if (const auto* r = e.raster(q.raster)) for (uint32_t i = 0; i < r->runs.size(); ++i)
                 if (r->runs.first_plan(i)) ++e.stats[r->runs.at(i).plan].presentations;
@@ -1437,6 +1437,9 @@ int read_toggle(cheat::Kind kind) noexcept {
 void cheat_key(UINT vk, UINT mods) { if (engine) engine->on_cheat_key(vk,mods); }
 constexpr uint64_t NoticeMs = 2500, ToggleWaitMs = 600;
 constexpr uint32_t StatusEm = 11;   // status numbers: em at 800x600, doubled at 1600x1200
+constexpr uint32_t FloatEm = 15;    // floating numbers: em at 800x600, doubled at 1600x1200
+constexpr uint64_t FloatMs = 1300;  // a floating number rises for this long, then disappears
+constexpr int32_t ManaBarX = 401, HealthBarX = 1188, BarY = 1177;   // 1600x1200 units (session-30 screenshot)
 }
 // Spell cast 0x5ED950 (thiscall on the spell registry [0x84F810]). SIX stack arguments, `ret 0x18` at 0x5EF75A
 // (CONFIRMED 2026-11-13; the 2026-11-12 reading of three arguments was wrong and crashed the first cast in
@@ -1590,18 +1593,55 @@ void Engine::update_status(uintptr_t backend) noexcept {
     const uint32_t scale = width == 800 && height == 600 ? 1 : width == 1600 && height == 1200 ? 2 : 0;
     if (!scale) return;
     StatusRead s;
-    if (!read_status(s)) { ++status_unreadable; return; }
+    if (!read_status(s)) { ++status_unreadable; status_synced = false; return; }
     std::copy(std::begin(s.v),std::end(s.v),std::begin(status_last));
+    if (floating_numbers) {
+        const auto* p = status_previous;
+        if (status_synced && p[1] == s.v[1] && p[3] == s.v[3]) {
+            if (s.v[0] < p[0]) spawn_floater(L"-"+std::to_wstring(p[0]-s.v[0]),HealthBarX,{255,96,72});
+            else if (s.v[0] >= p[0]+3) spawn_floater(L"+"+std::to_wstring(s.v[0]-p[0]),HealthBarX,{120,240,120});
+            if (s.v[2] < p[2]) spawn_floater(L"-"+std::to_wstring(p[2]-s.v[2]),ManaBarX,{130,190,255});
+        }
+        std::copy(std::begin(s.v),std::end(s.v),std::begin(status_previous));
+        status_synced = true;
+    }
     if (!s.health && !s.mana) return;
-    const uint32_t em = StatusEm*scale;
-    const int32_t baseline = int32_t(1177*scale/2) + int32_t(em)*36/100;
     try {
-        bool drawn = false;
-        if (s.mana && s.v[3])
-            drawn |= overlay_text(backend,std::to_wstring(s.v[2])+L"/"+std::to_wstring(s.v[3]),int32_t(401*scale/2),baseline,em,{255,255,255},status_misses);
-        if (s.health && s.v[1])
-            drawn |= overlay_text(backend,std::to_wstring(s.v[0])+L"/"+std::to_wstring(s.v[1]),int32_t(1188*scale/2),baseline,em,{255,255,255},status_misses);
-        if (drawn) ++status_frames;
+        if (status_numbers) {
+            const uint32_t em = StatusEm*scale;
+            const int32_t baseline = int32_t(BarY*int32_t(scale)/2) + int32_t(em)*36/100;
+            bool drawn = false;
+            if (s.mana && s.v[3])
+                drawn |= overlay_text(backend,std::to_wstring(s.v[2])+L"/"+std::to_wstring(s.v[3]),ManaBarX*int32_t(scale)/2,baseline,em,{255,255,255},status_misses);
+            if (s.health && s.v[1])
+                drawn |= overlay_text(backend,std::to_wstring(s.v[0])+L"/"+std::to_wstring(s.v[1]),HealthBarX*int32_t(scale)/2,baseline,em,{255,255,255},status_misses);
+            if (drawn) ++status_frames;
+        }
+        if (floating_numbers) {
+            const auto now = GetTickCount64();
+            const uint32_t em = FloatEm*scale;
+            bool drawn = false;
+            for (auto& f : floaters) {
+                if (f.text.empty()) continue;
+                if (now-f.start > FloatMs) { f.text.clear(); continue; }
+                // Starts just above the bar and rises 70 units (1600x1200) at a slowing pace.
+                const double t = double(now-f.start)/double(FloatMs);
+                const int32_t rise = int32_t(70.0*(1.0-(1.0-t)*(1.0-t)));
+                const int32_t baseline = (BarY-24-rise)*int32_t(scale)/2;
+                drawn |= overlay_text(backend,f.text,f.x*int32_t(scale)/2,baseline,em,f.rgb,floater_misses);
+            }
+            if (drawn) ++floater_frames;
+        }
+    } catch (...) {}
+}
+void Engine::spawn_floater(std::wstring text, int32_t x_units, std::array<uint8_t,3> rgb) noexcept {
+    try {
+        // Consecutive numbers on one bar step sideways so they do not cover each other.
+        static constexpr int32_t offsets[4] = {0,-60,60,-120};
+        auto& f = floaters[floater_next++ % floaters.size()];
+        f.text = std::move(text); f.start = GetTickCount64(); f.rgb = rgb;
+        f.x = x_units + offsets[floaters_spawned % 4];
+        ++floaters_spawned;
     } catch (...) {}
 }
 void Engine::compose(uintptr_t backend) noexcept {
@@ -1836,6 +1876,14 @@ void Engine::install(const Config& config, Logger& logger) {
                 }
                 status_numbers = warmed;
                 log->event("status_numbers","\"enabled\":"+std::string(status_numbers?"true":"false"));
+            }
+            if (render && (config.features & FeatureFloatingNumbers)) {
+                bool warmed = true;
+                for (const wchar_t c : std::wstring_view(L"0123456789+-")) for (const uint32_t em : {FloatEm,FloatEm*2}) {
+                    try { glyphs.warm(uint32_t(c),em,true); } catch (const std::exception&) { warmed = false; }
+                }
+                floating_numbers = warmed;
+                log->event("floating_numbers","\"enabled\":"+std::string(floating_numbers?"true":"false"));
             }
             input_hooks_enabled = input_hooks::any_enabled();
             log->event("input_hooks","\"probe\":"+std::string(o.probe?"true":"false")+",\"wheel_pages\":"+
@@ -2139,7 +2187,7 @@ void Engine::snapshot(const char* event) noexcept {
               ",\"leaks\":"+std::to_string(misc_leaks)+",\"draw_strips\":"+std::to_string(misc_draw_strips)+
               ",\"bounded\":"+std::to_string(misc_bounded)+",\"book_overwritten\":"+std::to_string(book_overwritten)+
               ",\"measures\":"+std::to_string(misc_measures)+",\"measure_faults\":"+std::to_string(misc_measure_faults)+
-              ",\"message_insets\":"+std::to_string(message_insets)+",\"cheat_presses\":"+std::to_string(cheat_presses)+",\"cheat_notices\":"+std::to_string(cheat_notices)+",\"notice_frames\":"+std::to_string(notice_frames)+",\"notice_glyph_misses\":"+std::to_string(notice_glyph_misses)+",\"misc_label_binds\":"+std::to_string(misc_label_binds)+",\"status_frames\":"+std::to_string(status_frames)+",\"status_misses\":"+std::to_string(status_misses)+",\"status_unreadable\":"+std::to_string(status_unreadable)+",\"status_last\":["+std::to_string(status_last[0])+","+std::to_string(status_last[1])+","+std::to_string(status_last[2])+","+std::to_string(status_last[3])+","+std::to_string(status_last[4])+"],\"cast_calls\":"+std::to_string(cast_calls)+",\"recent_casts\":"+[&]{ std::string r="["; for (const auto& x : recent_casts) if (x.spell) r += (r.size()>1?",":"")+std::string("[")+std::to_string(x.caster)+","+std::to_string(x.avatar)+","+std::to_string(x.spell)+"]"; return r+"]"; }()+",\"spell_casts\":"+std::to_string(spell_casts)+",\"last_spell\":"+std::to_string(last_spell)+",\"small_em_glyphs\":"+std::to_string(small_em_glyphs)+",\"book_messages\":"+std::to_string(book_messages)+
+              ",\"message_insets\":"+std::to_string(message_insets)+",\"cheat_presses\":"+std::to_string(cheat_presses)+",\"cheat_notices\":"+std::to_string(cheat_notices)+",\"notice_frames\":"+std::to_string(notice_frames)+",\"notice_glyph_misses\":"+std::to_string(notice_glyph_misses)+",\"misc_label_binds\":"+std::to_string(misc_label_binds)+",\"floaters\":"+std::to_string(floaters_spawned)+",\"floater_frames\":"+std::to_string(floater_frames)+",\"floater_misses\":"+std::to_string(floater_misses)+",\"status_frames\":"+std::to_string(status_frames)+",\"status_misses\":"+std::to_string(status_misses)+",\"status_unreadable\":"+std::to_string(status_unreadable)+",\"status_last\":["+std::to_string(status_last[0])+","+std::to_string(status_last[1])+","+std::to_string(status_last[2])+","+std::to_string(status_last[3])+","+std::to_string(status_last[4])+"],\"cast_calls\":"+std::to_string(cast_calls)+",\"recent_casts\":"+[&]{ std::string r="["; for (const auto& x : recent_casts) if (x.spell) r += (r.size()>1?",":"")+std::string("[")+std::to_string(x.caster)+","+std::to_string(x.avatar)+","+std::to_string(x.spell)+"]"; return r+"]"; }()+",\"spell_casts\":"+std::to_string(spell_casts)+",\"last_spell\":"+std::to_string(last_spell)+",\"small_em_glyphs\":"+std::to_string(small_em_glyphs)+",\"book_messages\":"+std::to_string(book_messages)+
               ",\"name_count_labels\":"+std::to_string(name_count_labels)+
               ",\"misc_message_strips\":"+std::to_string(misc_message_strips)+",\"shop_converts\":"+std::to_string(shop_converts)+
               ",\"shop_short\":"+std::to_string(shop_short)+",\"clock_rewrites\":"+std::to_string(clock_rewrites)+

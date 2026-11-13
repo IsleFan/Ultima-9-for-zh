@@ -17,10 +17,11 @@ inline constexpr uint32_t ForceFailure = 1;
 inline constexpr size_t PathCapacity = 1024;
 // Protocol 3: player-selectable enhancements ([features] in the settings INI, the front page's switches).
 inline constexpr uint32_t FeatureHoverNames = 1, FeatureWheelPages = 2, FeatureWheelZoom = 4,
-                          FeatureMovieSubtitles = 8, FeatureInputProbe = 16, FeatureStatusNumbers = 32;
-inline constexpr uint32_t AllFeatures = 63;
+                          FeatureMovieSubtitles = 8, FeatureInputProbe = 16, FeatureStatusNumbers = 32,
+                          FeatureFloatingNumbers = 64;
+inline constexpr uint32_t AllFeatures = 127;
 inline constexpr uint32_t DefaultFeatures = FeatureHoverNames | FeatureWheelPages | FeatureWheelZoom | FeatureMovieSubtitles |
-                                            FeatureStatusNumbers;
+                                            FeatureStatusNumbers | FeatureFloatingNumbers;
 inline constexpr uint32_t MinHoverDelayMs = 100, MaxHoverDelayMs = 2000, DefaultHoverDelayMs = 250;
 // Only fixed-width integers and UTF-16 arrays cross the x86 process boundary.
 struct Config {

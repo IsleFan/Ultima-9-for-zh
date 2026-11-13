@@ -93,7 +93,7 @@ Settings load_settings(const fs::path& launcher_ini, const fs::path& front_ini) 
     const std::pair<const wchar_t*, uint32_t> bits[] = {
         {L"hover_names", FeatureHoverNames}, {L"wheel_pages", FeatureWheelPages}, {L"wheel_zoom", FeatureWheelZoom},
         {L"movie_subtitles", FeatureMovieSubtitles}, {L"input_probe", FeatureInputProbe},
-        {L"status_numbers", FeatureStatusNumbers}};
+        {L"status_numbers", FeatureStatusNumbers}, {L"floating_numbers", FeatureFloatingNumbers}};
     for (const auto& [key, bit] : bits)
         if (read_number(launcher_ini, L"features", key, v) && v <= 1) s.features = v ? (s.features | bit) : (s.features & ~bit);
     if (read_number(launcher_ini, L"features", L"hover_delay_ms", v))
@@ -110,7 +110,8 @@ void save_settings(const Settings& s, const fs::path& launcher_ini, const fs::pa
     l << L"[features]\r\nhover_names = " << flag(FeatureHoverNames) << L"\r\nhover_delay_ms = " << s.hover_delay_ms
       << L"\r\nwheel_pages = " << flag(FeatureWheelPages) << L"\r\nwheel_zoom = " << flag(FeatureWheelZoom)
       << L"\r\nmovie_subtitles = " << flag(FeatureMovieSubtitles) << L"\r\ninput_probe = " << flag(FeatureInputProbe)
-      << L"\r\nstatus_numbers = " << flag(FeatureStatusNumbers) << L"\r\n";
+      << L"\r\nstatus_numbers = " << flag(FeatureStatusNumbers)
+      << L"\r\nfloating_numbers = " << flag(FeatureFloatingNumbers) << L"\r\n";
     write_utf16(launcher_ini, l.str());
     std::wostringstream f;
     f << L"; Written by U9Cht.exe (the front page).\r\n[game]\r\ndir = " << s.game_dir << L"\r\n";
