@@ -474,9 +474,16 @@ void act_keys(Id id, int arg) {
             break;
         }
         app.keys_page = false; app.keys_dirty = false; app.capture = -1; set_message(L"", false);
-        if (back_to_game()) {   // this window is in front, so it may hand the foreground back
-            SetForegroundWindow(app.game_window);
-            ShowWindow(app.window, SW_MINIMIZE);
+        if (back_to_game()) {
+            // This window is in front, so it may hand the foreground back. A full-screen game minimizes itself when
+            // it loses the foreground (2026-11-15: SetForegroundWindow alone left it on the task bar), so it is
+            // restored first; if that still fails, the Alt+Tab switch is tried.
+            const HWND game = app.game_window;
+            if (IsIconic(game)) ShowWindow(game, SW_RESTORE);
+            SetForegroundWindow(game);
+            if (GetForegroundWindow() != game) SwitchToThisWindow(game, TRUE);
+            if (GetForegroundWindow() == game || !IsIconic(game)) ShowWindow(app.window, SW_MINIMIZE);
+            else set_message(L"無法自動切回遊戲，請按 Alt+Tab 或點工作列上的遊戲。", true);
         }
         app.game_window = nullptr;
         break;

@@ -78,7 +78,7 @@ Details:
 - The page ignores the message unless it started the running game.
 - The game binds nothing to Ctrl+Shift+K, so the key does nothing else. The page refuses to bind it.
 - Without a front page (session tool), the runtime logs `key_bindings_hotkey` with `"front_page":false` once.
-- Not yet tried in game.
+- In game (2026-11-15, front page, full screen): the hotkey brought the page up every time. 回到遊戲 did nothing at first, because the full-screen game had minimized itself. It now restores the game window first and falls back to the Alt+Tab switch; with that it works (CONFIRMED). Saving during that run was not tried, so the live reload through the page itself is still untested (session 60 replaced the file directly).
 
 In game:
 - sessions 57 and 58: a keymap saved by this page works;
