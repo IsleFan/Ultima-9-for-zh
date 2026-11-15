@@ -1478,6 +1478,7 @@ void Engine::on_spell_cast(uint32_t caster, uint32_t avatar, uint32_t spell) noe
     std::rotate(recent_casts.begin(),recent_casts.begin()+1,recent_casts.end());
     recent_casts.back() = {caster,avatar,spell};
     if (!caster || caster != avatar) return;
+    last_action = GetTickCount64();
     ++spell_casts;
     const int plan = entry ? plan_for_entry(MiscEntryBase+entry) : -1;
     try {
@@ -1688,6 +1689,10 @@ void Engine::build_bar_glyphs() noexcept {
 }
 constexpr uint32_t MaxBars = 3, ResyncChanges = 12;
 constexpr uint64_t CombatantMs = 8000;
+// Only the Avatar's own fights (user's decision, session-47: a Goblin Captain fighting behind rocks got a bar): a hit
+// counts when the record is the locked target, or within ActionMs of the Avatar attacking (left button held while the
+// game window has focus; LeftClick is the only attack input, Default.kmp) or casting (cast_hook).
+constexpr uint64_t ActionMs = 3000;
 constexpr int32_t BarRowStep = 34;   // 1600x1200 units between stacked bars
 // Copies hp/max of all 512 records and each record's object ([[0x98F320]+4+i*4], as 0x4F1D90 reads it); false when
 // the table is absent or unreadable. Records are reused: a new creature in a slot is a new object (session-43 showed
@@ -1712,13 +1717,19 @@ void Engine::scan_combatants(uint32_t avatar_record, uint32_t locked) noexcept {
     std::array<uint32_t,512> object{};
     if (!read_records(base,hp,max,object)) { records_synced = false; return; }
     const auto now = GetTickCount64();
+    if (GetAsyncKeyState(VK_LBUTTON) & 0x8000) {
+        DWORD pid = 0;
+        if (const auto window = GetForegroundWindow()) GetWindowThreadProcessId(window,&pid);
+        if (pid == GetCurrentProcessId()) last_action = now;
+    }
+    const bool acting = last_action && now-last_action <= ActionMs;
     if (records_synced && base == record_base) {
         uint32_t changes = 0;
         for (uint32_t i = 0; i < 512; ++i) changes += hp[i] != record_hp[i] || max[i] != record_max[i];
         if (changes > ResyncChanges) ++combat_resyncs;
         else for (uint32_t i = 0; i < 512; ++i) {
             if (i == avatar_record || max[i] != record_max[i] || !max[i] || hp[i] >= record_hp[i] ||
-                !object[i] || object[i] != record_object[i]) continue;
+                !object[i] || object[i] != record_object[i] || (i != locked && !acting)) continue;
             ++combat_hits;
             std::rotate(recent_hits.begin(),recent_hits.begin()+1,recent_hits.end());
             recent_hits.back() = {i,record_hp[i],hp[i],max[i],object[i],i == locked};
