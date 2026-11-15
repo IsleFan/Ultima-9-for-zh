@@ -1771,6 +1771,7 @@ void Engine::draw_combat(uintptr_t backend, uint32_t scale, uint32_t avatar_reco
         rows[count++] = best->record;
     }
     for (auto& k : combatants) { k.row = -1; for (uint32_t r = 0; r < count; ++r) if (rows[r] == k.record) k.row = int32_t(r); }
+    for (uint32_t r = 0; r < count; ++r) dump_record(rows[r]);
     if (!target_bar || !count) return;
     auto& list = draw_list;
     const auto back = word(backend+0x3FC3C4);
@@ -1803,6 +1804,31 @@ void Engine::draw_combat(uintptr_t backend, uint32_t scale, uint32_t avatar_reco
         drawn = true;
     }
     if (drawn) ++target_bar_frames;
+}
+// Research for names on the bars (2026-11-15): the first time a creature gets a bar, its 0x13C-byte stats record and
+// the first 0x40 bytes of its object are logged once ("record_dump", at most 24), to find the TYPENAME index field
+// (TYPENAME 28 rat, 194 giant rat, 198 wolf). Read-only.
+bool copy_bytes(uintptr_t from, uint8_t* to, size_t n) noexcept {
+    __try { std::memcpy(to,reinterpret_cast<const void*>(from),n); return true; }
+    __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
+void Engine::dump_record(uint32_t record) noexcept {
+    if (record >= 512 || dumps >= 24) return;
+    const auto object = record_object[record];
+    for (uint32_t i = 0; i < dumps; ++i) if (dumped[i] == object) return;
+    try {
+        std::array<uint8_t,0x13C> r{}; std::array<uint8_t,0x40> o{};
+        if (!record_base || !copy_bytes(record_base+uintptr_t(record)*0x13C,r.data(),r.size())) return;
+        const bool have_object = object && copy_bytes(object,o.data(),o.size());
+        static const char* hex = "0123456789abcdef";
+        std::string rh, oh;
+        for (const auto b : r) { rh += hex[b>>4]; rh += hex[b&15]; }
+        if (have_object) for (const auto b : o) { oh += hex[b>>4]; oh += hex[b&15]; }
+        dumped[dumps++] = object;
+        log->event("record_dump","\"record\":"+std::to_string(record)+",\"hp\":"+std::to_string(record_hp[record])+
+                   ",\"max\":"+std::to_string(record_max[record])+",\"object\":"+std::to_string(object)+
+                   ",\"bytes\":\""+rh+"\",\"object_bytes\":\""+oh+"\"");
+    } catch (...) {}
 }
 // A hit record's damage floats beside its bar row (or the first row when it has none yet).
 void Engine::floater_for(uint32_t record, uint32_t damage) noexcept {

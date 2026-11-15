@@ -289,6 +289,8 @@ struct Engine {
     void scan_combatants(uint32_t avatar_record, uint32_t locked) noexcept;
     void draw_combat(uintptr_t backend, uint32_t scale, uint32_t avatar_record) noexcept;
     void floater_for(uint32_t record, uint32_t damage) noexcept;
+    std::array<uint32_t,24> dumped{}; uint32_t dumps = 0;
+    void dump_record(uint32_t record) noexcept;   // research: record bytes of a new bar's creature
     // Target probe (research for the target health bar, 2026-11-13; read-only). Combat manager [0x98F324]:
     // +0x1008 target handle (-1 none), +0x100C lock. Distinct targets seen: handle, lock, object type (+0xA), and the
     // stats record values hp/max (+0x34/+0x36) when the type is a record index (< 0x200), else 0xFFFF.
