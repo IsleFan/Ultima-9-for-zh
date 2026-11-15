@@ -47,7 +47,7 @@ The varying addresses suggest memory that was freed during the load is used afte
 
 When the Avatar's HP reaches 0 with the lock on, the runtime calls the game's own clear routine `0x4F90C0` once. It
 is a thiscall on `[0x98F324]` with argument 0 (no sound). No new hook is involved: the call is made from the existing
-flip hook.
+flip hook, outside the runtime lock (calling it under the lock deadlocked the game in session 55: the routine frees the marker through the hooked free).
 
 - The routine unmarks the entry: `0x4F91E0` removes the red target marker object `[P+0x1024]` from its scene list
   through `0x55FA60` and deletes it. The crashes write into that same list family (`0x55FA00` / `0x5E0C00`).

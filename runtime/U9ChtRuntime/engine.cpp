@@ -732,14 +732,18 @@ bool clear_target_lock(uintptr_t manager) noexcept {
 }
 uintptr_t __fastcall flip_hook(uintptr_t self, void*) {
     Guard guard;
+    // Outside `mutex`: the clear routine frees the target marker, which re-enters this runtime through the free and
+    // destroy hooks; holding the lock here deadlocked the game on death (session-55).
+    if (uintptr_t manager = 0; guard.state && avatar_dead_locked(manager)) {
+        const bool cleared = clear_target_lock(manager);
+        Exclusive lock(guard.state->mutex);
+        if (cleared) ++guard.state->death_unlocks; else ++guard.state->death_unlock_faults;
+    }
     if (guard.state) {
         auto& e = *guard.state; Exclusive lock(e.mutex);
         DWORD zero = 0; e.render_thread.compare_exchange_strong(zero,GetCurrentThreadId());
         if (e.render_thread.load() != GetCurrentThreadId()) e.fail(15);
         ++e.flips;
-        if (uintptr_t manager = 0; avatar_dead_locked(manager)) {
-            if (clear_target_lock(manager)) ++e.death_unlocks; else ++e.death_unlock_faults;
-        }
         if (e.render) { if (e.status_numbers || e.floating_numbers || e.target_bar) e.update_status(self); if (!e.cheat_bindings.empty()) e.update_notice(self); e.compose(self); }
         for (const auto& q : e.queues) if (q.address && q.last_frame == e.frame)
             if (const auto* r = e.raster(q.raster)) for (uint32_t i = 0; i < r->runs.size(); ++i)
