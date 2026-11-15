@@ -1533,6 +1533,7 @@ void Engine::update_notice(uintptr_t backend) noexcept {
 }
 bool Engine::overlay_text(uintptr_t backend, std::wstring_view text, int32_t center_x, int32_t baseline, uint32_t em,
                           std::array<uint8_t,3> fill, uint64_t& misses) noexcept {
+    if (!overlay_draw) return false;
     const auto width = word(backend+0x44), height = word(backend+0x48);
     auto& list = draw_list;
     const auto back = word(backend+0x3FC3C4);
@@ -1814,7 +1815,7 @@ void Engine::draw_combat(uintptr_t backend, uint32_t scale, uint32_t avatar_reco
         rows[count++] = best->record;
     }
     for (auto& k : combatants) { k.row = -1; for (uint32_t r = 0; r < count; ++r) if (rows[r] == k.record) k.row = int32_t(r); }
-    if (!target_bar || !count) return;
+    if (!target_bar || !count || !overlay_draw) return;
     auto& list = draw_list;
     const auto back = word(backend+0x3FC3C4);
     if (!back || list.epoch != frame) return;
@@ -2107,6 +2108,9 @@ void Engine::install(const Config& config, Logger& logger) {
             const auto exists = [&](const wchar_t* name) { return std::ifstream(dir / name, std::ios::binary).good(); };
             input_hooks::Options o;
             o.probe = (config.features & FeatureInputProbe) || exists(L"input_probe.on");
+            // Bisect aid (developer marker): overlay_draw.off keeps the overlay features computing but draws nothing.
+            overlay_draw = !exists(L"overlay_draw.off");
+            log->event("overlay_draw","\"enabled\":"+std::string(overlay_draw?"true":"false"));
             o.wheel = (config.features & FeatureWheelPages) && !exists(L"wheel_pages.off");
             o.zoom = (config.features & FeatureWheelZoom) != 0;
             o.hover = (config.features & FeatureHoverNames) && !exists(L"hover_names.off");
