@@ -1,27 +1,58 @@
-# U9-CHT Handoff（2026-11-11）
+# U9-CHT Handoff（2026-11-15）
 
 給下一個工作階段（人或 AI Agent）的交接。
 開工前仍須依 `AGENTS.md` 讀取 `AGENTS.md` 與 `ULTIMA_IX_CHT_MASTER_PLAN.md`。
 
-**手冊譯名校對已完成（2026-11-11，見第 4 節）。** 下一步：進遊戲確認（第 5 節），以及人工校稿。
+**最近完成（2026-11-12～15）：**
+- 作弊鍵與施法提示（開發用）、法力條法術名寬度修正。
+- 體力／法力數值、傷害／法力飄字、敵人血條，三者都有首頁開關。
+- 「鎖定敵人時死亡再讀檔閃退」這個原版錯誤的繞過方法。
+
+細節見第 3 節。
 
 ---
 
+## 0. 新對話開工清單
+
+1. 讀 `AGENTS.md`、`ULTIMA_IX_CHT_MASTER_PLAN.md`，以及本文件第 1、2 節。
+2. 建置 runtime（從 repo 根目錄執行）：
+   ```sh
+   "/c/Program Files/Microsoft Visual Studio/18/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe" --build .local/p10-misc/build --config Release
+   ```
+   - 新增測試檔後，要先執行 `cmake -S runtime -B .local/p10-misc/build`。
+   - C++ 測試：在 `.local/p10-misc/build` 執行 `ctest -C Release`。
+3. Python 測試：`python -m unittest discover -s tests`。
+4. 進遊戲測試用 Steam 私人副本，使用者說「準備好了」之後才執行：
+   ```sh
+   python scripts/run_p8_0_session.py start --session .local/p10-misc/session-NN --label "..." \
+     --game-dir .local/steam-game --build .local/p10-misc/out-m26 --runtime .local/p10-misc/build/Release \
+     --config .local/p9-2/u9cht.ini --preserve-saves --seed-saves .local/p10-misc/session-29/final-savegame \
+     --keymap .local/p10-misc/keymap/U9CHT-TEST.kmp
+   python scripts/run_p8_0_session.py finish --session .local/p10-misc/session-NN
+   ```
+   - 下一個 session 編號從 **57** 開始。
+   - 不加 `--keymap` 就用原本的按鍵檔：沒有作弊鍵、作弊提示和施法攔截。
+   - 要關掉個別功能，就用另一個設定檔，加上 `[features]` 區段。範例：`.local/p10-misc/bisect/u9cht-newfeatures-off.ini`。
+5. Runtime 版本號：
+   - 改 runtime 名稱時，三處要一起改：`runtime/common/version_manifest.h`、`u9cht/l10n/runtime_pack.py`、`runtime/CMakeLists.txt`。
+   - 改了以後要重建中文化資料，因為 pack 內嵌 runtime 名稱。
+   - 目前仍是 `0.2.45`。這期間加的功能都沒有升版號。
+
 ## 1. 目前狀態一覽
 
-- 分支：`p7-localization-pipeline`，已推送到 `origin/p7-localization-pipeline`（2026-11-11）。
-- 推送前改寫了本機歷史（使用者決定，2026-11-11）：
-  - 3 個舊 commit 的 `books.jsonl` 含石像鬼語原文，改成和 `89d9118` 相同的 `{{gargish:1}}` 佔位符；只替換那 6 段原文，其他內容不變。
-  - 驗證：最終檔案樹和改寫前完全相同（`900d0fe5…`）；commit 數和訊息都不變；尚未推送的歷史中原文殘留為 0。
-  - 從那 3 個 commit 起，之後所有 commit 的雜湊都改變了；本文件和 P10-1 報告已更新成新雜湊。
-  - 改寫前的歷史只留在本機備份分支 `backup/p7-before-gargish-rewrite`，**不可推送**。確認不再需要後可以刪除。
+- 分支：`p7-localization-pipeline`，已推送到 `origin`（2026-11-15，`63c22cb`）。
+  - 本機備份分支 `backup/p7-before-gargish-rewrite` **不可推送**。這是 2026-11-11 改寫歷史前的備份。
 - 工作樹：只有不可加入的未追蹤檔：`.vscode/`、`83e7052b…png`、`tools/u9xsb6bt2a*`、`tools/uixtools.zip`。
-- 本機私人遊戲副本 `.local/runtime-game`：已還原成原版，沒有進行中的 session。
+- 私人遊戲副本都已還原成原版，沒有進行中的 session：
+  - Steam：`.local/steam-game`。最近的測試都用它。
+  - GOG：`.local/runtime-game`。建置中文化資料時用它的原版檔。
 - 測試：
-  - `python -m unittest discover -s tests` → 166 tests OK（3 skipped）；
-  - C++ 在 `.local/p10-misc/build` 執行 `ctest -C Release` → 9/9。
-- Runtime：`U9ChtRuntime/0.2.31-p11`，建置在 `.local/p10-misc/build/Release`。
-- 最新完整建置：`.local/p10-misc/out-m12`（含 `runtime/movies.tsv`），結果 PASS（errors=0）。
+  - C++：11/11（2026-11-15）。
+  - Python：上次是 166 OK（3 skipped）。
+- Runtime：`U9ChtRuntime/0.2.45-p11`，建置在 `.local/p10-misc/build/Release`。
+- 中文化資料最新建置：`.local/p10-misc/out-m26`。
+- 測試存檔：`.local/p10-misc/session-29/final-savegame`（Steam 副本）。session 30～56 都從這裡開始，沒有寫回。
+- 首頁測試資料夾：`.local/p10-misc/front-release`。裡面已經是最新的 `U9Cht.exe`、launcher 和 runtime。
 
 ### 翻譯進度（全部是機器初稿 `draft`，尚未人工校稿）
 
@@ -44,6 +75,15 @@
 - 不提交遊戲原文、字型、本機絕對路徑、英文原文。含英文原文的 workset 和語音辨識稿只放在 `.local/`。
 - commit 結尾加上：`Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`。
 - 新的 hook 或 renderer 工作需要使用者明確授權（AGENTS §13、§14）。
+- 不可碰使用者原本的 GOG／Steam 安裝。路徑只在本機記憶裡，不寫進 repo。只用私人副本。
+- 首頁測試時不要按「自動搜尋」或「切換版本」：它們會指到使用者原本的安裝。
+- 遊戲卡住或閃退時，強制結束前要先問使用者。
+- 使用者沒有要求就不推送。
+- 原版比對測試的做法（2026-11-15 用過兩次）：
+  1. 把私人 Steam 副本的 `savegame/`、`dxcfg.ini`、`Options.ini` 備份到 `.local/p10-misc/<名稱>/backup`。
+  2. 放入 session-29 存檔；`dxcfg.ini` 改成 `presentation=windowed`、`display=1600x1200@120`。
+  3. 在背景執行副本裡的原版 `u9.exe`（不注入），等它結束。
+  4. 還原，並用 `diff`／`cmp` 和雜湊確認。
 
 ## 3. 已完成的工作（P10～P11）
 
@@ -133,19 +173,37 @@
 - 傷害／法力飄字（2026-11-13，玩家功能 `floating_numbers`，預設開啟）：session 36 實測正常（CONFIRMED，9 個飄字、無缺字）。
   - 每幀比對聖者體力／法力：扣血紅「-N」、回血 3 點以上綠「+N」、耗魔藍「-N」，從橫條上方往上飄 1.3 秒。
   - 讀不到的幀之後、或上限改變時只重新同步，不飄字。首頁勾選框「傷害／法力飄字」。
-- 下一步（使用者同意，2026-11-13）：只顯示「目前鎖定／攻擊中的敵人」的血條與頭上飄字，也要做成首頁開關。
-  - session 38：目標體力讀到了（CONFIRMED）。`+0x1008` 是戰鬥管理器自己的項目陣列索引；項目 `[P+i*4]+0xC` 直接指向目標的屬性記錄（`+0x34/+0x36` 體力），見 `0x4F8FD0`／`0x4F1D90`。三個目標讀到 5/7、20/30、4/7。
-  - 已做（session 40～47）：血條顯示在畫面上方中央（提示文字下方），最多 3 條，鎖定目標第一。每幀比對 512 筆屬性記錄偵測扣血；記錄格會重複使用，扣血需同一物件（`[[0x98F320]+4+i*4]`）。上限改用該個體觀察到的最高體力（使用者選擇，狼顯示 20/20）。
-  - 使用者決定（session 47）：只顯示「鎖定」與「聖者攻擊到」的對象。實作：聖者按左鍵（遊戲視窗在前景）或施法後 3 秒內的扣血才算。
-  - session 48：攻擊時仍會顯示岩石後的哥布林隊長。session 49 找到物件座標（CONFIRMED，往北／往東走驗證）：物件 `+0x04` 東、`+0x06` 北、`+0x08` 高度，12 位元、4096 繞回；走路約 150 單位／秒。
-  - 已加距離過濾：未鎖定的扣血，近戰後 3 秒內需在 450 單位內，施法後 3 秒內需在 1500 單位內。可視範圍／遮擋判斷未做（需鏡頭資料）。使用者決定先不做名稱顯示。
-  - session 50 驗證（CONFIRMED）：不再出現遠處戰鬥的血條；近戰與火球打到的敵人都有血條和飄字。記錄 235「Colando」是對話後轉為戰鬥的敵人，判定正確。敵人血條功能完成。
-  - 名稱（研究結果，CONFIRMED）：生物屬性記錄 `+0x04` 是英文名字（"Wolf"、"Giant Rat"、"Goblin Captain"、NPC "Colando"）。中文化資料沒有英文對照，要顯示中文名稱需在建置時加入「英文名稱雜湊 → 中文」對照（不存英文原文）。未做。
-  - 決定：先做「畫面上方中央的目標框」（血條＋數字＋飄字），不做頭頂血條（需要鏡頭投影，未研究）。
-  - session 37：診斷記錄沒看到任何目標（`[0x98F324]+0x1008` 一直沒有有效值）。可能是沒按鎖定鍵 T（`target_lock`）／N（`get_target_lock`），或位置判讀錯。已加上原始值與鎖定幀計數，待重測。
-  - 先研究：遊戲的瞄準目標在哪裡、能否攔到物件的畫面座標（名稱標籤、紅色菱形瞄準標記），再回報可行性。
+- 敵人血條（2026-11-13～15）：session 50 驗證完成（CONFIRMED）。
+  - 玩家功能 `target_bar`，預設開啟；首頁勾選框是「敵人血條」。
+  - 鎖定目標存在戰鬥管理器 `[0x98F324]`（`0x4F8FD0`／`0x4F1D90`）：
+    - `+0x100C` 是鎖定開關。
+    - `+0x1008` 是它自己項目陣列的索引，-1 代表沒有目標。
+    - 項目 `[P+i*4]+0xC` 直接指向目標的屬性記錄。
+  - 屬性記錄表 `[0x98F31C]`：
+    - 512 筆，每筆 0x13C，共 `0x27800`。讀檔時重新配置（`0x4F2270`）。
+    - 每筆的 `+0x04` 是英文名字，`+0x34/+0x36` 是體力。
+    - 記錄格會重複使用。記錄對應的物件是 `[[0x98F320]+4+i*4]`。
+  - 物件座標（session 49）：
+    - 物件 `+0x04` 是東西向，`+0x06` 是南北向，`+0x08` 是高度。
+    - 12 位元，4096 繞回。走路約 150 單位／秒。
+    - 物件 `+0x0A` 是記錄編號。
+  - 顯示規則：
+    - 位置在畫面上方中央、提示文字下方，最多 3 條。鎖定目標排第一（亮紅），其他是暗紅。
+    - 每幀比對 512 筆記錄來偵測扣血；同一物件才算。
+    - 未鎖定的對象，只在聖者攻擊後 3 秒內才算：近戰（左鍵，遊戲視窗在前景）要在 450 單位內，施法要在 1500 單位內。
+    - 上限用該個體觀察到的最高體力。這是使用者的選擇：沒受傷的狼顯示 20/20，記錄裡的上限其實是 30。
+    - 被打中的敵人在血條右側飄出紅色傷害；火球打中多隻時各自飄字。
+  - 使用者決定不做：
+    - 名稱顯示：要在建置時加「英文名稱雜湊 → 中文」對照。
+    - 頭頂血條：需要鏡頭投影。
+    - 可視範圍和遮擋判斷。
+  - 這三個顯示功能的每幀路徑完全不配置記憶體（`e6dc102`）。這是追查閃退時改的，保留。
+  - 研究用的部分還留在 runtime：
+    - 只讀的計數：`targets_seen`、`recent_hits`、`recent_casts`。
+    - 屬性傾印和座標記錄已停用，但程式還在（`dump_record`、`probe_positions`）。
+    - 開發用開關：中文化資料夾放 `overlay_draw.off`，就只計算不畫。
+    - 正式版前要清理，或改成只在開發模式才有。
 - 測試時是視窗化（session 工具改的），但無法拖動視窗：U9 用 `ClipCursor`／`SetCursorPos` 把游標鎖在視窗內，原版行為。可用 Alt+Tab 後 Win+方向鍵移動。
-- 目前最新建置是 `out-m26`（runtime 由 `.local/p10-misc/build/Release` 提供），存檔在 `.local/p10-misc/session-29/final-savegame`（Steam 副本；session 30～33 都從它開始，沒有改動存檔）。
 
 ## 4. 用中文手冊校對文本（2026-11-11 完成）
 
@@ -210,26 +268,18 @@
 
 ## 5. 尚未進遊戲測試的項目（需要使用者說「準備好了」）
 
-建置改用手冊校對後的 `out-m13`。
+用第 0 節的指令（Steam 副本、`out-m26`）。
 
-```sh
-python scripts/run_p8_0_session.py start --session .local/p10-misc/session-12 \
-  --label "P10-2/P11 small em / shops / clock / movies / manual terms" --build .local/p10-misc/out-m13 \
-  --runtime .local/p10-misc/build/Release --config .local/p9-2/u9cht.ini --preserve-saves \
-  --seed-saves .local/p10-misc/session-1/final-savegame \
-  --keymap .local/p10-misc/keymap/U9CHT-TEST.kmp
-python scripts/run_p8_0_session.py finish --session .local/p10-misc/session-12
-```
-
-要檢查的項目：
-
-- **影片**：開場動畫是否播放、字幕是否出現、會不會被 ddraw 轉接層蓋住、Esc 能否跳過、播完能否回到遊戲。在 snapshot 的 `movies{}` 計數裡確認。
-- ~~小字型 UI、時鐘~~（2026-11-12 使用者確認 OK）；尚未確認：商店買／賣清單、存讀檔頁、法術書、屬性頁。
-- 手冊譯名：
-  - 法術書的儀式清單：例如「重聚肉體與靈魂儀式」，看標籤會不會超出。
-  - 法術名稱：例如「地－召喚不死生物」。
-  - 狀態頁的新用語：機敏、神力、長程武器、生命力。
-- session 11 在播放影片時截圖，遊戲閃退（0xC0000005，原因 UNKNOWN，當時 runtime 閒置）。可以拿原版遊戲比對看看。
+- 翻譯畫面還沒確認：
+  - 商店買／賣清單；
+  - 存讀檔頁；
+  - 法術書：儀式清單的長標籤，例如「重聚肉體與靈魂儀式」，看會不會超出；
+  - 狀態頁：新用語，例如機敏、神力、長程武器、生命力。
+- 首頁：新增的三個勾選框（體力／法力數值、傷害／法力飄字、敵人血條）還沒實際目視確認版面，視窗高度現在是 818。
+  - 開 `.local/p10-misc/front-release/U9Cht.exe` 確認。不要按「自動搜尋」或「切換版本」。
+- 體力／法力數值和敵人血條：開啟對話、背包、日誌、選單時，會不會跟著橫條一起隱藏，還沒專門確認。
+- 飛行作弊開了再關就無法移動：用原版 exe 加同一份按鍵檔確認是不是原版行為（作法見第 2 節）。
+- session 11 播放影片時截圖閃退（0xC0000005，原因 UNKNOWN）：還沒和原版比對。
 
 ## 6. 其他待辦
 
