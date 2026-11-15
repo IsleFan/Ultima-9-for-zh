@@ -1783,6 +1783,7 @@ void Engine::draw_combat(uintptr_t backend, uint32_t scale, uint32_t avatar_reco
     }
     for (auto& k : combatants) { k.row = -1; for (uint32_t r = 0; r < count; ++r) if (rows[r] == k.record) k.row = int32_t(r); }
     for (uint32_t r = 0; r < count; ++r) dump_record(rows[r]);
+    probe_positions(locked);
     if (!target_bar || !count) return;
     auto& list = draw_list;
     const auto back = word(backend+0x3FC3C4);
@@ -1839,6 +1840,26 @@ void Engine::dump_record(uint32_t record) noexcept {
         log->event("record_dump","\"record\":"+std::to_string(record)+",\"hp\":"+std::to_string(record_hp[record])+
                    ",\"max\":"+std::to_string(record_max[record])+",\"object\":"+std::to_string(object)+
                    ",\"bytes\":\""+rh+"\",\"object_bytes\":\""+oh+"\"");
+    } catch (...) {}
+}
+// Research for object positions (2026-11-15, read-only): every 500 ms, the first 0x30 bytes of the Avatar's object
+// and of the locked target's object are logged ("position_probe", at most 900 lines), to find which fields move when
+// the Avatar walks. Object +0x0A is the record index (session-47).
+void Engine::probe_positions(uint32_t locked) noexcept {
+    const auto now = GetTickCount64();
+    if (position_lines >= 900 || now-position_tick < 500) return;
+    position_tick = now;
+    try {
+        static const char* hex = "0123456789abcdef";
+        const auto bytes = [&](uintptr_t object) {
+            std::array<uint8_t,0x30> b{}; std::string h;
+            if (object && copy_bytes(object,b.data(),b.size())) for (const auto c : b) { h += hex[c>>4]; h += hex[c&15]; }
+            return h;
+        };
+        const auto target = locked < 512 ? record_object[locked] : 0;
+        ++position_lines;
+        log->event("position_probe","\"avatar\":\""+bytes(avatar_object())+"\",\"target_record\":"+
+                   std::to_string(locked < 512 ? locked : 0xFFFFFFFF)+",\"target\":\""+bytes(target)+"\"");
     } catch (...) {}
 }
 // A hit record's damage floats beside its bar row (or the first row when it has none yet).
