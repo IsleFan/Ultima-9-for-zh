@@ -283,6 +283,8 @@ struct Engine {
     uintptr_t record_base = 0;
     bool records_synced = false;
     uint64_t combat_hits = 0, combat_resyncs = 0;
+    struct HitRecord { uint32_t record = 0, before = 0, after = 0, max = 0, object = 0, locked = 0; };
+    std::array<HitRecord,12> recent_hits{};   // newest last: evidence for unexpected bars
     void scan_combatants(uint32_t avatar_record, uint32_t locked) noexcept;
     void draw_combat(uintptr_t backend, uint32_t scale, uint32_t avatar_record) noexcept;
     void floater_for(uint32_t record, uint32_t damage) noexcept;
