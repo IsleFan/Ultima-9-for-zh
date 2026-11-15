@@ -238,6 +238,7 @@ python scripts/run_p8_0_session.py finish --session .local/p10-misc/session-12
   - 建置出的 FLX 含英文原文，不能散布。
 - 發布打包流程：還沒規劃。
 - 說明檔 `說明.txt`：要寫進「開新遊戲前請先重新啟動遊戲」（原版 bug）。
+  - 也要寫：「鎖定敵人時死亡，讀檔前先解除鎖定（T 或 A），否則遊戲會閃退」（原版 bug）。
 
 - 效能（2026-11-12 使用者提出，只記錄）：在現代電腦上仍不順。
   - GitHub 上沒找到 U9 專用的效能專案；社群建議都是 `Options.ini` 調整（`StreamDuration=3000`、`DeadPoolSize=3200`、裁切距離），未驗證。
@@ -263,7 +264,9 @@ python scripts/run_p8_0_session.py finish --session .local/p10-misc/session-12
   - 原版測試（2026-11-15，私人 Steam 副本、未修改英文 u9.exe、session-29 存檔、無注入）：死亡後讀檔**沒有閃退**，正常離開（結束代碼 0）。只測一次，但與中文化下幾乎每次都閃退對比，STRONG EVIDENCE：問題與中文化有關。副本存檔與設定已還原（測試後的存檔在 `.local/p10-misc/vanilla-death-load/after-savegame`）。
   - 二分法：session 51（三個新功能關、原本按鍵檔）死亡後讀檔**不閃退**；session 52（三個新功能開、原本按鍵檔）**閃退**（`u9.exe+0x15FBEB`，同一區）。問題在 status_numbers／floating_numbers／target_bar。
   - 推測（HYPOTHESIS）：這些功能每幀配置／釋放字串（與遊戲共用同一個堆積），重用了遊戲在死亡／讀檔時「釋放後仍使用」的記憶體。畫面寫入有 DirectDraw 鎖定與驗證，較不可能。
-  - 修正（待驗證）：這三個功能的每幀路徑改用固定緩衝區，完全不配置記憶體；研究用的屬性傾印與座標記錄已停用。已加當機記錄（vectored handler，只記錄不攔截，`exception` 事件，最多 64 筆），再遇到時看最後一筆的模組與位址。
+  - 修正（待驗證）：這三個功能的每幀路徑改用固定緩衝區，完全不配置記憶體；研究用的屬性傾印與座標記錄已停用。
+  - session 53 仍閃退；session 54（只計算不畫）使用者發現：**未鎖定**死亡讀檔正常，**鎖定敵人**時死亡讀檔閃退。
+  - **結論（CONFIRMED）：原版錯誤。** 原版 exe 鎖定敵人後死亡再讀檔也閃退（segmentation fault）。與中文化無關。見 `docs/research/U9_LOCKED_TARGET_DEATH_LOAD_CRASH.md`。說明檔要提醒：讀檔前先解除鎖定（T／A），或鎖定中死亡後重新啟動遊戲。已加當機記錄（vectored handler，只記錄不攔截，`exception` 事件，最多 64 筆），再遇到時看最後一筆的模組與位址。
 - 對話時直接跳到下一句（2026-11-13 使用者提出，只記錄，待研究）：先查原版有沒有跳過鍵或滑鼠點擊跳過，再看語音／字幕的推進點能否安全提前。
 - 避頭點（行首標點）規則、英文單字中途斷行。
 - 用 ✕ 關窗時的 0xC000041D 與原版比對。
