@@ -264,7 +264,7 @@ struct Engine {
     uint32_t floater_next = 0;
     uint64_t floaters_spawned = 0, floater_frames = 0, floater_misses = 0;
     void spawn_floater(std::wstring text, int32_t x_units, std::array<uint8_t,3> rgb, int32_t y_units = 0,
-                       int32_t rise_units = 70) noexcept;
+                       int32_t rise_units = 70, bool rightward = false) noexcept;
     // Target bar (FeatureTargetBar, 2026-11-13): the combat target's hp/max in a frame at the top centre. Solid
     // rectangles are runtime-owned glyphs (alpha only), index [scale-1]: shade, trough, fill; the fill is clipped to hp.
     bool target_bar = false;

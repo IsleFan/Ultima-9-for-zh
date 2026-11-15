@@ -713,7 +713,7 @@ uintptr_t __fastcall flip_hook(uintptr_t self, void*) {
         DWORD zero = 0; e.render_thread.compare_exchange_strong(zero,GetCurrentThreadId());
         if (e.render_thread.load() != GetCurrentThreadId()) e.fail(15);
         ++e.flips;
-        if (e.render) { if (!e.cheat_bindings.empty()) e.update_notice(self); if (e.status_numbers || e.floating_numbers || e.target_bar) e.update_status(self); e.compose(self); }
+        if (e.render) { if (e.status_numbers || e.floating_numbers || e.target_bar) e.update_status(self); if (!e.cheat_bindings.empty()) e.update_notice(self); e.compose(self); }
         for (const auto& q : e.queues) if (q.address && q.last_frame == e.frame)
             if (const auto* r = e.raster(q.raster)) for (uint32_t i = 0; i < r->runs.size(); ++i)
                 if (r->runs.first_plan(i)) ++e.stats[r->runs.at(i).plan].presentations;
@@ -1440,8 +1440,8 @@ constexpr uint32_t StatusEm = 11;   // status numbers: em at 800x600, doubled at
 constexpr uint32_t FloatEm = 15;    // floating numbers: em at 800x600, doubled at 1600x1200
 constexpr uint64_t FloatMs = 1300;  // a floating number rises for this long, then disappears
 constexpr int32_t ManaBarX = 401, HealthBarX = 1188, BarY = 1177;   // 1600x1200 units (session-30 screenshot)
-// Target frame, 1600x1200 units: centred under the two top bars (they end near y 38).
-constexpr int32_t TargetX = 800, TargetY = 76, TargetW = 360, TargetH = 18, TargetBorder = 3;
+// Target frame, 1600x1200 units: centred, below the notice line (notices reach about y 130; session-42 screenshot).
+constexpr int32_t TargetX = 800, TargetY = 160, TargetW = 360, TargetH = 18, TargetBorder = 3;
 constexpr uint64_t TargetZeroMs = 1500;   // a target at 0 HP stays shown this long
 }
 // Spell cast 0x5ED950 (thiscall on the spell registry [0x84F810]). SIX stack arguments, `ret 0x18` at 0x5EF75A
@@ -1795,17 +1795,19 @@ void Engine::draw_combat(uintptr_t backend, uint32_t scale, uint32_t avatar_reco
 void Engine::floater_for(uint32_t record, uint32_t damage) noexcept {
     int32_t row = 0;
     for (const auto& k : combatants) if (k.record == record && k.row >= 0) row = k.row;
-    try { spawn_floater(L"-"+std::to_wstring(damage),TargetX+TargetW/2+60,{255,96,72},TargetY+row*BarRowStep+30,40); } catch (...) {}
+    try { spawn_floater(L"-"+std::to_wstring(damage),TargetX+TargetW/2+70,{255,96,72},TargetY+row*BarRowStep+30,40,true); } catch (...) {}
 }
 void Engine::spawn_floater(std::wstring text, int32_t x_units, std::array<uint8_t,3> rgb, int32_t y_units,
-                           int32_t rise_units) noexcept {
+                           int32_t rise_units, bool rightward) noexcept {
     try {
         // Consecutive numbers on one bar step sideways so they do not cover each other.
         static constexpr int32_t offsets[4] = {0,-60,60,-120};
         auto& f = floaters[floater_next++ % floaters.size()];
         f.text = std::move(text); f.start = GetTickCount64(); f.rgb = rgb;
         f.y = y_units ? y_units : BarY-24; f.rise = rise_units;
-        f.x = x_units + offsets[floaters_spawned % 4];
+        // Beside a target bar the steps only go right, away from the bar (session-42).
+        static constexpr int32_t right[4] = {0,50,100,25};
+        f.x = x_units + (rightward ? right : offsets)[floaters_spawned % 4];
         ++floaters_spawned;
     } catch (...) {}
 }
