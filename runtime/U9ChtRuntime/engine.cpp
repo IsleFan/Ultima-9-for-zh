@@ -1570,6 +1570,17 @@ bool Engine::overlay_text(uintptr_t backend, std::wstring_view text, int32_t cen
 //    its widget at M+0x20+i*4; the options loader at 0x555246 maps HealthBar to element 0, ManaBar to element 1.
 //  - Bar centres measured on a 1600x1200 screenshot (session-30): mana x 401, health x 1188, y 1177; scaled by height/600.
 struct StatusRead { uint32_t v[5]{}; bool health = false, mana = false; uint32_t record = 0xFFFFFFFF; };
+// "hp/max" into a fixed buffer (no heap): the view stays valid while `buffer` lives.
+std::wstring_view ratio_text(std::array<wchar_t,16>& buffer, uint32_t a, uint32_t b) noexcept {
+    uint32_t n = 0;
+    const auto put = [&](uint32_t v) {
+        wchar_t d[10]; uint32_t k = 0;
+        do { d[k++] = wchar_t(L'0'+v%10); v /= 10; } while (v && k < 10);
+        while (k && n < buffer.size()) buffer[n++] = d[--k];
+    };
+    put(a); if (n < buffer.size()) buffer[n++] = L'/'; put(b);
+    return {buffer.data(),n};
+}
 bool read_status(StatusRead& out) noexcept {
     __try {
         const auto avatar = avatar_object();
@@ -1597,16 +1608,15 @@ void Engine::update_status(uintptr_t backend) noexcept {
     const auto width = word(backend+0x44), height = word(backend+0x48);
     const uint32_t scale = width == 800 && height == 600 ? 1 : width == 1600 && height == 1200 ? 2 : 0;
     if (!scale) return;
-    probe_target();
     StatusRead s;
     if (!read_status(s)) { ++status_unreadable; status_synced = false; return; }
     std::copy(std::begin(s.v),std::end(s.v),std::begin(status_last));
     if (floating_numbers) {
         const auto* p = status_previous;
         if (status_synced && p[1] == s.v[1] && p[3] == s.v[3]) {
-            if (s.v[0] < p[0]) spawn_floater(L"-"+std::to_wstring(p[0]-s.v[0]),HealthBarX,{255,96,72});
-            else if (s.v[0] >= p[0]+3) spawn_floater(L"+"+std::to_wstring(s.v[0]-p[0]),HealthBarX,{120,240,120});
-            if (s.v[2] < p[2]) spawn_floater(L"-"+std::to_wstring(p[2]-s.v[2]),ManaBarX,{130,190,255});
+            if (s.v[0] < p[0]) spawn_floater(L'-',p[0]-s.v[0],HealthBarX,{255,96,72});
+            else if (s.v[0] >= p[0]+3) spawn_floater(L'+',s.v[0]-p[0],HealthBarX,{120,240,120});
+            if (s.v[2] < p[2]) spawn_floater(L'-',p[2]-s.v[2],ManaBarX,{130,190,255});
         }
         std::copy(std::begin(s.v),std::end(s.v),std::begin(status_previous));
         status_synced = true;
@@ -1617,11 +1627,12 @@ void Engine::update_status(uintptr_t backend) noexcept {
         if (status_numbers) {
             const uint32_t em = StatusEm*scale;
             const int32_t baseline = int32_t(BarY*int32_t(scale)/2) + int32_t(em)*36/100;
+            std::array<wchar_t,16> buffer{};
             bool drawn = false;
             if (s.mana && s.v[3])
-                drawn |= overlay_text(backend,std::to_wstring(s.v[2])+L"/"+std::to_wstring(s.v[3]),ManaBarX*int32_t(scale)/2,baseline,em,{255,255,255},status_misses);
+                drawn |= overlay_text(backend,ratio_text(buffer,s.v[2],s.v[3]),ManaBarX*int32_t(scale)/2,baseline,em,{255,255,255},status_misses);
             if (s.health && s.v[1])
-                drawn |= overlay_text(backend,std::to_wstring(s.v[0])+L"/"+std::to_wstring(s.v[1]),HealthBarX*int32_t(scale)/2,baseline,em,{255,255,255},status_misses);
+                drawn |= overlay_text(backend,ratio_text(buffer,s.v[0],s.v[1]),HealthBarX*int32_t(scale)/2,baseline,em,{255,255,255},status_misses);
             if (drawn) ++status_frames;
         }
         if (floating_numbers) {
@@ -1629,13 +1640,13 @@ void Engine::update_status(uintptr_t backend) noexcept {
             const uint32_t em = FloatEm*scale;
             bool drawn = false;
             for (auto& f : floaters) {
-                if (f.text.empty()) continue;
-                if (now-f.start > FloatMs) { f.text.clear(); continue; }
+                if (!f.length) continue;
+                if (now-f.start > FloatMs) { f.length = 0; continue; }
                 // Starts just above the bar and rises 70 units (1600x1200) at a slowing pace.
                 const double t = double(now-f.start)/double(FloatMs);
                 const int32_t rise = int32_t(70.0*(1.0-(1.0-t)*(1.0-t)));
                 const int32_t baseline = (f.y-int32_t(double(f.rise)/70.0*rise))*int32_t(scale)/2;
-                drawn |= overlay_text(backend,f.text,f.x*int32_t(scale)/2,baseline,em,f.rgb,floater_misses);
+                drawn |= overlay_text(backend,std::wstring_view(f.text.data(),f.length),f.x*int32_t(scale)/2,baseline,em,f.rgb,floater_misses);
             }
             if (drawn) ++floater_frames;
         }
@@ -1803,8 +1814,6 @@ void Engine::draw_combat(uintptr_t backend, uint32_t scale, uint32_t avatar_reco
         rows[count++] = best->record;
     }
     for (auto& k : combatants) { k.row = -1; for (uint32_t r = 0; r < count; ++r) if (rows[r] == k.record) k.row = int32_t(r); }
-    for (uint32_t r = 0; r < count; ++r) dump_record(rows[r]);
-    probe_positions(locked);
     if (!target_bar || !count) return;
     auto& list = draw_list;
     const auto back = word(backend+0x3FC3C4);
@@ -1832,7 +1841,8 @@ void Engine::draw_combat(uintptr_t backend, uint32_t scale, uint32_t avatar_reco
             (fill > 0 && !rect(g[2],left,top,fill,colour))) break;
         try {
             const uint32_t em = StatusEm*scale;
-            overlay_text(backend,std::to_wstring(hp)+L"/"+std::to_wstring(max),TargetX*s/2,top+h/2+int32_t(em)*36/100,em,{255,255,255},status_misses);
+            std::array<wchar_t,16> buffer{};
+            overlay_text(backend,ratio_text(buffer,hp,max),TargetX*s/2,top+h/2+int32_t(em)*36/100,em,{255,255,255},status_misses);
         } catch (...) {}
         drawn = true;
     }
@@ -1887,15 +1897,19 @@ void Engine::probe_positions(uint32_t locked) noexcept {
 void Engine::floater_for(uint32_t record, uint32_t damage) noexcept {
     int32_t row = 0;
     for (const auto& k : combatants) if (k.record == record && k.row >= 0) row = k.row;
-    try { spawn_floater(L"-"+std::to_wstring(damage),TargetX+TargetW/2+70,{255,96,72},TargetY+row*BarRowStep+30,40,true); } catch (...) {}
+    spawn_floater(L'-',damage,TargetX+TargetW/2+70,{255,96,72},TargetY+row*BarRowStep+30,40,true);
 }
-void Engine::spawn_floater(std::wstring text, int32_t x_units, std::array<uint8_t,3> rgb, int32_t y_units,
+void Engine::spawn_floater(wchar_t sign, uint32_t value, int32_t x_units, std::array<uint8_t,3> rgb, int32_t y_units,
                            int32_t rise_units, bool rightward) noexcept {
     try {
         // Consecutive numbers on one bar step sideways so they do not cover each other.
         static constexpr int32_t offsets[4] = {0,-60,60,-120};
         auto& f = floaters[floater_next++ % floaters.size()];
-        f.text = std::move(text); f.start = GetTickCount64(); f.rgb = rgb;
+        f.length = 0; f.text[f.length++] = sign;
+        wchar_t digits[10]; uint32_t n = 0;
+        do { digits[n++] = wchar_t(L'0'+value%10); value /= 10; } while (value && n < 10);
+        while (n && f.length < f.text.size()) f.text[f.length++] = digits[--n];
+        f.start = GetTickCount64(); f.rgb = rgb;
         f.y = y_units ? y_units : BarY-24; f.rise = rise_units;
         // Beside a target bar the steps only go right, away from the bar (session-42).
         static constexpr int32_t right[4] = {0,50,100,25};

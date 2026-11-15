@@ -261,7 +261,9 @@ python scripts/run_p8_0_session.py finish --session .local/p10-misc/session-12
   - 讀檔時遊戲會釋放並重新配置屬性記錄表（0x4F2270）。
   - session 41、45 也同樣閃退（同一位置、同一堆疊），可穩定重現。
   - 原版測試（2026-11-15，私人 Steam 副本、未修改英文 u9.exe、session-29 存檔、無注入）：死亡後讀檔**沒有閃退**，正常離開（結束代碼 0）。只測一次，但與中文化下幾乎每次都閃退對比，STRONG EVIDENCE：問題與中文化有關。副本存檔與設定已還原（測試後的存檔在 `.local/p10-misc/vanilla-death-load/after-savegame`）。
-  - 下一步：二分法。先關掉新功能（status_numbers／floating_numbers／target_bar）並用原本的按鍵檔（不裝施法攔截），看是否仍閃退。已加當機記錄（vectored handler，只記錄不攔截，`exception` 事件，最多 64 筆），再遇到時看最後一筆的模組與位址。
+  - 二分法：session 51（三個新功能關、原本按鍵檔）死亡後讀檔**不閃退**；session 52（三個新功能開、原本按鍵檔）**閃退**（`u9.exe+0x15FBEB`，同一區）。問題在 status_numbers／floating_numbers／target_bar。
+  - 推測（HYPOTHESIS）：這些功能每幀配置／釋放字串（與遊戲共用同一個堆積），重用了遊戲在死亡／讀檔時「釋放後仍使用」的記憶體。畫面寫入有 DirectDraw 鎖定與驗證，較不可能。
+  - 修正（待驗證）：這三個功能的每幀路徑改用固定緩衝區，完全不配置記憶體；研究用的屬性傾印與座標記錄已停用。已加當機記錄（vectored handler，只記錄不攔截，`exception` 事件，最多 64 筆），再遇到時看最後一筆的模組與位址。
 - 對話時直接跳到下一句（2026-11-13 使用者提出，只記錄，待研究）：先查原版有沒有跳過鍵或滑鼠點擊跳過，再看語音／字幕的推進點能否安全提前。
 - 避頭點（行首標點）規則、英文單字中途斷行。
 - 用 ✕ 關窗時的 0xC000041D 與原版比對。

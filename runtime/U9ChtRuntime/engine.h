@@ -259,11 +259,13 @@ struct Engine {
     // maximum (load, level up), only resynchronises.
     bool floating_numbers = false, status_synced = false;
     uint32_t status_previous[5]{};
-    struct Floater { std::wstring text; uint64_t start = 0; int32_t x = 0, y = 0, rise = 70; std::array<uint8_t,3> rgb{}; };
+    // No heap use in the per-frame overlay paths (status numbers, floaters, target bars): fixed buffers only. Heap
+    // churn there exposed a game use-after-free while dying and loading (session-38..52, bisected 2026-11-15).
+    struct Floater { std::array<wchar_t,12> text{}; uint32_t length = 0; uint64_t start = 0; int32_t x = 0, y = 0, rise = 70; std::array<uint8_t,3> rgb{}; };
     std::array<Floater,16> floaters{};
     uint32_t floater_next = 0;
     uint64_t floaters_spawned = 0, floater_frames = 0, floater_misses = 0;
-    void spawn_floater(std::wstring text, int32_t x_units, std::array<uint8_t,3> rgb, int32_t y_units = 0,
+    void spawn_floater(wchar_t sign, uint32_t value, int32_t x_units, std::array<uint8_t,3> rgb, int32_t y_units = 0,
                        int32_t rise_units = 70, bool rightward = false) noexcept;
     // Target bar (FeatureTargetBar, 2026-11-13): the combat target's hp/max in a frame at the top centre. Solid
     // rectangles are runtime-owned glyphs (alpha only), index [scale-1]: shade, trough, fill; the fill is clipped to hp.
