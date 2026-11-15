@@ -1478,7 +1478,7 @@ void Engine::on_spell_cast(uint32_t caster, uint32_t avatar, uint32_t spell) noe
     std::rotate(recent_casts.begin(),recent_casts.begin()+1,recent_casts.end());
     recent_casts.back() = {caster,avatar,spell};
     if (!caster || caster != avatar) return;
-    last_action = GetTickCount64();
+    last_cast = GetTickCount64();
     ++spell_casts;
     const int plan = entry ? plan_for_entry(MiscEntryBase+entry) : -1;
     try {
@@ -1693,6 +1693,19 @@ constexpr uint64_t CombatantMs = 8000;
 // counts when the record is the locked target, or within ActionMs of the Avatar attacking (left button held while the
 // game window has focus; LeftClick is the only attack input, Default.kmp) or casting (cast_hook).
 constexpr uint64_t ActionMs = 3000;
+// Distance filter (session-49, CONFIRMED by walking north/east): object +0x04 = east, +0x06 = north, +0x08 = height,
+// 12-bit local coordinates that wrap at 4096. Walking covers about 150 units a second; locked targets were 650-1100
+// away. After a melee attack only records within MeleeRange count, after a cast within SpellRange.
+constexpr int32_t MeleeRange = 450, SpellRange = 1500;
+bool object_xy(uint32_t object, int32_t& x, int32_t& y) noexcept {
+    __try {
+        if (!object) return false;
+        x = *reinterpret_cast<const uint16_t*>(uintptr_t(object)+4) & 0xFFF;
+        y = *reinterpret_cast<const uint16_t*>(uintptr_t(object)+6) & 0xFFF;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
+int32_t wrapped(int32_t d) noexcept { d &= 0xFFF; return d >= 2048 ? d-4096 : d; }
 constexpr int32_t BarRowStep = 34;   // 1600x1200 units between stacked bars
 // Copies hp/max of all 512 records and each record's object ([[0x98F320]+4+i*4], as 0x4F1D90 reads it); false when
 // the table is absent or unreadable. Records are reused: a new creature in a slot is a new object (session-43 showed
@@ -1722,14 +1735,22 @@ void Engine::scan_combatants(uint32_t avatar_record, uint32_t locked) noexcept {
         if (const auto window = GetForegroundWindow()) GetWindowThreadProcessId(window,&pid);
         if (pid == GetCurrentProcessId()) last_action = now;
     }
-    const bool acting = last_action && now-last_action <= ActionMs;
+    const bool melee = last_action && now-last_action <= ActionMs, casting = last_cast && now-last_cast <= ActionMs;
+    int32_t ax = 0, ay = 0;
+    const bool avatar_at = object_xy(avatar_object(),ax,ay);
+    const auto near_avatar = [&](uint32_t i) {
+        int32_t x = 0, y = 0;
+        if (!avatar_at || !object_xy(object[i],x,y)) return false;
+        const int64_t dx = wrapped(x-ax), dy = wrapped(y-ay), d2 = dx*dx+dy*dy;
+        return (melee && d2 <= int64_t(MeleeRange)*MeleeRange) || (casting && d2 <= int64_t(SpellRange)*SpellRange);
+    };
     if (records_synced && base == record_base) {
         uint32_t changes = 0;
         for (uint32_t i = 0; i < 512; ++i) changes += hp[i] != record_hp[i] || max[i] != record_max[i];
         if (changes > ResyncChanges) ++combat_resyncs;
         else for (uint32_t i = 0; i < 512; ++i) {
             if (i == avatar_record || max[i] != record_max[i] || !max[i] || hp[i] >= record_hp[i] ||
-                !object[i] || object[i] != record_object[i] || (i != locked && !acting)) continue;
+                !object[i] || object[i] != record_object[i] || (i != locked && !near_avatar(i))) continue;
             ++combat_hits;
             std::rotate(recent_hits.begin(),recent_hits.begin()+1,recent_hits.end());
             recent_hits.back() = {i,record_hp[i],hp[i],max[i],object[i],i == locked};
