@@ -69,6 +69,17 @@ Binding a cheat puts a line under `[CHEAT COMMANDS]`, which also turns on the ru
 
 When that game ends, the page points `Current_Keymap` at `U9CHT.kmp` again, in case the game wrote its own value back on the way out.
 
+**Ctrl+Shift+K in game** brings this page up:
+1. The runtime posts `OpenKeyBindingsMessage` (`protocol.h`) to the window of class `U9ChtFront`, with the game's window in `wParam`. First it calls `AllowSetForegroundWindow` for the page's process.
+2. The page restores itself, opens the key bindings page and comes to the front.
+3. 返回 becomes 回到遊戲, which hands the foreground back to the game and minimizes the page again.
+
+Details:
+- The page ignores the message unless it started the running game.
+- The game binds nothing to Ctrl+Shift+K, so the key does nothing else. The page refuses to bind it.
+- Without a front page (session tool), the runtime logs `key_bindings_hotkey` with `"front_page":false` once.
+- Not yet tried in game.
+
 In game:
 - sessions 57 and 58: a keymap saved by this page works;
 - session 60: the live reload works (CONFIRMED). That test replaced the file directly, not through the page.

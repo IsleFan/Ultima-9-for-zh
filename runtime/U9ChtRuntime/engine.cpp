@@ -1576,7 +1576,13 @@ int read_toggle(cheat::Kind kind) noexcept {
     } __except (EXCEPTION_EXECUTE_HANDLER) {}
     return -1;
 }
-void cheat_key(UINT vk, UINT mods) { if (engine) engine->on_cheat_key(vk,mods); }
+// Every real key press (input_hooks on_key): the key bindings hotkey, then the cheat notices (no-op without bindings).
+// The key still reaches the game, which binds nothing to Ctrl+Shift+K.
+void key_press(UINT vk, UINT mods) {
+    if (!engine) return;
+    if (vk == OpenKeyBindingsVk && mods == (cheat::ModCtrl | cheat::ModShift)) { engine->open_key_bindings(); return; }
+    engine->on_cheat_key(vk,mods);
+}
 constexpr uint64_t NoticeMs = 2500, ToggleWaitMs = 600;
 constexpr uint32_t StatusEm = 11;   // status numbers: em at 800x600, doubled at 1600x1200
 constexpr uint32_t FloatEm = 15;    // floating numbers: em at 800x600, doubled at 1600x1200
@@ -1633,6 +1639,24 @@ void Engine::on_spell_cast(uint32_t caster, uint32_t avatar, uint32_t spell) noe
         show_notice(name.empty() ? L"聖者施展法術 #" + std::to_wstring(spell) : L"聖者施展「" + name + L"」");
         last_spell = spell;
     } catch (...) {}
+}
+void Engine::open_key_bindings() noexcept {
+    const HWND front = FindWindowW(FrontWindowClass, nullptr);
+    if (!front) {   // started by the session tool, or the front page is gone (e.g. quarantined)
+        if (key_page_missing++ == 0) log->event("key_bindings_hotkey","\"front_page\":false");
+        return;
+    }
+    DWORD front_pid = 0; GetWindowThreadProcessId(front, &front_pid);
+    // The game is in front; let the front page take the foreground when it answers.
+    if (front_pid) AllowSetForegroundWindow(front_pid);
+    HWND game = GetForegroundWindow();
+    DWORD game_pid = 0; if (game) GetWindowThreadProcessId(game, &game_pid);
+    if (game_pid != GetCurrentProcessId()) game = nullptr;
+    static const UINT message = RegisterWindowMessageW(OpenKeyBindingsMessage);
+    const bool posted = message && PostMessageW(front, message, reinterpret_cast<WPARAM>(game), 0);
+    ++key_page_requests;
+    log->event("key_bindings_hotkey","\"front_page\":true,\"posted\":"+std::string(posted?"true":"false")+
+               ",\"requests\":"+std::to_string(key_page_requests));
 }
 void Engine::on_cheat_key(UINT vk, UINT mods) noexcept {
     Exclusive lock(mutex);
@@ -2279,13 +2303,13 @@ void Engine::install(const Config& config, Logger& logger) {
                         try { glyphs.warm(uint32_t(c),em,c < 0x80); }
                         catch (const std::exception&) { if (unwarmed.size() < 16) unwarmed.push_back(uint32_t(c)); }
                     }
-                    o.on_key = cheat_key;
                 }
                 std::string skipped;
                 for (const auto c : unwarmed) skipped += (skipped.empty()?"":",")+std::to_string(c);
                 log->event("cheat_notices","\"keymap\":\""+keymap+"\",\"bindings\":"+std::to_string(cheat_bindings.size())+
                            ",\"unwarmed\":["+skipped+"]");
                 cheat_notices_on = !cheat_bindings.empty();
+                o.on_key = key_press;   // key bindings hotkey always; cheat notices when bound
                 // Live keymap reload: the files as the game read them at start are the baseline.
                 keymap_live = !exists(L"keymap_live.off");
                 if (keymap_live) { keymap_game = game; keymap_watch.start(keymap_stamp()); }

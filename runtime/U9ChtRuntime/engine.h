@@ -261,6 +261,9 @@ struct Engine {
     uint64_t keymap_options_time = 0, keymap_next_poll = 0, keymap_reloads = 0, keymap_refusals = 0;
     keymap_live::Stamp keymap_stamp() noexcept;
     void poll_keymap() noexcept;
+    // Ctrl+Shift+K in game: bring up the front page's key bindings page (protocol.h). Game thread, input hook.
+    uint64_t key_page_requests = 0, key_page_missing = 0;
+    void open_key_bindings() noexcept;
     bool overlay_draw = true;   // developer marker overlay_draw.off: overlays compute but draw nothing
     bool status_numbers = false;
     uint64_t status_frames = 0, status_misses = 0, status_unreadable = 0;

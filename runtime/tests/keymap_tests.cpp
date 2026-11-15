@@ -87,6 +87,9 @@ int main() {
         check(code_from_press(0x6F, true, false, false, false, &e) == 0 && e == KeyError::Unsupported, "keypad / arrives extended");
         check(code_from_press(0x2C, false, false, false, false, &e) == 0 && e == KeyError::Unsupported, "print screen is built in");
         check(code_from_press(0xE2, false, false, false, false, &e) == 0 && e == KeyError::Unsupported, "a key the game does not name");
+        check(code_from_press(0x4B, false, true, true, false, &e) == 0 && e == KeyError::Hotkey, "ctrl+shift+k opens the page");
+        check(code_from_press(0x4B, false, false, true, false, &e) == (Ctrl | 0x4B) && code_from_press(0x4B, false, true, true, true, &e) != 0,
+              "ctrl+k and ctrl+shift+alt+k stay bindable");
     }
     {   // reading, with the game's line rules
         const std::string text =

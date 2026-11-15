@@ -10,6 +10,7 @@
 
 - 遊戲中即時套用按鍵（2026-11-15，使用者授權）：首頁在遊戲進行中也能改鍵，存檔後 runtime 用遊戲自己的函式重讀按鍵檔。session 60 遊戲內驗證通過（CONFIRMED）。細節見研究文件 "Changing bindings while the game runs"。
 - 啟動器在遊戲結束時就先還原遊戲檔（`--restore-backup`），首頁被防毒移除也不會留下中文檔。
+- 遊戲中按 **Ctrl+Shift+K** 叫出首頁的按鍵設定頁，「回到遊戲」切回（2026-11-15，**尚未進遊戲驗證**，要經首頁啟動才能測）。說明見 `runtime/U9ChtFront/README.md`。
 - 首頁新增「按鍵設定」頁（2026-11-15；session 57、58 遊戲內驗證通過）：
   - 研究與遊戲讀按鍵檔的規則：`docs/research/U9_EXTENDED_SETUP_TOOL.md`；用法：`runtime/U9ChtFront/README.md`。
   - 程式：`runtime/U9ChtFront/keymap.h`、`keymap.cpp`；測試 `U9ChtKeymapTests`、`U9ChtKeymapLiveTests`（C++ 測試現在是 13 個）。

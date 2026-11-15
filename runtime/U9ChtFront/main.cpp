@@ -56,6 +56,8 @@ struct App {
     // Key bindings page.
     bool keys_page = false, keys_dirty = false, keys_leave_armed = false;
     bool keys_saved_while_running = false;   // Current_Keymap is checked again when that game ends
+    HWND game_window = nullptr;              // set when the page was brought up from the game (Ctrl+Shift+K)
+    UINT open_keys_message = 0;              // protocol.h OpenKeyBindingsMessage
     int tab = 0, capture = -1;          // capture: the command waiting for a key press, or -1
     keymap::Keymap keys;
     std::string keys_file;              // the keymap the page was loaded from
@@ -177,6 +179,9 @@ struct Painter {
     }
 };
 
+// The page was brought up from a running game: "返回" takes the player back to it.
+bool back_to_game() { return app.running && app.game_window && IsWindow(app.game_window); }
+
 // The key bindings page: one row per command, its keys as chips (click one to remove it) and "＋" to add one.
 void paint_keys(Painter& p) {
     const auto& commands = keymap::commands();
@@ -207,15 +212,15 @@ void paint_keys(Painter& p) {
     else if (app.tab == keymap::Pages - 1 && !app.keys_dirty)   // rows fill this tab, so its note goes here
         status = L"作弊是遊戲內建的開發功能。標 ⚠ 的三項據報會把背包重置成開場狀態，使用前請先存檔。";
     else if (app.running) status = std::wstring(app.keys_dirty ? L"有變更尚未儲存。" : L"") +
-                                   L"遊戲進行中：按「儲存按鍵」後，回到遊戲約一秒內生效（不必重新啟動）。";
+                                   L"遊戲進行中：儲存後回到遊戲，放開所有按鍵約一秒內生效（不必重新啟動）。";
     else status = L"按鍵檔：" + std::wstring(app.keys_file.begin(), app.keys_file.end()) + (app.keys_dirty ? L"（有變更尚未儲存）" : L"") +
-                  L"　　點按鍵可移除，按＋新增。Esc、F1～F12 由遊戲保留。";
+                  L"　點按鍵可移除，按＋新增。遊戲中按 Ctrl+Shift+K 可叫出這一頁。";
     p.text(40, 708, 820, 26, status, p.note, color, DT_CENTER);
     int x = 60;
     p.button(x, 746, 180, 46, L"儲存按鍵", KeySave, app.keys_dirty, true); x += 200;
     p.button(x, 746, 180, 46, L"載入原版預設", KeyDefaults, true); x += 200;
     p.button(x, 746, 180, 46, L"放棄變更", KeyRevert, app.keys_dirty); x += 200;
-    p.button(x, 746, 180, 46, L"返回", KeyBack, true);
+    p.button(x, 746, 180, 46, back_to_game() ? L"回到遊戲" : L"返回", KeyBack, true);
 }
 
 void paint(HDC dc) {
@@ -383,7 +388,7 @@ void start_game() {
     }).detach();
 }
 void game_ended(DWORD code) {
-    app.running = false;
+    app.running = false; app.game_window = nullptr;
     if (app.keys_saved_while_running) { keymap::select(app.s.game_dir); app.keys_saved_while_running = false; }
     const auto r = recover(app.s.game_dir, app.backup());
     refresh_game();
@@ -416,6 +421,7 @@ void capture_key(WPARAM vk, LPARAM lp) {
     if (!code) {
         if (error == keymap::KeyError::Reserved) set_message(L"F1～F12 由遊戲保留，請加上 Ctrl、Alt 或 Shift，或改用別的鍵。", true);
         else if (error == keymap::KeyError::Unsupported) set_message(L"遊戲不認得這個鍵，請改用別的鍵。", true);
+        else if (error == keymap::KeyError::Hotkey) set_message(L"Ctrl+Shift+K 保留給遊戲中叫出這一頁，請改用別的鍵。", true);
         return;   // a modifier alone: keep waiting for the key itself
     }
     const auto& commands = keymap::commands();
@@ -449,7 +455,8 @@ void act_keys(Id id, int arg) {
         app.keys_file = keymap::PlayerFile; app.keys_dirty = false; app.keys.skipped = 0; app.capture = -1;
         if (app.running) {
             app.keys_saved_while_running = true;
-            set_message(L"已儲存。切回遊戲後約一秒內生效；放開所有按鍵後才會套用。", false);
+            set_message(back_to_game() ? L"已儲存。按「回到遊戲」，放開所有按鍵約一秒內生效。"
+                                       : L"已儲存。切回遊戲後約一秒內生效；放開所有按鍵後才會套用。", false);
         } else set_message(L"已儲存到遊戲資料夾的 U9CHT.kmp。原本的 Default.kmp 沒有更動。", false);
         break;
     }
@@ -467,6 +474,11 @@ void act_keys(Id id, int arg) {
             break;
         }
         app.keys_page = false; app.keys_dirty = false; app.capture = -1; set_message(L"", false);
+        if (back_to_game()) {   // this window is in front, so it may hand the foreground back
+            SetForegroundWindow(app.game_window);
+            ShowWindow(app.window, SW_MINIMIZE);
+        }
+        app.game_window = nullptr;
         break;
     default: break;
     }
@@ -533,7 +545,21 @@ void act(Id id, int arg = 0) {
     if (id != Start) save();
 }
 
+// Ctrl+Shift+K in the game (protocol.h): open the key bindings page and come to the front. Ignored unless this page
+// started the running game.
+void open_keys_from_game(HWND game) {
+    if (!app.running) return;
+    app.game_window = game;
+    if (!app.keys_page) open_keys();
+    ShowWindow(app.window, SW_RESTORE);
+    SetForegroundWindow(app.window);
+}
+
 LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    if (app.open_keys_message && msg == app.open_keys_message) {
+        open_keys_from_game(reinterpret_cast<HWND>(wp)); InvalidateRect(hwnd, nullptr, FALSE);
+        return 0;
+    }
     switch (msg) {
     case WM_PAINT: {
         PAINTSTRUCT ps; HDC dc = BeginPaint(hwnd, &ps);
@@ -648,7 +674,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     search_game(true);
 
     WNDCLASSEXW wc{sizeof(wc)};
-    wc.lpfnWndProc = proc; wc.hInstance = instance; wc.lpszClassName = L"U9ChtFront";
+    static_assert((keymap::PageHotkey & 0xFF) == OpenKeyBindingsVk, "the hotkey the page refuses is the one the runtime sends");
+    app.open_keys_message = RegisterWindowMessageW(OpenKeyBindingsMessage);
+    wc.lpfnWndProc = proc; wc.hInstance = instance; wc.lpszClassName = FrontWindowClass;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wc.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
     RegisterClassExW(&wc);

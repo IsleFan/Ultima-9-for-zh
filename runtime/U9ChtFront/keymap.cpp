@@ -200,7 +200,9 @@ uint16_t code_from_press(unsigned vk, bool extended, bool shift, bool ctrl, bool
     if (vk == 0x1B || (!modified && vk >= 0x70 && vk <= 0x7B)) return fail(KeyError::Reserved);
     const auto code = uint16_t(vk | (extended ? Extended : 0));
     if (!name_of(code) || vk == 0x2C) return fail(KeyError::Unsupported);
-    return uint16_t(code | (shift ? Shift : 0) | (ctrl ? Ctrl : 0) | (alt ? Alt : 0));
+    const auto full = uint16_t(code | (shift ? Shift : 0) | (ctrl ? Ctrl : 0) | (alt ? Alt : 0));
+    if (full == PageHotkey) return fail(KeyError::Hotkey);
+    return full;
 }
 
 Keymap parse(std::string_view text) {

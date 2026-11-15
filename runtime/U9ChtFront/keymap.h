@@ -26,6 +26,8 @@ extern const wchar_t* const PageNames[Pages];
 
 // Key code as u9.exe builds it (0x4D3C30 / 0x4D3430): low byte = virtual key.
 inline constexpr uint16_t Shift = 0x100, Alt = 0x200, Ctrl = 0x400, Extended = 0x800;
+// Ctrl+Shift+K brings up this page from the game (protocol.h OpenKeyBindingsVk); it cannot be bound.
+inline constexpr uint16_t PageHotkey = Ctrl | Shift | 0x4B;
 
 struct Command {
     const char* name;      // as the game registers it
@@ -46,7 +48,7 @@ std::string key_text(uint16_t code);
 // Code -> text for the page ("Ctrl+Shift+數字鍵 ←").
 std::wstring key_label(uint16_t code);
 
-enum class KeyError { None, Modifier, Reserved, Unsupported };
+enum class KeyError { None, Modifier, Reserved, Unsupported, Hotkey };
 // A key press on the page (WM_KEYDOWN virtual key and its extended bit, plus the modifier state) -> code.
 // 0 with *error set when it cannot be a binding.
 uint16_t code_from_press(unsigned vk, bool extended, bool shift, bool ctrl, bool alt, KeyError* error = nullptr);
