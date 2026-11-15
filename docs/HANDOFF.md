@@ -8,6 +8,12 @@
 - 體力／法力數值、傷害／法力飄字、敵人血條，三者都有首頁開關。
 - 「鎖定敵人時死亡再讀檔閃退」這個原版錯誤的繞過方法。
 
+- 首頁新增「按鍵設定」頁（2026-11-15，**尚未 commit、尚未進遊戲驗證**）：
+  - 研究與遊戲讀按鍵檔的規則：`docs/research/U9_EXTENDED_SETUP_TOOL.md`；用法：`runtime/U9ChtFront/README.md`。
+  - 程式：`runtime/U9ChtFront/keymap.h`、`keymap.cpp`；測試 `U9ChtKeymapTests`（C++ 測試現在是 12 個）。
+  - 存檔寫到遊戲資料夾的 `U9CHT.kmp`，並改 `Options.ini` 的 `Current_Keymap`；不動 `Default.kmp`。
+  - 靜態分析發現 `abort_targeting` 不在 `u9.exe` 裡：原版按鍵檔的 A 鍵很可能沒有作用，待進遊戲確認。
+
 細節見第 3 節。
 
 ---
@@ -277,11 +283,29 @@
   - 狀態頁：新用語，例如機敏、神力、長程武器、生命力。
 - 首頁：新增的三個勾選框（體力／法力數值、傷害／法力飄字、敵人血條）還沒實際目視確認版面，視窗高度現在是 818。
   - 開 `.local/p10-misc/front-release/U9Cht.exe` 確認。不要按「自動搜尋」或「切換版本」。
+- 按鍵設定頁（`front-release` 裡已是新版 `U9Cht.exe`）：
+  - 實際操作：新增、移除、重複鍵變紅、儲存、載入原版預設、返回。
+  - 存檔後進遊戲，確認改過的鍵有效、沒有跳出「keymap file」錯誤訊息框。
+  - 注意：存檔會在私人副本留下 `U9CHT.kmp` 並改 `Options.ini`；測完要還原（session 工具會還原 `Options.ini`，`U9CHT.kmp` 要手動刪）。
+  - 順便確認 A 鍵（`abort_targeting`）在鎖定目標時到底有沒有作用。
+  - **第一次實測（2026-11-15 13:34，首頁啟動、開新遊戲、WASD 加到移動）：進遊戲後完全無法移動，滑鼠右鍵也不行；沒有錯誤訊息框。原因 UNKNOWN。**
+    - 同一場首頁被 Defender 隔離；存出的 `U9CHT.kmp` 格式檢查不出問題；記錄沒有例外。
+    - 滑鼠移動不經過按鍵檔，而且以前用原版按鍵檔也出現過原因不明的「無法移動」，所以還不能歸因於按鍵檔。
+    - 下一步：用 session 工具做對照（同一存檔，`--keymap` 用這份按鍵檔 vs 不加）。按鍵檔副本在 `.local/p10-misc/keymap/U9CHT-user-20261115.kmp`。
+    - **session 57（session 工具、session-29 存檔、這份按鍵檔）：方向鍵、WASD、右鍵移動、B、J、Alt+S 全部正常**（CONFIRMED）。首頁存出的按鍵檔沒問題；首頁那場無法移動的原因仍 UNKNOWN（差別：首頁啟動、Defender 隔離、可能是開新遊戲）。
+    - **session 58（session 工具、同一按鍵檔、開新遊戲）：WASD 正常**。開新遊戲本身也重現不了。
+    - 這和 11-12 記錄過一次的「讀檔後開新遊戲不能移動」相同，見 `docs/research/U9_NEW_GAME_AFTER_LOAD.md`（已補 11-15 的紀錄）。原因仍 UNKNOWN；下次再發生時先按一下 X 再放開，看能不能恢復（測游標停留功能的假設）。
+    - 要再用首頁重現，得先讓 Defender 不再隔離 `U9Cht.exe`（使用者自行在 Windows 安全性處理）。
 - 體力／法力數值和敵人血條：開啟對話、背包、日誌、選單時，會不會跟著橫條一起隱藏，還沒專門確認。
 - 飛行作弊開了再關就無法移動：用原版 exe 加同一份按鍵檔確認是不是原版行為（作法見第 2 節）。
 - session 11 播放影片時截圖閃退（0xC0000005，原因 UNKNOWN）：還沒和原版比對。
 
 ## 6. 其他待辦
+
+- **防毒誤判（2026-11-15，發布前必須處理）**：Microsoft Defender 在首頁按「開始遊戲」後 3 秒把 `front-release\U9Cht.exe` 判為 `Behavior:Win32/DefenseEvasion.A!ml` 並隔離。
+  - 遊戲本身照常執行並正常結束（結束代碼 0），但首頁被移除，所以離開遊戲後**沒有還原**四個 FLX；已依收據手動還原並驗證雜湊。
+  - 觸發的是哪個行為還不知道（UNKNOWN）。11-12 用首頁啟動、以及 session 工具啟動都沒被擋。
+  - 影響：玩家電腦上也可能發生，而且會留下未還原的遊戲檔（下次開首頁時 `recover()` 會處理，前提是首頁還在）。
 
 - 啟動頁下一步：在玩家電腦上建置 `data/`。
   - 需要附帶 Python（embeddable 版）和 `u9cht` 套件，從玩家自己的遊戲檔建置。
