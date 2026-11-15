@@ -42,4 +42,15 @@ The varying addresses suggest memory that was freed during the load is used afte
 
 - The localization is not the cause. The earlier "no heap use in overlays" change (`e6dc102`) stays: it is harmless.
 - Help text for players should say: **release the target lock (`T` / `A`) before loading a save, or restart the game after dying with a target locked.**
-- A possible later fix would be a minimal hook that clears the lock before a load. That needs explicit authorization (AGENTS §13).
+## Workaround in the runtime (authorized by the user 2026-11-15, not yet verified in game)
+
+When the Avatar's HP reaches 0 with the lock on, the runtime calls the game's own clear routine `0x4F90C0` once. It
+is a thiscall on `[0x98F324]` with argument 0 (no sound). No new hook is involved: the call is made from the existing
+flip hook.
+
+- The routine unmarks the entry: `0x4F91E0` removes the red target marker object `[P+0x1024]` from its scene list
+  through `0x55FA60` and deletes it. The crashes write into that same list family (`0x55FA00` / `0x5E0C00`).
+- It then sets `+0x100C = 0` and `+0x1008 = -1`, the same as releasing the lock with `T`.
+- Counters: `death_unlocks`, `death_unlock_faults`.
+
+This supports the HYPOTHESIS above: the target marker survives the load and points into the freed scene.

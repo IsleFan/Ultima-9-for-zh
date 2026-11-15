@@ -706,6 +706,30 @@ uintptr_t __fastcall name_destroy_hook(uintptr_t self, void*) {
     }
     return reinterpret_cast<uintptr_t(__thiscall*)(uintptr_t)>(name_destroy_gateway)(self);
 }
+// Native bug workaround (user request 2026-11-15; docs/research/U9_LOCKED_TARGET_DEATH_LOAD_CRASH.md): dying with a
+// target locked and then loading crashes the original game. When the Avatar's HP reaches 0 with the lock on, the game's
+// own clear routine 0x4F90C0 (thiscall on the combat manager [0x98F324], argument 0 = no sound) runs once: it unmarks
+// the entry (0x4F91E0 removes the red target marker from its scene list via 0x55FA60, the list the crash corrupts) and
+// sets +0x100C = 0, +0x1008 = -1, exactly as releasing the lock with T does. Game thread (flip), no other change.
+}   // leave the anonymous namespace to declare u9cht::avatar_object (defined with the spell-cast hook below)
+uint32_t avatar_object() noexcept;
+namespace {
+bool avatar_dead_locked(uintptr_t& manager) noexcept {
+    __try {
+        manager = word(0x98F324);
+        if (!manager || !word(manager+0x100C) || uint32_t(word(manager+0x1008)) == 0xFFFFFFFF) return false;
+        const auto avatar = avatar_object();
+        const auto records = word(0x98F31C);
+        if (!avatar || !records) return false;
+        const uint16_t type = *reinterpret_cast<const uint16_t*>(uintptr_t(avatar)+0xA);
+        if (type >= 0x200) return false;
+        return *reinterpret_cast<const uint16_t*>(records+uintptr_t(type)*0x13C+0x34) == 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
+bool clear_target_lock(uintptr_t manager) noexcept {
+    __try { reinterpret_cast<void(__thiscall*)(uintptr_t,uint32_t)>(0x4F90C0)(manager,0); return true; }
+    __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
 uintptr_t __fastcall flip_hook(uintptr_t self, void*) {
     Guard guard;
     if (guard.state) {
@@ -713,6 +737,9 @@ uintptr_t __fastcall flip_hook(uintptr_t self, void*) {
         DWORD zero = 0; e.render_thread.compare_exchange_strong(zero,GetCurrentThreadId());
         if (e.render_thread.load() != GetCurrentThreadId()) e.fail(15);
         ++e.flips;
+        if (uintptr_t manager = 0; avatar_dead_locked(manager)) {
+            if (clear_target_lock(manager)) ++e.death_unlocks; else ++e.death_unlock_faults;
+        }
         if (e.render) { if (e.status_numbers || e.floating_numbers || e.target_bar) e.update_status(self); if (!e.cheat_bindings.empty()) e.update_notice(self); e.compose(self); }
         for (const auto& q : e.queues) if (q.address && q.last_frame == e.frame)
             if (const auto* r = e.raster(q.raster)) for (uint32_t i = 0; i < r->runs.size(); ++i)
@@ -2472,7 +2499,7 @@ void Engine::snapshot(const char* event) noexcept {
               ",\"leaks\":"+std::to_string(misc_leaks)+",\"draw_strips\":"+std::to_string(misc_draw_strips)+
               ",\"bounded\":"+std::to_string(misc_bounded)+",\"book_overwritten\":"+std::to_string(book_overwritten)+
               ",\"measures\":"+std::to_string(misc_measures)+",\"measure_faults\":"+std::to_string(misc_measure_faults)+
-              ",\"message_insets\":"+std::to_string(message_insets)+",\"cheat_presses\":"+std::to_string(cheat_presses)+",\"cheat_notices\":"+std::to_string(cheat_notices)+",\"notice_frames\":"+std::to_string(notice_frames)+",\"notice_glyph_misses\":"+std::to_string(notice_glyph_misses)+",\"misc_label_binds\":"+std::to_string(misc_label_binds)+",\"target_misses\":"+std::to_string(target_misses)+",\"target_lock_frames\":"+std::to_string(target_lock_frames)+",\"last_target_raw\":"+std::to_string(last_target_raw)+",\"combat_hits\":"+std::to_string(combat_hits)+",\"recent_hits\":"+[&]{ std::string r="["; for (const auto& x : recent_hits) if (x.max) r += (r.size()>1?",":"")+std::string("[")+std::to_string(x.record)+","+std::to_string(x.before)+","+std::to_string(x.after)+","+std::to_string(x.max)+","+std::to_string(x.object)+","+std::to_string(x.locked)+"]"; return r+"]"; }()+",\"combat_resyncs\":"+std::to_string(combat_resyncs)+",\"target_bar_frames\":"+std::to_string(target_bar_frames)+",\"target_frames\":"+std::to_string(target_frames)+",\"target_overflow\":"+std::to_string(target_overflow)+",\"targets_seen\":"+[&]{ std::string r="["; for (const auto& t : targets_seen) if (t.frames) r += (r.size()>1?",":"")+std::string("[")+std::to_string(t.handle)+","+std::to_string(t.lock)+","+std::to_string(t.type)+","+std::to_string(t.hp)+","+std::to_string(t.max)+","+std::to_string(t.min_hp)+","+std::to_string(t.frames)+"]"; return r+"]"; }()+",\"floaters\":"+std::to_string(floaters_spawned)+",\"floater_frames\":"+std::to_string(floater_frames)+",\"floater_misses\":"+std::to_string(floater_misses)+",\"status_frames\":"+std::to_string(status_frames)+",\"status_misses\":"+std::to_string(status_misses)+",\"status_unreadable\":"+std::to_string(status_unreadable)+",\"status_last\":["+std::to_string(status_last[0])+","+std::to_string(status_last[1])+","+std::to_string(status_last[2])+","+std::to_string(status_last[3])+","+std::to_string(status_last[4])+"],\"cast_calls\":"+std::to_string(cast_calls)+",\"recent_casts\":"+[&]{ std::string r="["; for (const auto& x : recent_casts) if (x.spell) r += (r.size()>1?",":"")+std::string("[")+std::to_string(x.caster)+","+std::to_string(x.avatar)+","+std::to_string(x.spell)+"]"; return r+"]"; }()+",\"spell_casts\":"+std::to_string(spell_casts)+",\"last_spell\":"+std::to_string(last_spell)+",\"small_em_glyphs\":"+std::to_string(small_em_glyphs)+",\"book_messages\":"+std::to_string(book_messages)+
+              ",\"message_insets\":"+std::to_string(message_insets)+",\"cheat_presses\":"+std::to_string(cheat_presses)+",\"cheat_notices\":"+std::to_string(cheat_notices)+",\"notice_frames\":"+std::to_string(notice_frames)+",\"notice_glyph_misses\":"+std::to_string(notice_glyph_misses)+",\"misc_label_binds\":"+std::to_string(misc_label_binds)+",\"target_misses\":"+std::to_string(target_misses)+",\"target_lock_frames\":"+std::to_string(target_lock_frames)+",\"last_target_raw\":"+std::to_string(last_target_raw)+",\"death_unlocks\":"+std::to_string(death_unlocks)+",\"death_unlock_faults\":"+std::to_string(death_unlock_faults)+",\"combat_hits\":"+std::to_string(combat_hits)+",\"recent_hits\":"+[&]{ std::string r="["; for (const auto& x : recent_hits) if (x.max) r += (r.size()>1?",":"")+std::string("[")+std::to_string(x.record)+","+std::to_string(x.before)+","+std::to_string(x.after)+","+std::to_string(x.max)+","+std::to_string(x.object)+","+std::to_string(x.locked)+"]"; return r+"]"; }()+",\"combat_resyncs\":"+std::to_string(combat_resyncs)+",\"target_bar_frames\":"+std::to_string(target_bar_frames)+",\"target_frames\":"+std::to_string(target_frames)+",\"target_overflow\":"+std::to_string(target_overflow)+",\"targets_seen\":"+[&]{ std::string r="["; for (const auto& t : targets_seen) if (t.frames) r += (r.size()>1?",":"")+std::string("[")+std::to_string(t.handle)+","+std::to_string(t.lock)+","+std::to_string(t.type)+","+std::to_string(t.hp)+","+std::to_string(t.max)+","+std::to_string(t.min_hp)+","+std::to_string(t.frames)+"]"; return r+"]"; }()+",\"floaters\":"+std::to_string(floaters_spawned)+",\"floater_frames\":"+std::to_string(floater_frames)+",\"floater_misses\":"+std::to_string(floater_misses)+",\"status_frames\":"+std::to_string(status_frames)+",\"status_misses\":"+std::to_string(status_misses)+",\"status_unreadable\":"+std::to_string(status_unreadable)+",\"status_last\":["+std::to_string(status_last[0])+","+std::to_string(status_last[1])+","+std::to_string(status_last[2])+","+std::to_string(status_last[3])+","+std::to_string(status_last[4])+"],\"cast_calls\":"+std::to_string(cast_calls)+",\"recent_casts\":"+[&]{ std::string r="["; for (const auto& x : recent_casts) if (x.spell) r += (r.size()>1?",":"")+std::string("[")+std::to_string(x.caster)+","+std::to_string(x.avatar)+","+std::to_string(x.spell)+"]"; return r+"]"; }()+",\"spell_casts\":"+std::to_string(spell_casts)+",\"last_spell\":"+std::to_string(last_spell)+",\"small_em_glyphs\":"+std::to_string(small_em_glyphs)+",\"book_messages\":"+std::to_string(book_messages)+
               ",\"name_count_labels\":"+std::to_string(name_count_labels)+
               ",\"misc_message_strips\":"+std::to_string(misc_message_strips)+",\"shop_converts\":"+std::to_string(shop_converts)+
               ",\"shop_short\":"+std::to_string(shop_short)+",\"clock_rewrites\":"+std::to_string(clock_rewrites)+

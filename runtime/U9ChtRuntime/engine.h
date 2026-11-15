@@ -250,6 +250,7 @@ struct Engine {
     bool overlay_text(uintptr_t backend, std::wstring_view text, int32_t center_x, int32_t baseline, uint32_t em,
                       std::array<uint8_t,3> fill, uint64_t& misses) noexcept;
     // Status numbers on the health and mana bars ("35/98"), requested 2026-11-13 (FeatureStatusNumbers).
+    uint64_t death_unlocks = 0, death_unlock_faults = 0;   // native bug workaround: lock released on death
     bool overlay_draw = true;   // developer marker overlay_draw.off: overlays compute but draw nothing
     bool status_numbers = false;
     uint64_t status_frames = 0, status_misses = 0, status_unreadable = 0;
