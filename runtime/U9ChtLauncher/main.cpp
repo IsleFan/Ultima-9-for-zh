@@ -1,3 +1,4 @@
+#include "front_core.h"
 #include "platform.h"
 #include "version_manifest.h"
 #include <tlhelp32.h>
@@ -92,8 +93,27 @@ uintptr_t export_rva(const std::filesystem::path& dll, const char* name) {
     FreeLibrary(module); require(result != 0, "runtime export missing"); return result;
 }
 }
+// --restore-backup (given by the front page): put the player's original static files back as soon as the game
+// ends, with the same receipt-based recover() the front page uses. The front page still runs it again when it
+// sees the launcher exit; without a receipt that second call does nothing. This covers a front page that is no
+// longer there to do it (2026-11-15: Microsoft Defender quarantined U9Cht.exe while the game was running, and the
+// player's files stayed replaced until restored by hand).
+void restore_after_game(const Logger& log, const std::filesystem::path& game, const std::filesystem::path& backup) {
+    if (backup.empty() || game.empty()) return;
+    try {
+        const auto result = front::recover(game, backup);
+        log.event("restore_after_game", std::string("\"ok\":") + (result.ok ? "true" : "false") +
+                  ",\"acted\":" + (result.message.empty() ? "false" : "true"));
+        if (!result.ok) std::cerr << "restore failed: " << utf8(result.message) << '\n';
+    } catch (const std::exception& error) {
+        log.event("restore_after_game", "\"ok\":false,\"exception\":true");
+        std::cerr << "restore failed: " << error.what() << '\n';
+    }
+}
+
 int wmain(int argc, wchar_t** argv) {
     Logger log;
+    std::filesystem::path restore_game, restore_backup;
     Handle process, primary;
     DWORD pid = 0;
     void* remote_data = nullptr;
@@ -108,12 +128,17 @@ int wmain(int argc, wchar_t** argv) {
             else if (key == L"--verify-unload") unload = true;
             else {
                 require(i + 1 < argc && (key == L"--game-dir" || key == L"--runtime" || key == L"--log" ||
-                         key == L"--mode" || key == L"--font" || key == L"--allowlist" || key == L"--config"), "unknown/missing argument");
+                         key == L"--mode" || key == L"--font" || key == L"--allowlist" || key == L"--config" ||
+                         key == L"--restore-backup"), "unknown/missing argument");
                 require(options.emplace(key, argv[++i]).second, "duplicate option");
             }
         }
         require(options.count(L"--game-dir") && options.count(L"--log"), "--game-dir and fresh --log are required");
         const auto game = std::filesystem::canonical(options[L"--game-dir"]);
+        if (options.count(L"--restore-backup")) {
+            // Set before anything can fail, so every exit path below restores.
+            restore_game = game; restore_backup = std::filesystem::absolute(options[L"--restore-backup"]);
+        }
         const auto dll = std::filesystem::canonical(options.count(L"--runtime") ? options[L"--runtime"] :
                          (std::filesystem::path(module_path(nullptr)).parent_path() / L"U9ChtRuntime.dll").wstring());
         const auto log_path = std::filesystem::absolute(options[L"--log"]);
@@ -231,12 +256,16 @@ int wmain(int argc, wchar_t** argv) {
         DWORD code = 0; require(GetExitCodeProcess(process.get(), &code), "game exit status unavailable");
         log.event("game_exited", "\"exit_code\":" + std::to_string(code));
         std::cout << "EXIT game_pid=" << pid << " code=" << code << '\n';
+        restore_after_game(log, restore_game, restore_backup);
         return code == 0 ? 0 : 3;
     } catch (const std::exception& error) {
         // The only process ever terminated here is this launcher's own child.
         if (process && !resumed) { TerminateProcess(process.get(), 2); WaitForSingleObject(process.get(), 10000); }
         log.event("launcher_fail", "\"primary_resumed\":" + std::string(resumed ? "true" : "false"));
         std::cerr << error.what() << '\n';
+        // A game this launcher resumed may still be running (a wait failure): restoring under it is not safe.
+        if (!resumed || (process && WaitForSingleObject(process.get(), 0) == WAIT_OBJECT_0))
+            restore_after_game(log, restore_game, restore_backup);
         return 2;
     }
 }

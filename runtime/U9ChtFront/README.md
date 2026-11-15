@@ -86,7 +86,11 @@ Every hooked address is therefore the same. `version_manifest.h` accepts both ha
 4. `backup/installed.txt` is written before the first original is replaced.
 5. The Chinese files are copied in and verified.
 
-**When the game ends:** `recover()` puts each original back and verifies it.
+**When the game ends:** `recover()` puts each original back and verifies it. It runs twice:
+1. `U9ChtLauncher.exe` runs it as soon as the game exits, because the page passes `--restore-backup <backup>`. It also runs on the launcher's failure paths, except while a resumed game may still be running.
+2. The page runs it again when it sees the launcher exit. With the receipt already gone, this does nothing.
+
+The launcher's run covers a page that is gone by then: on 2026-11-15 Microsoft Defender quarantined `U9Cht.exe` while the game was running, and the player's files stayed replaced. The session tool does not pass `--restore-backup` and restores on its own.
 
 `recover()` also runs when the page starts, which resolves a session cut short by a crash or a power loss.
 

@@ -357,7 +357,7 @@ void start_game() {
     const auto err = app.base / L"logs" / (name + L"-launcher.txt");
     std::wstring command = L"\"" + launcher.wstring() + L"\" --game-dir \"" + app.s.game_dir + L"\" --runtime \"" + dll.wstring() +
         L"\" --log \"" + log.wstring() + L"\" --mode render --allowlist \"" + pack.wstring() + L"\" --config \"" +
-        app.launcher_ini().wstring() + L"\"";
+        app.launcher_ini().wstring() + L"\" --restore-backup \"" + app.backup().wstring() + L"\"";
     SECURITY_ATTRIBUTES sa{sizeof(sa), nullptr, TRUE};
     HANDLE out = CreateFileW(err.c_str(), GENERIC_WRITE, FILE_SHARE_READ, &sa, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     STARTUPINFOW si{}; si.cb = sizeof(si);
