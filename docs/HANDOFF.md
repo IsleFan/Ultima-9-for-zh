@@ -8,9 +8,11 @@
 - 體力／法力數值、傷害／法力飄字、敵人血條，三者都有首頁開關。
 - 「鎖定敵人時死亡再讀檔閃退」這個原版錯誤的繞過方法。
 
-- 首頁新增「按鍵設定」頁（2026-11-15，**尚未 commit、尚未進遊戲驗證**）：
+- 遊戲中即時套用按鍵（2026-11-15，使用者授權）：首頁在遊戲進行中也能改鍵，存檔後 runtime 用遊戲自己的函式重讀按鍵檔。session 60 遊戲內驗證通過（CONFIRMED）。細節見研究文件 "Changing bindings while the game runs"。
+- 啟動器在遊戲結束時就先還原遊戲檔（`--restore-backup`），首頁被防毒移除也不會留下中文檔。
+- 首頁新增「按鍵設定」頁（2026-11-15；session 57、58 遊戲內驗證通過）：
   - 研究與遊戲讀按鍵檔的規則：`docs/research/U9_EXTENDED_SETUP_TOOL.md`；用法：`runtime/U9ChtFront/README.md`。
-  - 程式：`runtime/U9ChtFront/keymap.h`、`keymap.cpp`；測試 `U9ChtKeymapTests`（C++ 測試現在是 12 個）。
+  - 程式：`runtime/U9ChtFront/keymap.h`、`keymap.cpp`；測試 `U9ChtKeymapTests`、`U9ChtKeymapLiveTests`（C++ 測試現在是 13 個）。
   - 存檔寫到遊戲資料夾的 `U9CHT.kmp`，並改 `Options.ini` 的 `Current_Keymap`；不動 `Default.kmp`。
   - 靜態分析發現 `abort_targeting` 不在 `u9.exe` 裡：原版按鍵檔的 A 鍵很可能沒有作用，待進遊戲確認。
 
@@ -36,7 +38,7 @@
      --keymap .local/p10-misc/keymap/U9CHT-TEST.kmp
    python scripts/run_p8_0_session.py finish --session .local/p10-misc/session-NN
    ```
-   - 下一個 session 編號從 **57** 開始。
+   - 下一個 session 編號從 **61** 開始。
    - 不加 `--keymap` 就用原本的按鍵檔：沒有作弊鍵、作弊提示和施法攔截。
    - 要關掉個別功能，就用另一個設定檔，加上 `[features]` 區段。範例：`.local/p10-misc/bisect/u9cht-newfeatures-off.ini`。
 5. Runtime 版本號：
@@ -53,7 +55,7 @@
   - Steam：`.local/steam-game`。最近的測試都用它。
   - GOG：`.local/runtime-game`。建置中文化資料時用它的原版檔。
 - 測試：
-  - C++：11/11（2026-11-15）。
+  - C++：13/13（2026-11-15）。
   - Python：上次是 166 OK（3 skipped）。
 - Runtime：`U9ChtRuntime/0.2.45-p11`，建置在 `.local/p10-misc/build/Release`。
 - 中文化資料最新建置：`.local/p10-misc/out-m26`。

@@ -215,7 +215,45 @@ Session 57 (2026-11-15, session tool, the user's keymap from the front page with
 - The game reads the keymap once, at start: `0x4966FC` calls the loader `0x4D23C0`. The keymap object is kept at `[0x84F80C]`; its file name is at `+0x14`, copied from `0x98F580`.
 - A handler-shaped function at `0x49C140` (`ret 0x20`, acts on key down) calls the reader `0x4D25E0` again. Nothing refers to it: no command is registered with it in this build (CONFIRMED: no reference to its address). It looks like a developer "reload keymap" command that was left unregistered.
 - The reader only adds keys (`0x4D3820`). It never removes one. Calling it again would keep every old binding (CONFIRMED from the code).
-- So a live change needs, on the game's own thread: empty each command's key list, add the two built-in bindings again, set the file name, then call `0x4D25E0`. That is a new runtime intervention calling game functions, and needs explicit authorization (AGENTS §13). Not implemented.
+- So a live change needs, on the game's own thread: empty each command's key list, add the two built-in bindings again, set the file name, then call `0x4D25E0`.
+
+### Implemented (user authorization 2026-11-15)
+
+Code: `runtime/U9ChtRuntime/keymap_live.h` (decision part, `U9ChtKeymapLiveTests`) and `poll_keymap` / `reload_keymap` in `engine.cpp`.
+
+List layout, CONFIRMED from the code:
+- a list holds `+4` first, `+8` last, `+0xC` cursor;
+- a node holds `+4` next, `+8` previous;
+- the keymap object `[0x84F80C]` is such a list of commands; each command holds its key list at `+0x14`.
+
+When it runs:
+- In the flip hook, on the game thread, outside the runtime lock. Freeing keys re-enters the runtime's free hook, the same reason the death unlock runs there.
+- Every 500 ms it compares the last-write time and size of `Options.ini` and of the keymap that `Options.ini` names.
+- A change is applied once it has stayed the same for 1 s, and only while no key is held down.
+
+What it does, using only the game's own routines:
+1. For each command, remove every key (`0x5E4190`) and delete it (key vtable[0] with 1). This is the loop of the key list destructor `0x4D36A0`.
+2. Give each command back its `undefined` key (`0x4D3820`), as registration `0x4D3A00` does.
+3. Add the two built-in bindings (`shift+escape`, `PrintScrn`) as the loader `0x4D23C0` does.
+4. Copy the keymap name into `+0x14`.
+5. Run the reader `0x4D25E0`.
+
+The whole call is guarded by SEH.
+
+When it refuses (the game keeps its current bindings, and an event is logged):
+- the new name is longer than the one already in the game's buffer, whose size is unknown;
+- the keymap file is missing;
+- the front page's parser would skip any line of the file. Such a line is either an unknown key, which makes the game show a message box, or a line over the game's unchecked buffers.
+
+Cheat notices follow the new bindings only when they were set up at start (glyphs warmed, cast hook installed). Cheats bound only during play work, but show no notice.
+
+Developer marker: `keymap_live.off` in the data folder turns the reload off.
+
+**Session 60 (2026-11-15), CONFIRMED in game.** Session tool, the user's keymap with WASD. While the game ran, the keymap file was replaced twice:
+1. With the shipped bindings plus `y = jump` (event `keymap_live ok, 71 bindings`). WASD no longer moved the Avatar, the arrows still did, and Y jumped.
+2. With the user's keymap again (`74 bindings`). W moved again.
+
+There was no stall, no message box and no exception, and the game exited with code 0.
 
 ## Still open
 
