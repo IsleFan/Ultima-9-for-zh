@@ -1,5 +1,6 @@
 #include "engine.h"
 #include "input_hooks.h"
+#include "keymap.h"
 #include <intrin.h>
 #include <algorithm>
 #include <cstdio>
@@ -730,8 +731,118 @@ bool clear_target_lock(uintptr_t manager) noexcept {
     __try { reinterpret_cast<void(__thiscall*)(uintptr_t,uint32_t)>(0x4F90C0)(manager,0); return true; }
     __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
 }
+// ---- live keymap reload (keymap_live.h) ----
+// The game's keymap object [0x84F80C] is an intrusive list of commands (+4 first, node +4 next). Each command holds
+// its key list at +0x14, a list of the same kind. The routines below are the ones the game itself uses:
+//   0x5E4190 list remove (thiscall, 1 arg, unlinks only)    key vtable[0] deleting destructor (thiscall, 1 = free)
+//   0x4D3820 add a key by text, sorted (thiscall, 1 arg)    0x4D25E0 keymap reader (thiscall, no args)
+// Clearing mirrors the key list destructor 0x4D36A0; then each command gets back the "undefined" key every command
+// is registered with (0x4D3A00), and the two built-in bindings are added as the loader 0x4D23C0 adds them.
+// POD only: SEH (__try) cannot sit in a function that unwinds C++ objects.
+constexpr uintptr_t KeymapObject = 0x84F80C;
+size_t keymap_name_length(uintptr_t keymap) noexcept {
+    __try { return strnlen(reinterpret_cast<const char*>(keymap+0x14), 64); }
+    __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
+}
+bool reload_keymap(uintptr_t keymap, const char* name) noexcept {
+    using Remove = void(__thiscall*)(uintptr_t,uintptr_t);
+    using Destroy = void(__thiscall*)(uintptr_t,uint32_t);
+    using AddKey = void(__thiscall*)(uintptr_t,const char*);
+    using Reader = void(__thiscall*)(uintptr_t);
+    __try {
+        for (uintptr_t command = word(keymap+4); command; command = word(command+4)) {
+            const uintptr_t keys = command+0x14;
+            for (uintptr_t key = word(keys+4); key; key = word(keys+4)) {
+                reinterpret_cast<Remove>(0x5E4190)(keys,key);
+                reinterpret_cast<Destroy>(word(word(key)))(key,1);
+            }
+            reinterpret_cast<AddKey>(0x4D3820)(keys,"undefined");
+        }
+        for (uintptr_t command = word(keymap+4); command; command = word(command+4)) {
+            const auto name_text = reinterpret_cast<const char*>(word(command+0xC));
+            if (!name_text) continue;
+            if (_stricmp(name_text,"exit_to_old_camera") == 0) reinterpret_cast<AddKey>(0x4D3820)(command+0x14,"shift+escape");
+            else if (_stricmp(name_text,"take_screenshot") == 0) reinterpret_cast<AddKey>(0x4D3820)(command+0x14,"PrintScrn");
+        }
+        std::memcpy(reinterpret_cast<char*>(keymap+0x14),name,std::strlen(name)+1);   // length checked by name_fits
+        reinterpret_cast<Reader>(0x4D25E0)(keymap);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
+// A key held across the reload could lose its key-up (its binding may be gone), leaving e.g. a movement on.
+bool any_key_down() noexcept {
+    for (int vk = 0x08; vk <= 0xFE; ++vk) if (GetAsyncKeyState(vk) & 0x8000) return true;
+    return false;
+}
+uint64_t file_stamp(const std::filesystem::path& path, uint64_t& size) noexcept {
+    WIN32_FILE_ATTRIBUTE_DATA a{};
+    if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &a)) { size = 0; return 0; }
+    size = (uint64_t(a.nFileSizeHigh) << 32) | a.nFileSizeLow;
+    return (uint64_t(a.ftLastWriteTime.dwHighDateTime) << 32) | a.ftLastWriteTime.dwLowDateTime;
+}
+std::string read_text(const std::filesystem::path& path) {
+    std::ifstream f(path, std::ios::binary); std::ostringstream d; d << f.rdbuf(); return d.str();
+}
+}   // namespace
+
+keymap_live::Stamp Engine::keymap_stamp() noexcept {
+    keymap_live::Stamp s;
+    try {
+        s.options_time = file_stamp(keymap_game / L"Options.ini", s.options_size);
+        if (s.options_time != keymap_options_time) {   // Options.ini changed: the keymap it names may have too
+            keymap_options_time = s.options_time;
+            keymap_name = cheat::current_keymap(read_text(keymap_game / L"Options.ini"));
+        }
+        if (!keymap_name.empty() && keymap_name.find_first_of("/\\:") == std::string::npos)
+            s.keymap_time = file_stamp(keymap_game / std::filesystem::path(keymap_name), s.keymap_size);
+    } catch (...) {}
+    return s;
+}
+
+void Engine::poll_keymap() noexcept {
+    const auto now = GetTickCount64();
+    if (!keymap_live || now < keymap_next_poll) return;
+    keymap_next_poll = now + keymap_live::PollMs;
+    const auto stamp = keymap_stamp();
+    if (keymap_watch.poll(now, stamp) != keymap_live::Step::Apply || any_key_down()) return;
+    keymap_watch.settle(stamp);   // applied or refused, this state is not tried again
+    try {
+        const auto refuse = [&](const char* reason) {
+            ++keymap_refusals;
+            log->event("keymap_live","\"ok\":false,\"reason\":\""+std::string(reason)+"\",\"keymap\":\""+keymap_name+"\"");
+        };
+        const auto keymap = word(KeymapObject);
+        if (!keymap) return refuse("no_keymap_object");
+        if (!keymap_live::name_fits(keymap_name, keymap_name_length(keymap))) return refuse("name");
+        if (!stamp.keymap_time) return refuse("missing_file");
+        const auto text = read_text(keymap_game / std::filesystem::path(keymap_name));
+        // The game's reader has no length checks and shows a message box for an unknown key: refuse any file the
+        // front page's parser would have to skip lines of (keymap.h). The game keeps its current bindings.
+        const auto parsed = front::keymap::parse(text);
+        if (parsed.skipped) return refuse("lines_the_game_cannot_read");
+        if (!reload_keymap(keymap, keymap_name.c_str())) { ++keymap_refusals; log->event("keymap_live","\"ok\":false,\"reason\":\"fault\""); return; }
+        ++keymap_reloads;
+        size_t bindings = parsed.extra.size();
+        for (const auto& keys : parsed.keys) bindings += keys.size();
+        // Cheat notices follow the new bindings only when they were set up at start (glyphs warmed, hooks in place).
+        size_t cheats = 0;
+        if (cheat_notices_on) {
+            auto updated = cheat::parse_bindings(text);
+            std::erase_if(updated,[](const cheat::Binding& b) { return !cheat::text_for(b.command); });
+            Exclusive lock(mutex);
+            cheat_bindings = std::move(updated); pending_cheat = {}; cheats = cheat_bindings.size();
+        }
+        log->event("keymap_live","\"ok\":true,\"keymap\":\""+keymap_name+"\",\"bindings\":"+std::to_string(bindings)+
+                   ",\"cheat_notice_bindings\":"+std::to_string(cheats)+",\"reloads\":"+std::to_string(keymap_reloads));
+    } catch (...) {}
+}
+
+namespace {
 uintptr_t __fastcall flip_hook(uintptr_t self, void*) {
     Guard guard;
+    // Live keymap reload, outside `mutex` for the same reason as the death unlock below: freeing the old keys
+    // re-enters this runtime through the free hook.
+    if (guard.state) guard.state->poll_keymap();
     // Outside `mutex`: the clear routine frees the target marker, which re-enters this runtime through the free and
     // destroy hooks; holding the lock here deadlocked the game on death (session-55).
     if (uintptr_t manager = 0; guard.state && avatar_dead_locked(manager)) {
@@ -2174,6 +2285,11 @@ void Engine::install(const Config& config, Logger& logger) {
                 for (const auto c : unwarmed) skipped += (skipped.empty()?"":",")+std::to_string(c);
                 log->event("cheat_notices","\"keymap\":\""+keymap+"\",\"bindings\":"+std::to_string(cheat_bindings.size())+
                            ",\"unwarmed\":["+skipped+"]");
+                cheat_notices_on = !cheat_bindings.empty();
+                // Live keymap reload: the files as the game read them at start are the baseline.
+                keymap_live = !exists(L"keymap_live.off");
+                if (keymap_live) { keymap_game = game; keymap_watch.start(keymap_stamp()); }
+                log->event("keymap_live_watch","\"enabled\":"+std::string(keymap_live?"true":"false")+",\"keymap\":\""+keymap_name+"\"");
             }
             input_hooks::configure(o);
             // Status numbers: digits and '/' at both screen sizes, proportional (not CJK cells).

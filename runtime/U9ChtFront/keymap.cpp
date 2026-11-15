@@ -320,16 +320,24 @@ bool load(const fs::path& file, Keymap& out) {
     return true;
 }
 
+Result select(const fs::path& game) {
+    std::string options;
+    if (!read_bytes(game / L"Options.ini", options) || !std::regex_search(options, CurrentKeymap))
+        return {false, L"Options.ini 裡找不到 Current_Keymap。"};
+    const auto updated = std::regex_replace(options, CurrentKeymap, std::string("Current_Keymap=") + PlayerFile,
+                                            std::regex_constants::format_first_only);
+    if (updated != options && !write_bytes(game / L"Options.ini", updated)) return {false, L"無法寫入 Options.ini。"};
+    return {};
+}
+
 Result save(const fs::path& game, const Keymap& k) {
     std::string text, options;
     std::wstring error;
     if (!serialize(k, text, &error)) return {false, error};
     if (!read_bytes(game / L"Options.ini", options) || !std::regex_search(options, CurrentKeymap))
         return {false, L"Options.ini 裡找不到 Current_Keymap，沒有儲存按鍵。"};
+    // The keymap first, then Options.ini: a running game's live reload (keymap_live.h) waits for both to settle.
     if (!write_bytes(game / PlayerFile, text)) return {false, L"無法寫入 U9CHT.kmp。"};
-    const auto updated = std::regex_replace(options, CurrentKeymap, std::string("Current_Keymap=") + PlayerFile,
-                                            std::regex_constants::format_first_only);
-    if (updated != options && !write_bytes(game / L"Options.ini", updated)) return {false, L"無法寫入 Options.ini。"};
-    return {};
+    return select(game);
 }
 }

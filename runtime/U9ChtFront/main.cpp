@@ -55,6 +55,7 @@ struct App {
     int dpi = 96;
     // Key bindings page.
     bool keys_page = false, keys_dirty = false, keys_leave_armed = false;
+    bool keys_saved_while_running = false;   // Current_Keymap is checked again when that game ends
     int tab = 0, capture = -1;          // capture: the command waiting for a key press, or -1
     keymap::Keymap keys;
     std::string keys_file;              // the keymap the page was loaded from
@@ -205,6 +206,8 @@ void paint_keys(Painter& p) {
     else if (lost) { status = L"有 " + std::to_wstring(lost) + L" 個紅色按鍵和別的指令重複，遊戲不會執行它們。"; color = Bad; }
     else if (app.tab == keymap::Pages - 1 && !app.keys_dirty)   // rows fill this tab, so its note goes here
         status = L"作弊是遊戲內建的開發功能。標 ⚠ 的三項據報會把背包重置成開場狀態，使用前請先存檔。";
+    else if (app.running) status = std::wstring(app.keys_dirty ? L"有變更尚未儲存。" : L"") +
+                                   L"遊戲進行中：按「儲存按鍵」後，回到遊戲約一秒內生效（不必重新啟動）。";
     else status = L"按鍵檔：" + std::wstring(app.keys_file.begin(), app.keys_file.end()) + (app.keys_dirty ? L"（有變更尚未儲存）" : L"") +
                   L"　　點按鍵可移除，按＋新增。Esc、F1～F12 由遊戲保留。";
     p.text(40, 708, 820, 26, status, p.note, color, DT_CENTER);
@@ -290,7 +293,7 @@ void paint(HDC dc) {
                            (app.s.width || supported(game_resolution(app.s.game_dir)));
     int x = 40;
     p.button(x, 746, 148, 46, L"開始遊戲", Start, can_start, true); x += 168;
-    p.button(x, 746, 148, 46, L"按鍵設定", Keys, idle && game_ok); x += 168;
+    p.button(x, 746, 148, 46, L"按鍵設定", Keys, game_ok); x += 168;   // also while the game runs (live reload)
     p.button(x, 746, 148, 46, L"說明", Help, true); x += 168;
     p.button(x, 746, 148, 46, L"回報問題", Report, true); x += 168;
     p.button(x, 746, 148, 46, L"結束", Quit, idle);
@@ -381,6 +384,7 @@ void start_game() {
 }
 void game_ended(DWORD code) {
     app.running = false;
+    if (app.keys_saved_while_running) { keymap::select(app.s.game_dir); app.keys_saved_while_running = false; }
     const auto r = recover(app.s.game_dir, app.backup());
     refresh_game();
     if (!r.ok) set_message(r.message, true);
@@ -443,7 +447,10 @@ void act_keys(Id id, int arg) {
         const auto r = keymap::save(app.s.game_dir, app.keys);
         if (!r.ok) { set_message(r.message, true); break; }
         app.keys_file = keymap::PlayerFile; app.keys_dirty = false; app.keys.skipped = 0; app.capture = -1;
-        set_message(L"已儲存到遊戲資料夾的 U9CHT.kmp。原本的 Default.kmp 沒有更動。", false);
+        if (app.running) {
+            app.keys_saved_while_running = true;
+            set_message(L"已儲存。切回遊戲後約一秒內生效；放開所有按鍵後才會套用。", false);
+        } else set_message(L"已儲存到遊戲資料夾的 U9CHT.kmp。原本的 Default.kmp 沒有更動。", false);
         break;
     }
     case KeyDefaults:

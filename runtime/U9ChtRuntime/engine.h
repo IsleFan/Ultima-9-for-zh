@@ -8,6 +8,7 @@
 #include "clock_text.h"
 #include "movie_graph.h"
 #include "cheat_notice.h"
+#include "keymap_live.h"
 #include <atomic>
 
 namespace u9cht {
@@ -251,6 +252,15 @@ struct Engine {
                       std::array<uint8_t,3> fill, uint64_t& misses) noexcept;
     // Status numbers on the health and mana bars ("35/98"), requested 2026-11-13 (FeatureStatusNumbers).
     uint64_t death_unlocks = 0, death_unlock_faults = 0;   // native bug workaround: lock released on death
+    // Live keymap reload (keymap_live.h). Game thread only (flip, outside `mutex`), except cheat_bindings.
+    bool keymap_live = false, cheat_notices_on = false;
+    keymap_live::Watcher keymap_watch;
+    std::filesystem::path keymap_game;
+    std::string keymap_name;                 // the keymap Options.ini named when last read
+    keymap_live::Stamp keymap_stamp_now;     // what the last poll saw
+    uint64_t keymap_options_time = 0, keymap_next_poll = 0, keymap_reloads = 0, keymap_refusals = 0;
+    keymap_live::Stamp keymap_stamp() noexcept;
+    void poll_keymap() noexcept;
     bool overlay_draw = true;   // developer marker overlay_draw.off: overlays compute but draw nothing
     bool status_numbers = false;
     uint64_t status_frames = 0, status_misses = 0, status_unreadable = 0;

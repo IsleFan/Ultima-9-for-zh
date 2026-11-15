@@ -181,8 +181,13 @@ int main() {
         Keymap saved;
         check(load(game / PlayerFile, saved) && saved.keys == k.keys, "saved file reads back");
         check(save(game, k).ok && current_keymap(game) == PlayerFile, "saving again");
+        write(game / L"Options.ini", options);   // as if the game wrote its own value back on exit
+        check(select(game).ok && current_keymap(game) == PlayerFile, "select points Current_Keymap back");
+        check(read(game / L"Options.ini") == "[Interface]\r\n\r\n; Current keymap\r\nCurrent_Keymap=U9CHT.kmp\r\n\r\nQuickSpell=0\r\n",
+              "select keeps every other byte");
         write(game / L"Options.ini", "[Interface]\r\n");
         check(!save(game, k).ok && current_keymap(game).empty(), "no Current_Keymap: refused");
+        check(!select(game).ok, "select without Current_Keymap: refused");
         write(game / L"Options.ini", "Current_Keymap=..\\x.kmp\r\n");
         check(current_keymap(game).empty(), "a path is not accepted as a keymap name");
         fs::remove_all(game, ec);

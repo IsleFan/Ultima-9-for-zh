@@ -65,7 +65,13 @@ The change is persistent, like the resolution.
 
 Binding a cheat puts a line under `[CHEAT COMMANDS]`, which also turns on the runtime's on-screen cheat notices.
 
-Not yet tried in game: a keymap saved by this page (the reader's rules are CONFIRMED statically only).
+**While the game runs**, the page stays usable. Bindings saved then take effect in the running game about a second after the player returns to it, once every key is released. The runtime reloads the keymap with the game's own routines; see `docs/research/U9_EXTENDED_SETUP_TOOL.md`, "Changing bindings while the game runs".
+
+When that game ends, the page points `Current_Keymap` at `U9CHT.kmp` again, in case the game wrote its own value back on the way out.
+
+In game:
+- sessions 57 and 58: a keymap saved by this page works;
+- session 60: the live reload works (CONFIRMED). That test replaced the file directly, not through the page.
 
 ## Steam release
 

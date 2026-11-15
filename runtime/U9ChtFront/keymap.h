@@ -71,4 +71,7 @@ std::string current_keymap(const fs::path& game);
 bool load(const fs::path& file, Keymap& out);
 // Writes <game>/U9CHT.kmp and points Current_Keymap at it; every other byte of Options.ini is kept.
 Result save(const fs::path& game, const Keymap& k);
+// Points Current_Keymap at U9CHT.kmp (the Options.ini half of save). The front page runs it again when a game
+// it saved bindings during has ended, in case the game wrote its own value back on the way out.
+Result select(const fs::path& game);
 }
