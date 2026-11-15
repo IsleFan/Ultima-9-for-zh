@@ -1689,14 +1689,19 @@ void Engine::build_bar_glyphs() noexcept {
 constexpr uint32_t MaxBars = 3, ResyncChanges = 12;
 constexpr uint64_t CombatantMs = 8000;
 constexpr int32_t BarRowStep = 34;   // 1600x1200 units between stacked bars
-// Copies hp/max of all 512 records; false when the table is absent or unreadable.
-bool read_records(uintptr_t& base, std::array<uint16_t,512>& hp, std::array<uint16_t,512>& max) noexcept {
+// Copies hp/max of all 512 records and each record's object ([[0x98F320]+4+i*4], as 0x4F1D90 reads it); false when
+// the table is absent or unreadable. Records are reused: a new creature in a slot is a new object (session-43 showed
+// fresh creatures below full HP taken for hits), so a hit needs the same object in both frames.
+bool read_records(uintptr_t& base, std::array<uint16_t,512>& hp, std::array<uint16_t,512>& max,
+                  std::array<uint32_t,512>& object) noexcept {
     __try {
         base = word(0x98F31C);
         if (!base) return false;
+        const auto objects = word(0x98F320);
         for (uint32_t i = 0; i < 512; ++i) {
             const auto r = base + uintptr_t(i)*0x13C;
             hp[i] = *reinterpret_cast<const uint16_t*>(r+0x34); max[i] = *reinterpret_cast<const uint16_t*>(r+0x36);
+            object[i] = objects ? uint32_t(word(objects+4+uintptr_t(i)*4)) : 0;
         }
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
@@ -1704,14 +1709,16 @@ bool read_records(uintptr_t& base, std::array<uint16_t,512>& hp, std::array<uint
 void Engine::scan_combatants(uint32_t avatar_record, uint32_t locked) noexcept {
     uintptr_t base = 0;
     std::array<uint16_t,512> hp{}, max{};
-    if (!read_records(base,hp,max)) { records_synced = false; return; }
+    std::array<uint32_t,512> object{};
+    if (!read_records(base,hp,max,object)) { records_synced = false; return; }
     const auto now = GetTickCount64();
     if (records_synced && base == record_base) {
         uint32_t changes = 0;
         for (uint32_t i = 0; i < 512; ++i) changes += hp[i] != record_hp[i] || max[i] != record_max[i];
         if (changes > ResyncChanges) ++combat_resyncs;
         else for (uint32_t i = 0; i < 512; ++i) {
-            if (i == avatar_record || max[i] != record_max[i] || !max[i] || hp[i] >= record_hp[i]) continue;
+            if (i == avatar_record || max[i] != record_max[i] || !max[i] || hp[i] >= record_hp[i] ||
+                !object[i] || object[i] != record_object[i]) continue;
             ++combat_hits;
             Combatant* c = nullptr;
             for (auto& k : combatants) if (k.record == i) { c = &k; break; }
@@ -1724,7 +1731,7 @@ void Engine::scan_combatants(uint32_t avatar_record, uint32_t locked) noexcept {
             if (floating_numbers) floater_for(i,record_hp[i]-hp[i]);
         }
     } else if (records_synced) ++combat_resyncs;
-    record_base = base; record_hp = hp; record_max = max; records_synced = true;
+    record_base = base; record_hp = hp; record_max = max; record_object = object; records_synced = true;
 }
 void Engine::draw_combat(uintptr_t backend, uint32_t scale, uint32_t avatar_record) noexcept {
     TargetRead t;
