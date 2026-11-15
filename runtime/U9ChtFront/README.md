@@ -12,7 +12,8 @@ puts the original files back.
 | 中文化資料 | State of `data/` (the `build_localization.py` output) and its plan count. | — |
 | 強化功能 | Hover names (with the delay), wheel paging, Ctrl+wheel zoom, movie subtitles. | `u9cht.ini` `[features]` |
 | 畫面與字型 | Chinese font, journal letter and line spacing, resolution (keep, 800×600 or 1600×1200). | `u9cht.ini` `[font]` and `[journal]`; `front.ini` `[display]` |
-| Buttons | 開始遊戲, 說明 (`說明.txt`), 回報問題 (GitHub Issues), 結束. | — |
+| Buttons | 開始遊戲, 按鍵設定, 說明 (`說明.txt`), 回報問題 (GitHub Issues), 結束. | — |
+| 按鍵設定 (its own page) | Key bindings for 97 game commands in six tabs, cheats included. | `<game>\U9CHT.kmp`; `Options.ini` `Current_Keymap` |
 
 How the files are handled:
 - Both INI files are written as UTF-16LE with a BOM, so font paths may hold Chinese.
@@ -36,6 +37,35 @@ Choosing a size changes only these values; every other byte of both files is kep
 The change is persistent, like changing it in the game's own options.
 
 The Steam release ships `dxcfg.ini` with `display=desktop`, which scales the game to the desktop. That line names no size, so it is left as it is and only `Options.ini` changes.
+
+## Key bindings page
+
+`keymap.h` and `keymap.cpp` read and write a keymap the way `u9.exe` reads it. The rules were traced in the game's code; see `docs/research/U9_EXTENDED_SETUP_TOOL.md`.
+
+On the page:
+- one row per command, each bound key shown as a small button; clicking it removes the key;
+- ＋ waits for a real key press (with Ctrl, Alt, Shift) and adds it; Esc cancels;
+- a command may hold up to four keys;
+- a key shared by two commands is drawn red on the command the game will not run;
+- 載入原版預設 loads the bindings of `Default.kmp` into the page.
+
+What it refuses:
+- Esc and unmodified F1–F12 (the game skips them);
+- Shift, Ctrl or Alt alone;
+- keys the game's table does not name, such as the keypad `/`, which Windows reports as an extended key.
+
+Saving:
+- writes `U9CHT.kmp` beside `u9.exe`;
+- sets `Current_Keymap=U9CHT.kmp` in `Options.ini` and keeps every other byte of that file;
+- never modifies `Default.kmp`;
+- keeps every line inside the game's unchecked buffers (64, 32 and 32 bytes) and every section under 3,800 bytes;
+- writes back, unchanged, bindings of command names the page does not offer.
+
+The change is persistent, like the resolution.
+
+Binding a cheat puts a line under `[CHEAT COMMANDS]`, which also turns on the runtime's on-screen cheat notices.
+
+Not yet tried in game: a keymap saved by this page (the reader's rules are CONFIRMED statically only).
 
 ## Steam release
 
@@ -82,7 +112,8 @@ Everything sits beside `U9Cht.exe` unless overridden on the command line:
   - settings round trip and clamping;
   - resolution edits;
   - install, recover, a foreign change, version mismatch and damaged data.
-- `U9Cht.exe --screenshot FILE.bmp` draws the page once and exits.
+- `U9ChtKeymapTests` (ctest) covers the key bindings core on synthetic text: key names, the game's line rules, write and read back, shared keys, saving beside a synthetic `Options.ini`. With `U9_GAME_DIR` set it also checks the game's own `Default.kmp` (LOCAL-ONLY, skipped otherwise).
+- `U9Cht.exe --screenshot FILE.bmp` draws the page once and exits. Add `--page keys:N` for tab N of the key bindings page.
 
 ## Not yet done
 

@@ -64,6 +64,9 @@ std::wstring game_edition(const fs::path& dir);
 std::vector<std::wstring> steam_library_paths(const std::string& vdf);
 
 struct Result { bool ok = true; std::wstring message; };
+// Whole-file read, and a write through a temporary file that then replaces the target.
+bool read_bytes(const fs::path& p, std::string& out);
+bool write_bytes(const fs::path& p, const std::string& data);
 // Undo an install whose receipt is in `backup`. Files changed by anything else are left alone and reported.
 Result recover(const fs::path& game, const fs::path& backup);
 Result install(const fs::path& game, const fs::path& data, const Manifest& m, const fs::path& backup);

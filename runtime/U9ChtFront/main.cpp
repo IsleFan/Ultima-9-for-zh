@@ -7,8 +7,9 @@
 //   data\  (build_localization.py output)  --data DIR
 //   fonts\ (default font: the first .ttf/.otf/.ttc)
 //   u9cht.ini, front.ini, backup\, logs\   --base DIR
-// Test: --screenshot FILE.bmp draws the page once and exits.
+// Test: --screenshot FILE.bmp draws the page once and exits; --page keys:N draws tab N of the key bindings page.
 #include "front_core.h"
+#include "keymap.h"
 #include "platform.h"
 #include "protocol.h"
 #include "version_manifest.h"
@@ -32,9 +33,11 @@ constexpr int Width = 900, Height = 818;
 
 enum Id {
     None, BrowseGame, SearchGame, Hover, DelayMinus, DelayPlus, Wheel, Zoom, Movies, Status, Floating, TargetBar,
-    FontPick, FontDefault, LetterMinus, LetterPlus, LineMinus, LinePlus, ResPrev, ResNext, Start, Help, Report, Quit, Choice0, Choice1, Choice2
+    FontPick, FontDefault, LetterMinus, LetterPlus, LineMinus, LinePlus, ResPrev, ResNext, Start, Help, Report, Quit, Choice0, Choice1, Choice2,
+    Keys, KeyTab, KeyAdd, KeyRemove, KeySave, KeyDefaults, KeyRevert, KeyBack
 };
-struct Hit { RECT r; Id id; bool enabled; };
+// `arg` tells apart the hits that share an id on the key bindings page (tab, command, key).
+struct Hit { RECT r; Id id; bool enabled; int arg = 0; };
 
 struct App {
     fs::path base, data, runtime, fonts;
@@ -48,7 +51,13 @@ struct App {
     HWND window = nullptr;
     std::vector<Hit> hits;
     Id hot = None;
+    int hot_arg = 0;
     int dpi = 96;
+    // Key bindings page.
+    bool keys_page = false, keys_dirty = false, keys_leave_armed = false;
+    int tab = 0, capture = -1;          // capture: the command waiting for a key press, or -1
+    keymap::Keymap keys;
+    std::string keys_file;              // the keymap the page was loaded from
     fs::path launcher_ini() const { return base / L"u9cht.ini"; }
     fs::path front_ini() const { return base / L"front.ini"; }
     fs::path backup() const { return base / L"backup"; }
@@ -131,12 +140,20 @@ struct Painter {
         RECT r{S(x), S(y), S(x + w), S(y + h)};
         HBRUSH b = CreateSolidBrush(c); FrameRect(dc, &r, b); DeleteObject(b);
     }
-    void button(int x, int y, int w, int h, const std::wstring& t, Id id, bool enabled = true, bool primary = false) {
-        const bool hot = enabled && app.hot == id;
+    void button(int x, int y, int w, int h, const std::wstring& t, Id id, bool enabled = true, bool primary = false, int arg = 0) {
+        const bool hot = enabled && app.hot == id && app.hot_arg == arg;
         fill(x, y, w, h, hot ? ButtonHot : Button);
         frame(x, y, w, h, !enabled ? RGB(70, 62, 52) : (hot || primary) ? Gold : Line);
         text(x, y, w, h, t, primary ? heading : body, enabled ? (primary ? Gold : Text) : RGB(110, 100, 90), DT_CENTER);
-        app.hits.push_back({{S(x), S(y), S(x + w), S(y + h)}, id, enabled});
+        app.hits.push_back({{S(x), S(y), S(x + w), S(y + h)}, id, enabled, arg});
+    }
+    // A small button in the note font: one bound key on the key bindings page.
+    void chip(int x, int y, int w, int h, const std::wstring& t, Id id, int arg, COLORREF color) {
+        const bool hot = app.hot == id && app.hot_arg == arg;
+        fill(x, y, w, h, hot ? ButtonHot : Button);
+        frame(x, y, w, h, hot ? Gold : color == Text ? Line : color);
+        text(x + 4, y, w - 8, h, t, note, color, DT_CENTER);
+        app.hits.push_back({{S(x), S(y), S(x + w), S(y + h)}, id, true, arg});
     }
     void check(int x, int y, const std::wstring& label, const std::wstring& detail, bool on, Id id, bool enabled) {
         const bool hot = enabled && app.hot == id;
@@ -159,12 +176,52 @@ struct Painter {
     }
 };
 
+// The key bindings page: one row per command, its keys as chips (click one to remove it) and "＋" to add one.
+void paint_keys(Painter& p) {
+    const auto& commands = keymap::commands();
+    for (int i = 0, x = 40; i < keymap::Pages; ++i, x += 138)
+        p.button(x, 100, 130, 30, keymap::PageNames[i], KeyTab, true, i == app.tab, i);
+    int y = 142;
+    for (int i = 0; i < int(commands.size()); ++i) {
+        if (commands[size_t(i)].page != app.tab) continue;
+        if (app.capture == i) p.fill(40, y, 820, 24, RGB(58, 44, 24));
+        p.text(48, y, 236, 24, commands[size_t(i)].label, p.body, app.capture == i ? Gold : Text);
+        const auto& keys = app.keys.keys[size_t(i)];
+        int x = 288;
+        for (size_t k = 0; k < keys.size() && k < 16; ++k, x += 136) {
+            const bool loses = keymap::owner(app.keys, keys[k]) != i;   // another command takes this key in game
+            p.chip(x, y + 2, 132, 20, keymap::key_label(keys[k]) + L"  ✕", KeyRemove, i * 16 + int(k), loses ? Bad : Text);
+        }
+        if (keys.size() < keymap::MaxKeys) p.chip(x, y + 2, 24, 20, L"＋", KeyAdd, i, Gold);
+        y += 24;
+    }
+
+    std::wstring status; COLORREF color = Muted;
+    const int lost = keymap::conflicts(app.keys);
+    if (app.capture >= 0) {
+        status = L"請按下要指定給「" + std::wstring(commands[size_t(app.capture)].label) + L"」的按鍵（可加 Ctrl、Alt、Shift；按 Esc 取消）";
+        color = Gold;
+    } else if (!app.message.empty()) { status = app.message; color = app.message_bad ? Bad : Muted; }
+    else if (lost) { status = L"有 " + std::to_wstring(lost) + L" 個紅色按鍵和別的指令重複，遊戲不會執行它們。"; color = Bad; }
+    else if (app.tab == keymap::Pages - 1 && !app.keys_dirty)   // rows fill this tab, so its note goes here
+        status = L"作弊是遊戲內建的開發功能。標 ⚠ 的三項據報會把背包重置成開場狀態，使用前請先存檔。";
+    else status = L"按鍵檔：" + std::wstring(app.keys_file.begin(), app.keys_file.end()) + (app.keys_dirty ? L"（有變更尚未儲存）" : L"") +
+                  L"　　點按鍵可移除，按＋新增。Esc、F1～F12 由遊戲保留。";
+    p.text(40, 708, 820, 26, status, p.note, color, DT_CENTER);
+    int x = 60;
+    p.button(x, 746, 180, 46, L"儲存按鍵", KeySave, app.keys_dirty, true); x += 200;
+    p.button(x, 746, 180, 46, L"載入原版預設", KeyDefaults, true); x += 200;
+    p.button(x, 746, 180, 46, L"放棄變更", KeyRevert, app.keys_dirty); x += 200;
+    p.button(x, 746, 180, 46, L"返回", KeyBack, true);
+}
+
 void paint(HDC dc) {
     app.hits.clear();
     Painter p(dc);
     p.fill(0, 0, Width, Height, Background);
-    p.text(0, 18, Width, 44, L"創世紀 IX：昇華　繁體中文版", p.title, Gold, DT_CENTER);
+    p.text(0, 18, Width, 44, app.keys_page ? L"按鍵設定" : L"創世紀 IX：昇華　繁體中文版", p.title, Gold, DT_CENTER);
     p.text(0, 62, Width, 24, L"Ultima IX: Ascension　　版本 " + version_text() + L"　　非官方中文化", p.note, Muted, DT_CENTER);
+    if (app.keys_page) { paint_keys(p); return; }
     const bool idle = !app.running;
 
     p.heading_line(100, L"遊戲位置");
@@ -231,11 +288,12 @@ void paint(HDC dc) {
            app.running ? Gold : app.message_bad ? Bad : Muted, DT_CENTER);
     const bool can_start = idle && game_ok && app.manifest.ok && !app.s.font.empty() &&
                            (app.s.width || supported(game_resolution(app.s.game_dir)));
-    int x = 60;
-    p.button(x, 746, 180, 46, L"開始遊戲", Start, can_start, true); x += 200;
-    p.button(x, 746, 180, 46, L"說明", Help, true); x += 200;
-    p.button(x, 746, 180, 46, L"回報問題", Report, true); x += 200;
-    p.button(x, 746, 180, 46, L"結束", Quit, idle);
+    int x = 40;
+    p.button(x, 746, 148, 46, L"開始遊戲", Start, can_start, true); x += 168;
+    p.button(x, 746, 148, 46, L"按鍵設定", Keys, idle && game_ok); x += 168;
+    p.button(x, 746, 148, 46, L"說明", Help, true); x += 168;
+    p.button(x, 746, 148, 46, L"回報問題", Report, true); x += 168;
+    p.button(x, 746, 148, 46, L"結束", Quit, idle);
 }
 
 // ---- actions ----
@@ -330,7 +388,85 @@ void game_ended(DWORD code) {
     else set_message(L"遊戲已結束，已還原遊戲原本的檔案。", false);
     ShowWindow(app.window, SW_RESTORE); SetForegroundWindow(app.window);
 }
-void act(Id id) {
+// ---- key bindings page ----
+bool load_keys(const std::string& file) {
+    keymap::Keymap k;
+    if (!keymap::load(fs::path(app.s.game_dir) / file, k)) return false;
+    app.keys = std::move(k); app.capture = -1; app.keys_leave_armed = false;
+    return true;
+}
+void open_keys() {
+    const auto file = keymap::current_keymap(app.s.game_dir);
+    if (file.empty()) { set_message(L"Options.ini 裡找不到 Current_Keymap，無法設定按鍵。", true); return; }
+    if (!load_keys(file)) { set_message(L"讀不到按鍵檔：" + std::wstring(file.begin(), file.end()), true); return; }
+    app.keys_file = file; app.keys_dirty = false; app.keys_page = true;
+    if (app.keys.skipped) set_message(L"按鍵檔裡有 " + std::to_wstring(app.keys.skipped) + L" 行遊戲無法辨識，儲存後會移除。", false);
+    else set_message(L"", false);
+}
+// A key press while a command waits for one.
+void capture_key(WPARAM vk, LPARAM lp) {
+    if (vk == VK_ESCAPE) { app.capture = -1; set_message(L"", false); return; }
+    keymap::KeyError error{};
+    const auto code = keymap::code_from_press(unsigned(vk), (lp & (1 << 24)) != 0, GetKeyState(VK_SHIFT) < 0,
+                                              GetKeyState(VK_CONTROL) < 0, GetKeyState(VK_MENU) < 0, &error);
+    if (!code) {
+        if (error == keymap::KeyError::Reserved) set_message(L"F1～F12 由遊戲保留，請加上 Ctrl、Alt 或 Shift，或改用別的鍵。", true);
+        else if (error == keymap::KeyError::Unsupported) set_message(L"遊戲不認得這個鍵，請改用別的鍵。", true);
+        return;   // a modifier alone: keep waiting for the key itself
+    }
+    const auto& commands = keymap::commands();
+    const int command = app.capture;
+    auto& keys = app.keys.keys[size_t(command)];
+    app.capture = -1; app.keys_leave_armed = false;
+    if (std::find(keys.begin(), keys.end(), code) != keys.end()) { set_message(L"", false); return; }
+    keys.push_back(code); app.keys_dirty = true;
+    const int winner = keymap::owner(app.keys, code);
+    int other = -1;
+    for (size_t i = 0; i < app.keys.keys.size(); ++i)
+        if (int(i) != command && std::find(app.keys.keys[i].begin(), app.keys.keys[i].end(), code) != app.keys.keys[i].end()) other = int(i);
+    if (other < 0) set_message(L"", false);
+    else set_message(L"「" + keymap::key_label(code) + L"」也指定給「" + commands[size_t(other)].label + L"」。遊戲只會執行「" +
+                     commands[size_t(winner)].label + L"」。", true);
+}
+void act_keys(Id id, int arg) {
+    if (id != KeyBack) app.keys_leave_armed = false;
+    switch (id) {
+    case KeyTab: app.tab = arg; app.capture = -1; break;
+    case KeyAdd: app.capture = arg; set_message(L"", false); break;
+    case KeyRemove: {
+        auto& keys = app.keys.keys[size_t(arg / 16)];
+        if (size_t(arg % 16) < keys.size()) { keys.erase(keys.begin() + arg % 16); app.keys_dirty = true; }
+        app.capture = -1; set_message(L"", false);
+        break;
+    }
+    case KeySave: {
+        const auto r = keymap::save(app.s.game_dir, app.keys);
+        if (!r.ok) { set_message(r.message, true); break; }
+        app.keys_file = keymap::PlayerFile; app.keys_dirty = false; app.keys.skipped = 0; app.capture = -1;
+        set_message(L"已儲存到遊戲資料夾的 U9CHT.kmp。原本的 Default.kmp 沒有更動。", false);
+        break;
+    }
+    case KeyDefaults:
+        if (load_keys(keymap::ShippedFile)) { app.keys_dirty = true; set_message(L"已載入原版預設按鍵，按「儲存按鍵」後生效。", false); }
+        else set_message(L"遊戲資料夾裡找不到 Default.kmp。", true);
+        break;
+    case KeyRevert:
+        if (load_keys(app.keys_file)) { app.keys_dirty = false; set_message(L"已放棄變更。", false); }
+        break;
+    case KeyBack:
+        if (app.keys_dirty && !app.keys_leave_armed) {
+            app.keys_leave_armed = true; app.capture = -1;
+            set_message(L"變更還沒儲存。再按一次「返回」會放棄變更。", true);
+            break;
+        }
+        app.keys_page = false; app.keys_dirty = false; app.capture = -1; set_message(L"", false);
+        break;
+    default: break;
+    }
+}
+
+void act(Id id, int arg = 0) {
+    if (app.keys_page) { act_keys(id, arg); return; }
     auto& s = app.s;
     const auto toggle = [&](uint32_t bit) { s.features ^= bit; };
     switch (id) {
@@ -375,6 +511,7 @@ void act(Id id) {
     case FontPick: { const auto f = pick_font(app.window); if (!f.empty()) s.font = f; break; }
     case FontDefault: s.font = default_font().wstring(); break;
     case Start: start_game(); break;
+    case Keys: open_keys(); return;
     case Help: {
         const auto help = app.base / L"說明.txt";
         std::error_code ec;
@@ -406,9 +543,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_ERASEBKGND: return 1;
     case WM_MOUSEMOVE: {
         const POINT pt{short(LOWORD(lp)), short(HIWORD(lp))};
-        Id hot = None;
-        for (const auto& h : app.hits) if (h.enabled && PtInRect(&h.r, pt)) hot = h.id;
-        if (hot != app.hot) { app.hot = hot; InvalidateRect(hwnd, nullptr, FALSE); }
+        Id hot = None; int arg = 0;
+        for (const auto& h : app.hits) if (h.enabled && PtInRect(&h.r, pt)) { hot = h.id; arg = h.arg; }
+        if (hot != app.hot || arg != app.hot_arg) { app.hot = hot; app.hot_arg = arg; InvalidateRect(hwnd, nullptr, FALSE); }
         SetCursor(LoadCursorW(nullptr, hot ? IDC_HAND : IDC_ARROW));
         TRACKMOUSEEVENT t{sizeof(t), TME_LEAVE, hwnd, 0}; TrackMouseEvent(&t);
         return 0;
@@ -417,11 +554,22 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_SETCURSOR: if (LOWORD(lp) == HTCLIENT) return TRUE; break;
     case WM_LBUTTONUP: {
         const POINT pt{short(LOWORD(lp)), short(HIWORD(lp))};
-        for (const auto& h : app.hits) if (h.enabled && PtInRect(&h.r, pt)) { act(h.id); break; }
+        for (const auto& h : app.hits) if (h.enabled && PtInRect(&h.r, pt)) { act(h.id, h.arg); break; }
         InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
     }
+    case WM_SYSKEYDOWN:   // Alt combinations (and F10) arrive here; without a capture they keep their system meaning
+        if (!app.keys_page || app.capture < 0) break;
+        capture_key(wp, lp); InvalidateRect(hwnd, nullptr, FALSE);
+        return 0;
+    case WM_SYSCHAR: if (app.keys_page && app.capture >= 0) return 0; break;
     case WM_KEYDOWN:
+        if (app.keys_page) {
+            if (app.capture >= 0) capture_key(wp, lp);
+            else if (wp == VK_ESCAPE) act(KeyBack);
+            InvalidateRect(hwnd, nullptr, FALSE);
+            return 0;
+        }
         if (wp == VK_ESCAPE && !app.running) DestroyWindow(hwnd);
         if (wp == VK_RETURN) { act(Start); InvalidateRect(hwnd, nullptr, FALSE); }
         return 0;
@@ -463,6 +611,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     app.base = app.data = app.runtime = exe_dir;
     app.data = exe_dir / L"data";
     fs::path screenshot;
+    std::wstring page;
     int argc = 0;
     wchar_t** argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     for (int i = 1; argv && i + 1 < argc; i += 2) {
@@ -471,6 +620,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
         else if (key == L"--data") app.data = argv[i + 1];
         else if (key == L"--runtime") app.runtime = argv[i + 1];
         else if (key == L"--screenshot") screenshot = argv[i + 1];
+        else if (key == L"--page") page = argv[i + 1];   // with --screenshot: "keys" or "keys:N" (tab N)
     }
     if (argv) LocalFree(argv);
     std::error_code ec;
@@ -506,6 +656,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
 
     if (!screenshot.empty()) {
         app.dpi = 96;
+        if (page.rfind(L"keys", 0) == 0) {
+            open_keys();
+            if (page.size() > 5) app.tab = std::clamp(_wtoi(page.c_str() + 5), 0, keymap::Pages - 1);
+        }
         HDC screen = GetDC(nullptr);
         HDC mem = CreateCompatibleDC(screen);
         HBITMAP bmp = CreateCompatibleBitmap(screen, Width, Height);

@@ -267,7 +267,6 @@ std::vector<fs::path> find_game_candidates() {
     return found;
 }
 
-namespace {
 bool read_bytes(const fs::path& p, std::string& out) {
     std::ifstream in(p, std::ios::binary);
     if (!in) return false;
@@ -279,7 +278,6 @@ bool write_bytes(const fs::path& p, const std::string& data) {
         out.write(data.data(), std::streamsize(data.size()));
         if (!out) return false; }
     return MoveFileExW(temp.c_str(), p.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
-}
 }
 
 Resolution game_resolution(const fs::path& game) {
