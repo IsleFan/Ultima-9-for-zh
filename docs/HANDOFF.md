@@ -266,7 +266,8 @@ python scripts/run_p8_0_session.py finish --session .local/p10-misc/session-12
   - 推測（HYPOTHESIS）：這些功能每幀配置／釋放字串（與遊戲共用同一個堆積），重用了遊戲在死亡／讀檔時「釋放後仍使用」的記憶體。畫面寫入有 DirectDraw 鎖定與驗證，較不可能。
   - 修正（待驗證）：這三個功能的每幀路徑改用固定緩衝區，完全不配置記憶體；研究用的屬性傾印與座標記錄已停用。
   - session 53 仍閃退；session 54（只計算不畫）使用者發現：**未鎖定**死亡讀檔正常，**鎖定敵人**時死亡讀檔閃退。
-  - **結論（CONFIRMED）：原版錯誤。** 原版 exe 鎖定敵人後死亡再讀檔也閃退（segmentation fault）。與中文化無關。見 `docs/research/U9_LOCKED_TARGET_DEATH_LOAD_CRASH.md`。說明檔要提醒：讀檔前先解除鎖定（T／A），或鎖定中死亡後重新啟動遊戲。已加當機記錄（vectored handler，只記錄不攔截，`exception` 事件，最多 64 筆），再遇到時看最後一筆的模組與位址。
+  - **結論（CONFIRMED）：原版錯誤。** 原版 exe 鎖定敵人後死亡再讀檔也閃退（segmentation fault）。與中文化無關。見 `docs/research/U9_LOCKED_TARGET_DEATH_LOAD_CRASH.md`。說明檔要提醒：讀檔前先解除鎖定（T／A），或鎖定中死亡後重新啟動遊戲。
+  - 已加繞過方法（使用者同意）：聖者死亡且鎖定中時，呼叫遊戲自己的解除鎖定 `0x4F90C0`（在畫面更新流程、runtime 鎖之外）。session 55 曾因在鎖內呼叫而死結；session 56 驗證兩次死亡讀檔都正常（CONFIRMED）。有了繞過方法，說明檔的提醒可視情況省略。已加當機記錄（vectored handler，只記錄不攔截，`exception` 事件，最多 64 筆），再遇到時看最後一筆的模組與位址。
 - 對話時直接跳到下一句（2026-11-13 使用者提出，只記錄，待研究）：先查原版有沒有跳過鍵或滑鼠點擊跳過，再看語音／字幕的推進點能否安全提前。
 - 避頭點（行首標點）規則、英文單字中途斷行。
 - 用 ✕ 關窗時的 0xC000041D 與原版比對。

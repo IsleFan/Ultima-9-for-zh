@@ -43,7 +43,7 @@ The varying addresses suggest memory that was freed during the load is used afte
 - The localization is not the cause. The earlier "no heap use in overlays" change (`e6dc102`) stays: it is harmless.
 - Help text for players should say: **release the target lock (`T` / `A`) before loading a save, or restart the game after dying with a target locked.**
 
-## Workaround in the runtime (authorized by the user 2026-11-15, not yet verified in game)
+## Workaround in the runtime (authorized by the user 2026-11-15; verified in session 56)
 
 When the Avatar's HP reaches 0 with the lock on, the runtime calls the game's own clear routine `0x4F90C0` once. It
 is a thiscall on `[0x98F324]` with argument 0 (no sound). No new hook is involved: the call is made from the existing
@@ -55,3 +55,6 @@ flip hook, outside the runtime lock (calling it under the lock deadlocked the ga
 - Counters: `death_unlocks`, `death_unlock_faults`.
 
 This supports the HYPOTHESIS above: the target marker survives the load and points into the freed scene.
+
+Session 56 (localization, all features on): the user locked a target, died, and loaded twice. There was no crash and
+no hang: `death_unlocks` 2, `death_unlock_faults` 0, no fault logged, exit code 0. CONFIRMED.
