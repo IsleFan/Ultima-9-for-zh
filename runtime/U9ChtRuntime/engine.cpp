@@ -1733,6 +1733,10 @@ void Engine::scan_combatants(uint32_t avatar_record, uint32_t locked) noexcept {
             if (floating_numbers) floater_for(i,record_hp[i]-hp[i]);
         }
     } else if (records_synced) ++combat_resyncs;
+    // Displayed maximum: the highest HP this creature has had while observed (the user's choice, 2026-11-15: an unhurt
+    // wolf shows 20/20, not the record's 20/30). A new object in the slot or a new table starts it again.
+    for (uint32_t i = 0; i < 512; ++i)
+        record_peak[i] = base == record_base && object[i] == record_object[i] ? std::max(record_peak[i],hp[i]) : hp[i];
     record_base = base; record_hp = hp; record_max = max; record_object = object; records_synced = true;
 }
 void Engine::draw_combat(uintptr_t backend, uint32_t scale, uint32_t avatar_record) noexcept {
@@ -1784,8 +1788,8 @@ void Engine::draw_combat(uintptr_t backend, uint32_t scale, uint32_t avatar_reco
     bool drawn = false;
     for (uint32_t r = 0; r < count; ++r) {
         const auto record = rows[r];
-        const uint32_t hp = record_hp[record], max = record_max[record];
-        if (!max || hp > max) continue;
+        const uint32_t hp = record_hp[record], max = std::max<uint32_t>(record_peak[record],hp);
+        if (!record_max[record] || !max) continue;
         const int32_t left = TargetX*s/2 - w/2, top = (TargetY+int32_t(r)*BarRowStep)*s/2 - h/2;
         const int32_t fill = int32_t(int64_t(w)*hp/max);
         // The locked target is red; others hit recently are a duller red.

@@ -280,6 +280,7 @@ struct Engine {
     std::array<Combatant,8> combatants{};
     std::array<uint16_t,512> record_hp{}, record_max{};
     std::array<uint32_t,512> record_object{};
+    std::array<uint16_t,512> record_peak{};   // highest HP seen for the slot's current object: the bar's maximum
     uintptr_t record_base = 0;
     bool records_synced = false;
     uint64_t combat_hits = 0, combat_resyncs = 0;
