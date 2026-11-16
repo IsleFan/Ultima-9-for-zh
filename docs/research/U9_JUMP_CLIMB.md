@@ -1,6 +1,6 @@
 # Jump and climb on one key (research)
 
-2026-11-16. Static disassembly of `u9.exe`, plus a read-only probe in the runtime (session 61). No behaviour is changed yet.
+2026-11-16. Static disassembly of `u9.exe`, a read-only probe in the runtime (session 61), then the feature itself, implemented with the user's authorization and tried in game the same day (see "Implemented" at the end).
 
 ## Request (human)
 
@@ -54,7 +54,7 @@ From there, all CONFIRMED by reading the code:
    - **Found:** it starts the climb (vtable `+0x1BC`, then `+0x184`), stores the old state in `+0x146`, and clears flag `0x40` of `+0xD8`.
    - The store to `+0x146` at `0x57F249` happens on the success path only.
 
-## Design this makes possible (not authorized; AGENTS §13)
+## Design (authorized by the user on 2026-11-16)
 
 Make the **jump key** the smart one, for the Avatar only:
 
@@ -75,3 +75,18 @@ Open points, to settle in game before it could be called done:
 - **Jump has one more precondition than climb** in the key handlers (`0x51C0F0`). The smart key goes through the jump handler, so that test still applies; a climb through the smart key is refused in that one case where C would allow it. Which case that is, is UNKNOWN.
 - **Jumping at a low wall on purpose** becomes a climb. That is the behaviour the request describes, but it should be a front page switch, off until tried.
 - Whether the queue timing matters: the jump is taken from the queue a little after the key press, so the climb test runs at that moment, not at the key press.
+
+## Implemented (2026-11-16)
+
+- Feature bit `FeatureSmartJump` (256), `smart_jump` in `u9cht.ini` `[features]`, **off by default**. The front page shows it as 跳躍鍵自動攀爬.
+- `engine.cpp`: `jump_hook` on `0x4193A0` (hook name `avatar_jump`) and `try_climb`, exactly the design above, with two additions:
+  - the failure callback at `+0x628` is taken out for the duration of the climb call and put back, so a climb that does not start stays silent;
+  - nothing is tried while `+0x68E` is set, because the jump key then does something else (`0x4193A3`).
+- The climb call is guarded by SEH; a fault counts in `smart_faults` and the jump goes on.
+- Counters in the log: `smart_climbs`, `smart_jumps`, `smart_faults`.
+
+**Front page run, 2026-11-16 (private Steam copy, proxy loading, the box ticked), CONFIRMED in game:**
+- the human: the jump key jumps on open ground and climbs where something can be climbed; the climb key still works;
+- log: `smart_jump enabled`, 3 climbs, 5 jumps, 0 faults, no exception, exit code 0.
+
+Not looked at separately yet: jumping while moving, the one case where jump is refused but climb is allowed (`0x51C0F0`), and longer play with the feature on.

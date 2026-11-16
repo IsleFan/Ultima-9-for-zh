@@ -121,7 +121,7 @@ Tests:
 - the human saw Chinese text as usual and heard music, speech and effects;
 - the game exited with code 0; `proxy_removed ok`; no `dsound.dll` and no launch file was left; the session's restore checks passed.
 
-**Still open: whether Microsoft Defender accepts this path (UNKNOWN).** The folder was excluded from scanning during these tests. It has to be tried once through the front page with the exclusion removed.
+**Microsoft Defender, 2026-11-16: not flagged (CONFIRMED on this machine, one run).** The human removed the folder's exclusion, then started the game through the front page with freshly built files. Nothing was quarantined, no notice appeared, and `Get-MpThreatDetection` shows no detection after the one of 2026-11-15. The same front page with the injection path had been quarantined 3 s after starting the game. One machine and one run do not prove what other machines or later Defender updates will do.
 
 ## Effort (rough, as estimated before the work)
 
