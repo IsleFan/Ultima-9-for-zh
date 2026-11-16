@@ -1,26 +1,14 @@
-# U9-CHT Handoff（2026-11-15）
+# U9-CHT Handoff（2026-11-16）
 
 給下一個工作階段（人或 AI Agent）的交接。
 開工前仍須依 `AGENTS.md` 讀取 `AGENTS.md` 與 `ULTIMA_IX_CHT_MASTER_PLAN.md`。
 
-**最近完成（2026-11-12～15）：**
-- 作弊鍵與施法提示（開發用）、法力條法術名寬度修正。
-- 體力／法力數值、傷害／法力飄字、敵人血條，三者都有首頁開關。
-- 「鎖定敵人時死亡再讀檔閃退」這個原版錯誤的繞過方法。
-
-- 遊戲中即時套用按鍵（2026-11-15，使用者授權）：首頁在遊戲進行中也能改鍵，存檔後 runtime 用遊戲自己的函式重讀按鍵檔。session 60 遊戲內驗證通過（CONFIRMED）。細節見研究文件 "Changing bindings while the game runs"。
-- 啟動器在遊戲結束時就先還原遊戲檔（`--restore-backup`），首頁被防毒移除也不會留下中文檔。
-- 遊戲中按 **Ctrl+Shift+K** 叫出首頁的按鍵設定頁，「回到遊戲」切回：首頁全螢幕實測通過（2026-11-15）。**還沒測：遊戲中經首頁「儲存按鍵」後即時生效**（session 60 是直接換檔測的）。
-- 啟動器負責還原：首頁實測兩次，遊戲結束後都已還原（`restore_after_game ok`）。
-- **不注入的載入方式（代理 `dsound.dll`）已實作**（2026-11-16，使用者授權）：`U9ChtProxy.dll`、啟動器 `--load proxy`；首頁預設用它，session 工具加 `--load proxy` 才用。session 61 遊戲內通過（中文、聲音、結束後移除）。**Defender：2026-11-16 拿掉排除後經首頁啟動，沒有被攔截**（這台電腦、一次）。見 `docs/research/U9_PROXY_DLL_LOADING.md`。
-- **跳躍鍵自動攀爬**（2026-11-16，使用者授權）：首頁開關「跳躍鍵自動攀爬」，預設關；`u9cht.ini` 的 `smart_jump`。首頁實測通過（攀爬 3、跳躍 5、例外 0）。做法與待看項目見 `docs/research/U9_JUMP_CLIMB.md`。
-- 首頁新增「按鍵設定」頁（2026-11-15；session 57、58 遊戲內驗證通過）：
-  - 研究與遊戲讀按鍵檔的規則：`docs/research/U9_EXTENDED_SETUP_TOOL.md`；用法：`runtime/U9ChtFront/README.md`。
-  - 程式：`runtime/U9ChtFront/keymap.h`、`keymap.cpp`；測試 `U9ChtKeymapTests`、`U9ChtKeymapLiveTests`（C++ 測試現在是 13 個）。
-  - 存檔寫到遊戲資料夾的 `U9CHT.kmp`，並改 `Options.ini` 的 `Current_Keymap`；不動 `Default.kmp`。
-  - 靜態分析發現 `abort_targeting` 不在 `u9.exe` 裡：原版按鍵檔的 A 鍵很可能沒有作用，待進遊戲確認。
-
-細節見第 3 節。
+**這一波（2026-11-15～16）做完的事**，細節見第 3e 節：
+- 首頁「按鍵設定」頁，依 `u9.exe` 讀按鍵檔的規則重做，作弊鍵也能設定。
+- 遊戲中即時套用按鍵，加上 Ctrl+Shift+K 叫出設定頁、「回到遊戲」切回。
+- 啟動器在遊戲結束時自己還原遊戲檔（`--restore-backup`）。
+- **改用代理 `dsound.dll` 載入 runtime，不再注入**；Defender 不再攔截（這台電腦、一次）。
+- 跳躍鍵自動攀爬（首頁開關，預設關）。
 
 ---
 
@@ -31,40 +19,46 @@
    ```sh
    "/c/Program Files/Microsoft Visual Studio/18/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe" --build .local/p10-misc/build --config Release
    ```
-   - 新增測試檔後，要先執行 `cmake -S runtime -B .local/p10-misc/build`。
-   - C++ 測試：在 `.local/p10-misc/build` 執行 `ctest -C Release`。
+   - 新增原始檔或測試檔後，要先執行 `cmake -S runtime -B .local/p10-misc/build`。
+   - C++ 測試：在 `.local/p10-misc/build` 執行同一個資料夾裡的 `ctest.exe -C Release`（Git Bash 的 PATH 上沒有 `ctest`）。
 3. Python 測試：`python -m unittest discover -s tests`。
 4. 進遊戲測試用 Steam 私人副本，使用者說「準備好了」之後才執行：
    ```sh
-   python scripts/run_p8_0_session.py start --session .local/p10-misc/session-NN --label "..." \
-     --game-dir .local/steam-game --build .local/p10-misc/out-m26 --runtime .local/p10-misc/build/Release \
-     --config .local/p9-2/u9cht.ini --preserve-saves --seed-saves .local/p10-misc/session-29/final-savegame \
-     --keymap .local/p10-misc/keymap/U9CHT-TEST.kmp
+   python scripts/run_p8_0_session.py start --session .local/p10-misc/session-NN --label "..."      --game-dir .local/steam-game --build .local/p10-misc/out-m26 --runtime .local/p10-misc/build/Release      --config .local/p9-2/u9cht.ini --preserve-saves --seed-saves .local/p10-misc/session-29/final-savegame      --load proxy --keymap .local/p10-misc/keymap/U9CHT-TEST.kmp
    python scripts/run_p8_0_session.py finish --session .local/p10-misc/session-NN
    ```
    - 下一個 session 編號從 **62** 開始。
-   - 不加 `--keymap` 就用原本的按鍵檔：沒有作弊鍵、作弊提示和施法攔截。
+   - `--load proxy`：用代理 `dsound.dll` 載入（和首頁相同）。不加就是舊的注入方式（啟動器的預設），留作對照。
+   - 不加 `--keymap` 就用 `Options.ini` 目前指定的按鍵檔（見第 1 節「私人副本」），沒有作弊鍵。
    - 要關掉個別功能，就用另一個設定檔，加上 `[features]` 區段。範例：`.local/p10-misc/bisect/u9cht-newfeatures-off.ini`。
-5. Runtime 版本號：
+   - session 工具會讓遊戲以視窗模式執行；經首頁啟動則是全螢幕。
+5. 首頁測試：`.local/p10-misc/front-release/U9Cht.exe`（使用者自己開）。
+   - 重新建置後，要把 `U9Cht.exe`、`U9ChtLauncher.exe`、`U9ChtRuntime.dll`、`U9ChtProxy.dll` 四個檔從 `build/Release` 複製過去。首頁開著時無法覆蓋 `U9Cht.exe`，先請使用者關掉。
+   - 首頁的記錄在 `front-release/logs/`。
+6. Runtime 版本號：
    - 改 runtime 名稱時，三處要一起改：`runtime/common/version_manifest.h`、`u9cht/l10n/runtime_pack.py`、`runtime/CMakeLists.txt`。
    - 改了以後要重建中文化資料，因為 pack 內嵌 runtime 名稱。
-   - 目前仍是 `0.2.45`。這期間加的功能都沒有升版號。
+   - 目前仍是 `0.2.45`。這兩波加的功能都沒有升版號。
 
 ## 1. 目前狀態一覽
 
-- 分支：`p7-localization-pipeline`，已推送到 `origin`（2026-11-15，`63c22cb`）。
+- 分支：`p7-localization-pipeline`，已推送到 `origin`（2026-11-16，`a44ee4b`）。
   - 本機備份分支 `backup/p7-before-gargish-rewrite` **不可推送**。這是 2026-11-11 改寫歷史前的備份。
 - 工作樹：只有不可加入的未追蹤檔：`.vscode/`、`83e7052b…png`、`tools/u9xsb6bt2a*`、`tools/uixtools.zip`。
-- 私人遊戲副本都已還原成原版，沒有進行中的 session：
-  - Steam：`.local/steam-game`。最近的測試都用它。
+  - `tools/u9xsb6bt2a/` 是第三方工具 Extended Setup（著作權屬原作者），不在 `.gitignore` 裡，**不可加入**。
+- 私人遊戲副本，沒有進行中的 session：
+  - Steam：`.local/steam-game`。最近的測試都用它。資源檔是原版，沒有殘留的 `dsound.dll`。
+    - **注意：`Options.ini` 目前是 `Current_Keymap=U9CHT.kmp`**，遊戲資料夾裡有使用者 11-15 15:45 從首頁存的 `U9CHT.kmp`。這是使用者的首頁測試狀態，不要擅自改回。
+    - 因此 `session-56/backup/Options.ini` 不再是可用的比對基準。要比對時以 session 工具 start 時自己備份的 `backup/` 為準。
   - GOG：`.local/runtime-game`。建置中文化資料時用它的原版檔。
 - 測試：
   - C++：14/14（2026-11-16）。
-  - Python：上次是 166 OK（3 skipped）。
+  - Python：166 OK（3 skipped）。
 - Runtime：`U9ChtRuntime/0.2.45-p11`，建置在 `.local/p10-misc/build/Release`。
 - 中文化資料最新建置：`.local/p10-misc/out-m26`。
-- 測試存檔：`.local/p10-misc/session-29/final-savegame`（Steam 副本）。session 30～56 都從這裡開始，沒有寫回。
-- 首頁測試資料夾：`.local/p10-misc/front-release`。裡面已經是最新的 `U9Cht.exe`、launcher 和 runtime。
+- 測試存檔：`.local/p10-misc/session-29/final-savegame`（Steam 副本）。session 30～61 都從這裡開始，沒有寫回。
+- 首頁測試資料夾：`.local/p10-misc/front-release`，四個程式都是最新版（2026-11-16）。
+- Microsoft Defender：`.local/p10-misc` 的排除**已拿掉**（使用者 2026-11-16）。代理載入沒被攔截；舊的注入方式會被攔截。
 
 ### 翻譯進度（全部是機器初稿 `draft`，尚未人工校稿）
 
@@ -91,6 +85,8 @@
 - 首頁測試時不要按「自動搜尋」或「切換版本」：它們會指到使用者原本的安裝。
 - 遊戲卡住或閃退時，強制結束前要先問使用者。
 - 使用者沒有要求就不推送。
+- 改遊戲設定檔（`Options.ini`、`dxcfg.ini`、按鍵檔）不要用 Git Bash 的 `sed -i`：它會把 CRLF 改成 LF（2026-11-15 發生過）。要還原就從驗證過的備份複製，要修改就用 Python 二進位模式，改完用 `cmp` 或雜湊確認。
+- 首頁正在執行時不要關掉它；要覆蓋 `front-release` 的檔案前先請使用者關閉。
 - 原版比對測試的做法（2026-11-15 用過兩次）：
   1. 把私人 Steam 副本的 `savegame/`、`dxcfg.ini`、`Options.ini` 備份到 `.local/p10-misc/<名稱>/backup`。
   2. 放入 session-29 存檔；`dxcfg.ini` 改成 `presentation=windowed`、`display=1600x1200@120`。
@@ -217,6 +213,41 @@
     - 正式版前要清理，或改成只在開發模式才有。
 - 測試時是視窗化（session 工具改的），但無法拖動視窗：U9 用 `ClipCursor`／`SetCursorPos` 把游標鎖在視窗內，原版行為。可用 Alt+Tab 後 Win+方向鍵移動。
 
+### 3e. 按鍵、載入方式與操作改善（2026-11-15～16）
+
+研究與說明文件：
+- `docs/research/U9_EXTENDED_SETUP_TOOL.md`：第三方工具 Extended Setup 的功能、`u9.exe` 讀按鍵檔的規則（追過程式碼）、鍵盤移動一次只能一個方向、即時套用的做法。
+- `docs/research/U9_PROXY_DLL_LOADING.md`：代理 `dsound.dll` 的研究、實作與 Defender 結果。
+- `docs/research/U9_JUMP_CLIMB.md`：跳躍與攀爬的機制、跳躍鍵自動攀爬的做法與結果。
+- `runtime/U9ChtFront/README.md`：首頁、按鍵設定頁、快捷鍵、載入方式。
+
+**按鍵設定頁**（`runtime/U9ChtFront/keymap.h`／`keymap.cpp`，測試 `U9ChtKeymapTests`）：
+- 6 個分頁、97 個指令（含作弊）；一個指令最多 4 個鍵；按＋後直接按鍵；重複鍵標紅（顯示遊戲實際會執行哪一個）。
+- 存到遊戲資料夾的 `U9CHT.kmp`，只改 `Options.ini` 的 `Current_Keymap` 一行；不動 `Default.kmp`。
+- 遊戲讀按鍵檔的限制（寫檔時都遵守）：每行去空白後 < 64 bytes、鍵名與指令名 < 32；每區段 4,096 bytes；Esc、F1～F12 保留；不認得的鍵名會跳訊息框。
+- 遊戲內驗證：session 57、58（首頁存的按鍵檔有效）。
+
+**遊戲中即時套用**（`runtime/U9ChtRuntime/keymap_live.h`，`engine.cpp` 的 `poll_keymap`／`reload_keymap`，測試 `U9ChtKeymapLiveTests`）：
+- 每 0.5 秒看 `Options.ini` 和按鍵檔有沒有變，穩定 1 秒且沒有按鍵按著時，用遊戲自己的函式清空按鍵、補回內建綁定、重讀檔案。
+- 檔案裡有遊戲讀不懂的行就拒絕，沿用舊按鍵。開發用關閉開關：資料夾放 `keymap_live.off`。
+- 遊戲內驗證：session 60（直接換檔）。**經首頁「儲存按鍵」後生效還沒測過。**
+
+**Ctrl+Shift+K**：遊戲中叫出首頁的按鍵設定頁；「返回」變成「回到遊戲」，會先還原縮小的全螢幕遊戲。首頁實測通過。設定頁不允許把 Ctrl+Shift+K 指定給遊戲指令。
+
+**啟動器負責還原**：首頁傳 `--restore-backup`，啟動器在遊戲結束時就還原四個 FLX。首頁實測多次通過（`restore_after_game ok`）。
+
+**代理 `dsound.dll` 載入**（`runtime/U9ChtProxy/`，測試 `U9ChtProxyForwardTests`）：
+- 啟動器 `--load proxy`：把 `U9ChtProxy.dll` 放進遊戲資料夾當 `dsound.dll`，用環境變數 `U9CHT_LAUNCH` 指向啟動檔，正常啟動 `u9.exe`；代理在遊戲進入點載入 runtime 並回報結果；遊戲結束後移除。
+- 沒有環境變數時代理只轉接 DirectSound，從 Steam／GOG 直接開遊戲完全不受影響。
+- 遊戲資料夾已有別人的 `dsound.dll` 時拒絕啟動，不覆蓋也不刪除；只處理帶我們標記的檔案。
+- 驗證：session 61（中文、聲音正常、結束後移除）；首頁實測，Defender 拿掉排除後沒有攔截。
+
+**跳躍鍵自動攀爬**（`FeatureSmartJump`，`u9cht.ini` 的 `smart_jump`，首頁勾選框，預設關）：
+- hook 聖者自己的跳躍函式 `0x4193A0`；跳之前先呼叫遊戲自己的攀爬函式 `0x57EF00`，開始攀爬就不跳。
+- 首頁實測通過（攀爬 3、跳躍 5、例外 0）。
+
+**runtime 的唯讀診斷**：`movement_probe`（每場記一次聖者攀爬／跳躍函式位址）。研究用，正式版前可移除。
+
 ## 4. 用中文手冊校對文本（2026-11-11 完成）
 
 ### 4.0 結果
@@ -287,40 +318,30 @@
   - 存讀檔頁；
   - 法術書：儀式清單的長標籤，例如「重聚肉體與靈魂儀式」，看會不會超出；
   - 狀態頁：新用語，例如機敏、神力、長程武器、生命力。
-- 首頁：新增的三個勾選框（體力／法力數值、傷害／法力飄字、敵人血條）還沒實際目視確認版面，視窗高度現在是 818。
-  - 開 `.local/p10-misc/front-release/U9Cht.exe` 確認。不要按「自動搜尋」或「切換版本」。
-- 按鍵設定頁（`front-release` 裡已是新版 `U9Cht.exe`）：
-  - 實際操作：新增、移除、重複鍵變紅、儲存、載入原版預設、返回。
-  - 存檔後進遊戲，確認改過的鍵有效、沒有跳出「keymap file」錯誤訊息框。
-  - 注意：存檔會在私人副本留下 `U9CHT.kmp` 並改 `Options.ini`；測完要還原（session 工具會還原 `Options.ini`，`U9CHT.kmp` 要手動刪）。
-  - 順便確認 A 鍵（`abort_targeting`）在鎖定目標時到底有沒有作用。
-  - **第一次實測（2026-11-15 13:34，首頁啟動、開新遊戲、WASD 加到移動）：進遊戲後完全無法移動，滑鼠右鍵也不行；沒有錯誤訊息框。原因 UNKNOWN。**
-    - 同一場首頁被 Defender 隔離；存出的 `U9CHT.kmp` 格式檢查不出問題；記錄沒有例外。
-    - 滑鼠移動不經過按鍵檔，而且以前用原版按鍵檔也出現過原因不明的「無法移動」，所以還不能歸因於按鍵檔。
-    - 下一步：用 session 工具做對照（同一存檔，`--keymap` 用這份按鍵檔 vs 不加）。按鍵檔副本在 `.local/p10-misc/keymap/U9CHT-user-20261115.kmp`。
-    - **session 57（session 工具、session-29 存檔、這份按鍵檔）：方向鍵、WASD、右鍵移動、B、J、Alt+S 全部正常**（CONFIRMED）。首頁存出的按鍵檔沒問題；首頁那場無法移動的原因仍 UNKNOWN（差別：首頁啟動、Defender 隔離、可能是開新遊戲）。
-    - **session 58（session 工具、同一按鍵檔、開新遊戲）：WASD 正常**。開新遊戲本身也重現不了。
-    - 這和 11-12 記錄過一次的「讀檔後開新遊戲不能移動」相同，見 `docs/research/U9_NEW_GAME_AFTER_LOAD.md`（已補 11-15 的紀錄）。原因仍 UNKNOWN；下次再發生時先按一下 X 再放開，看能不能恢復（測游標停留功能的假設）。
-    - 要再用首頁重現，得先讓 Defender 不再隔離 `U9Cht.exe`（使用者自行在 Windows 安全性處理）。
+- 首頁版面：強化功能現在有 8 個勾選框（列距 30），截圖檢查過、使用者也用過，但還沒在高 DPI 螢幕上看過。
+- 這一波的功能，還沒測到的部分：
+  - **遊戲中經首頁「儲存按鍵」後即時生效**（Ctrl+Shift+K → 改鍵 → 儲存 → 回到遊戲 → 新鍵有效）。
+  - 跳躍鍵自動攀爬：移動中起跳、較長時間遊玩；以及「跳躍被拒絕但攀爬允許」的那一種情況（`0x51C0F0`）。
+  - A 鍵（`abort_targeting`）：靜態分析顯示 `u9.exe` 沒有這個指令，鎖定目標時按 A 很可能沒作用。確認後要改 `docs/testing/KEYS_zh-TW.md` 和說明檔的「T 或 A」。
+- 「不能移動」（原因 UNKNOWN，至今兩次，都是開新遊戲之後）：見 `docs/research/U9_NEW_GAME_AFTER_LOAD.md`。按鍵檔已排除（session 57、58）。再發生時請使用者先按一下 X 再放開，看能不能恢復（測游標停留功能的假設）。
 - 體力／法力數值和敵人血條：開啟對話、背包、日誌、選單時，會不會跟著橫條一起隱藏，還沒專門確認。
 - 飛行作弊開了再關就無法移動：用原版 exe 加同一份按鍵檔確認是不是原版行為（作法見第 2 節）。
 - session 11 播放影片時截圖閃退（0xC0000005，原因 UNKNOWN）：還沒和原版比對。
 
 ## 6. 其他待辦
 
-- **防毒誤判（2026-11-15，發布前必須處理）**：Microsoft Defender 在首頁按「開始遊戲」後 3 秒把 `front-release\U9Cht.exe` 判為 `Behavior:Win32/DefenseEvasion.A!ml` 並隔離。
-  - 遊戲本身照常執行並正常結束（結束代碼 0），但首頁被移除，所以離開遊戲後**沒有還原**四個 FLX；已依收據手動還原並驗證雜湊。
-  - 觸發的是哪個行為還不知道（UNKNOWN）。11-12 用首頁啟動、以及 session 工具啟動都沒被擋。
-  - 影響：玩家電腦上也可能發生，而且會留下未還原的遊戲檔（下次開首頁時 `recover()` 會處理，前提是首頁還在）。
-  - 已改善（2026-11-15）：首頁傳 `--restore-backup` 給啟動器，啟動器在遊戲結束時就先還原；首頁被移除時檔案也會還原。合成資料測試通過，尚未在真實遊戲走過一次。
-  - 防毒誤判本身還沒處理（回報誤判、程式碼簽章、說明檔）。
+- **防毒**：
+  - 2026-11-15 Defender 把用注入方式啟動的首頁判為 `Behavior:Win32/DefenseEvasion.A!ml` 並隔離。
+  - 2026-11-16 改用代理 `dsound.dll` 後，拿掉排除測試，沒有被攔截（這台電腦、一次）。
+  - 還可以考慮：把啟動器的預設改成 `--load proxy`、程式碼簽章、每個發布版本送 Microsoft 檢查、說明檔提醒。
 
 - 啟動頁下一步：在玩家電腦上建置 `data/`。
   - 需要附帶 Python（embeddable 版）和 `u9cht` 套件，從玩家自己的遊戲檔建置。
   - 建置出的 FLX 含英文原文，不能散布。
 - 發布打包流程：還沒規劃。
 - 說明檔 `說明.txt`：要寫進「開新遊戲前請先重新啟動遊戲」（原版 bug）。
-  - 也要寫：「鎖定敵人時死亡，讀檔前先解除鎖定（T 或 A），否則遊戲會閃退」（原版 bug）。
+  - 也要寫：「鎖定敵人時死亡，讀檔前先解除鎖定（T），否則遊戲會閃退」（原版 bug）。A 鍵很可能沒作用，見第 5 節。runtime 已有繞過方法，這段提醒可視情況省略。
+  - 也要寫：防毒軟體可能攔截，以及處理方法。
 
 - 效能（2026-11-12 使用者提出，只記錄）：在現代電腦上仍不順。
   - GitHub 上沒找到 U9 專用的效能專案；社群建議都是 `Options.ini` 調整（`StreamDuration=3000`、`DeadPoolSize=3200`、裁切距離），未驗證。
