@@ -164,6 +164,12 @@ def start(args):
     command = [str(exe), "--game-dir", str(game), "--runtime", str(dll), "--log", str(session / "runtime.jsonl"),
                "--mode", "render", "--allowlist", str(pack)]
     command += ["--config", str(args.config)] if args.config else ["--font", str(args.font)]
+    if args.load:
+        # proxy: U9ChtProxy.dll (beside the launcher) goes into the game folder as dsound.dll for this session;
+        # the launcher removes it when the game ends.
+        command += ["--load", args.load]
+        receipt["load"] = args.load
+        write_json(session / "launch.json", receipt)
     with (session / "stdout.txt").open("wb") as out, (session / "stderr.txt").open("wb") as err:
         process = subprocess.Popen(command, cwd=ROOT, stdout=out, stderr=err, creationflags=subprocess.CREATE_NO_WINDOW)
     receipt["launcher_pid"] = process.pid
@@ -361,6 +367,8 @@ def main(argv=None):
     parser.add_argument("--keymap", type=Path,
                         help="test keymap installed as U9CHT-TEST.kmp and selected for this session only; "
                              "Default.kmp is never modified")
+    parser.add_argument("--load", choices=("inject", "proxy"),
+                        help="how the launcher loads the runtime (default: the launcher's own default, inject)")
     args = parser.parse_args(argv)
     args.session = args.session.resolve()
     if args.command != "finish":

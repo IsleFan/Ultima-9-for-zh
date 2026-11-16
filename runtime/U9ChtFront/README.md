@@ -116,11 +116,23 @@ A file that matches neither the original nor the installed hash has been changed
 - its backup is kept;
 - the page reports it.
 
+## How the runtime is loaded
+
+The page starts the launcher with `--load proxy` (`U9Cht.exe --load inject` selects the old injection path):
+- the launcher copies `U9ChtProxy.dll` into the game folder as `dsound.dll` for the session;
+- it starts `u9.exe` normally;
+- the proxy loads the runtime at the game's entry point;
+- when the game ends the launcher removes `dsound.dll` again.
+
+There is no suspended process, no remote memory and no remote thread. See `docs/research/U9_PROXY_DLL_LOADING.md`.
+
+A `dsound.dll` the player already has in the game folder is never overwritten: the page reports it and does not start the game. A copy of ours left by a session that was cut short does nothing when the game is started any other way, and is removed when the page next starts.
+
 ## Folder layout
 
 Everything sits beside `U9Cht.exe` unless overridden on the command line:
 
-    U9Cht.exe, U9ChtLauncher.exe, U9ChtRuntime.dll   (--runtime DIR)
+    U9Cht.exe, U9ChtLauncher.exe, U9ChtRuntime.dll, U9ChtProxy.dll   (--runtime DIR)
     data\        build output: static\*.FLX, runtime\allowlist.u9ct, movies.tsv, build-manifest.json   (--data DIR)
     fonts\       default font: the first .ttf/.otf/.ttc
     u9cht.ini, front.ini, backup\, logs\              (--base DIR)

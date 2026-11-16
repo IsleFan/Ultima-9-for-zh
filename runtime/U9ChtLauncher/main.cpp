@@ -3,6 +3,7 @@
 #include "version_manifest.h"
 #include <tlhelp32.h>
 #include <iostream>
+#include <memory>
 #include <map>
 #include <algorithm>
 #include <cwctype>
@@ -111,9 +112,32 @@ void restore_after_game(const Logger& log, const std::filesystem::path& game, co
     }
 }
 
+// --load proxy (protocol.h, docs/research/U9_PROXY_DLL_LOADING.md): no suspended process, no remote memory, no remote
+// thread. U9ChtProxy.dll goes into the game folder as dsound.dll, the game is started normally, and the proxy loads
+// the runtime at the game's entry point. These helpers are the launcher's side of that.
+bool read_result(const std::filesystem::path& file, LaunchResult& result) {
+    Handle f(CreateFileW(file.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+                         FILE_ATTRIBUTE_NORMAL, nullptr));
+    if (!f) return false;
+    DWORD got = 0;
+    return ReadFile(f.get(), &result, sizeof(result), &got, nullptr) && got == sizeof(result) && result.magic == LaunchMagic;
+}
+// After the game process has ended: the proxy leaves the game folder and the two launch files go.
+void cleanup_proxy(const Logger& log, const std::filesystem::path& game, const std::filesystem::path& launch) noexcept {
+    if (game.empty()) return;
+    try {
+        const bool removed = front::remove_proxy(game);
+        std::error_code ec;
+        std::filesystem::remove(launch, ec);
+        std::filesystem::remove(launch.wstring() + LaunchResultSuffix, ec);
+        log.event("proxy_removed", std::string("\"ok\":") + (removed ? "true" : "false"));
+        if (!removed) std::cerr << "could not remove dsound.dll from the game folder\n";
+    } catch (...) { log.event("proxy_removed", "\"ok\":false,\"exception\":true"); }
+}
+
 int wmain(int argc, wchar_t** argv) {
     Logger log;
-    std::filesystem::path restore_game, restore_backup;
+    std::filesystem::path restore_game, restore_backup, proxy_game, launch_path;
     Handle process, primary;
     DWORD pid = 0;
     void* remote_data = nullptr;
@@ -129,7 +153,7 @@ int wmain(int argc, wchar_t** argv) {
             else {
                 require(i + 1 < argc && (key == L"--game-dir" || key == L"--runtime" || key == L"--log" ||
                          key == L"--mode" || key == L"--font" || key == L"--allowlist" || key == L"--config" ||
-                         key == L"--restore-backup"), "unknown/missing argument");
+                         key == L"--restore-backup" || key == L"--load" || key == L"--proxy"), "unknown/missing argument");
                 require(options.emplace(key, argv[++i]).second, "duplicate option");
             }
         }
@@ -204,6 +228,67 @@ int wmain(int argc, wchar_t** argv) {
         log.event("launcher_validated", "\"runtime_version\":"+std::to_string(RuntimeVersion)+
             ",\"bits\":32,\"debugger\":false,\"runtime_sha256\":\""+utf8(sha256(dll))+"\"");
         if (validate) { log.event("validation_only"); return 0; }
+        const bool proxy_load = options.count(L"--load") && options[L"--load"] == L"proxy";
+        if (options.count(L"--load")) require(proxy_load || options[L"--load"] == L"inject", "--load must be inject or proxy");
+        if (proxy_load) {
+            require(!unload, "--verify-unload needs --load inject");
+            const auto proxy = std::filesystem::canonical(options.count(L"--proxy") ? options[L"--proxy"] :
+                               (std::filesystem::path(module_path(nullptr)).parent_path() / L"U9ChtProxy.dll").wstring());
+            const auto dll_path = dll.wstring();
+            require(dll_path.size() < PathCapacity, "runtime path too long");
+            launch_path = log_path.wstring() + L".launch";
+            const auto result_path = std::filesystem::path(launch_path.wstring() + LaunchResultSuffix);
+            require(launch_path.wstring().size() < PathCapacity - 32, "launch file path too long");
+            std::error_code ec; std::filesystem::remove(result_path, ec);
+            auto launch = std::make_unique<LaunchFile>();
+            launch->config = config;
+            std::copy(dll_path.begin(), dll_path.end(), launch->runtime_path);
+            require(front::write_bytes(launch_path, std::string(reinterpret_cast<const char*>(launch.get()), sizeof(LaunchFile))),
+                    "launch file write failed");
+            const auto installed = front::install_proxy(game, proxy);
+            proxy_game = game;   // from here every exit path removes the proxy again
+            if (!installed.ok) throw std::runtime_error("proxy install refused: " + utf8(installed.message));
+            log.event("proxy_installed", "\"proxy_sha256\":\"" + utf8(sha256(proxy)) + "\"");
+            // The variable is inherited by the game and removed from this process again at once.
+            require(SetEnvironmentVariableW(LaunchVariable, launch_path.c_str()), "launch variable failed");
+            STARTUPINFOW startup{}; startup.cb = sizeof(startup);
+            PROCESS_INFORMATION info{};
+            const BOOL created = CreateProcessW((game / L"u9.exe").c_str(), nullptr, nullptr, nullptr, FALSE, 0,
+                                                nullptr, game.c_str(), &startup, &info);
+            SetEnvironmentVariableW(LaunchVariable, nullptr);
+            require(created, "game creation failed");
+            process.reset(info.hProcess); primary.reset(info.hThread); pid = info.dwProcessId;
+            log.event("game_created", "\"game_pid\":" + std::to_string(pid) + ",\"load\":\"proxy\"");
+            // The proxy writes its result once U9ChtInitialize has returned (a few seconds: the glyph prewarm).
+            auto result = std::make_unique<LaunchResult>();
+            bool have = false;
+            for (const auto deadline = GetTickCount64() + 120000; !have && GetTickCount64() < deadline;) {
+                have = read_result(result_path, *result);
+                if (!have && WaitForSingleObject(process.get(), 100) == WAIT_OBJECT_0) { have = read_result(result_path, *result); break; }
+            }
+            require(have, "proxy handshake: no result (the proxy did not start the runtime)");
+            config = result->config;
+            if (!result->ok || !valid_protocol(config) || config.state != State::Ready || config.process_id != pid) {
+                log.event("handshake_fail", "\"error\":" + std::to_string(static_cast<uint32_t>(config.error)) +
+                          ",\"stage\":" + std::to_string(static_cast<uint32_t>(result->stage)) +
+                          ",\"rolled_back\":" + std::to_string(result->rolled_back));
+                WaitForSingleObject(process.get(), 10000);   // the proxy ends the game itself (exit code 2)
+                throw std::runtime_error("runtime initialization reported FAIL; the game was stopped");
+            }
+            log.event("handshake_ready", "\"game_pid\":" + std::to_string(pid) +
+                       ",\"image_base\":" + std::to_string(config.image_base) +
+                       ",\"wrapper_base\":" + std::to_string(config.wrapper_base) + ",\"load\":\"proxy\"");
+            resumed = true; primary.reset();
+            log.event("game_resumed", "\"game_pid\":" + std::to_string(pid) + ",\"load\":\"proxy\"");
+            std::cout << "READY game_pid=" << pid << " debugger=false\n" << std::flush;
+            require(WaitForSingleObject(process.get(), INFINITE) == WAIT_OBJECT_0, "game process wait failed");
+            DWORD code = 0; require(GetExitCodeProcess(process.get(), &code), "game exit status unavailable");
+            log.event("game_exited", "\"exit_code\":" + std::to_string(code));
+            std::cout << "EXIT game_pid=" << pid << " code=" << code << '\n';
+            cleanup_proxy(log, proxy_game, launch_path);
+            restore_after_game(log, restore_game, restore_backup);
+            return code == 0 ? 0 : 3;
+        }
         STARTUPINFOW startup{}; startup.cb = sizeof(startup);
         PROCESS_INFORMATION info{};
         require(CreateProcessW((game / L"u9.exe").c_str(), nullptr, nullptr, nullptr, FALSE, CREATE_SUSPENDED,
@@ -264,8 +349,10 @@ int wmain(int argc, wchar_t** argv) {
         log.event("launcher_fail", "\"primary_resumed\":" + std::string(resumed ? "true" : "false"));
         std::cerr << error.what() << '\n';
         // A game this launcher resumed may still be running (a wait failure): restoring under it is not safe.
-        if (!resumed || (process && WaitForSingleObject(process.get(), 0) == WAIT_OBJECT_0))
+        if (!resumed || (process && WaitForSingleObject(process.get(), 0) == WAIT_OBJECT_0)) {
+            cleanup_proxy(log, proxy_game, launch_path);
             restore_after_game(log, restore_game, restore_backup);
+        }
         return 2;
     }
 }

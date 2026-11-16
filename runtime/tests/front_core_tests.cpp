@@ -27,6 +27,24 @@ int main() {
     fs::remove_all(root, ec);
     fs::create_directories(root);
 
+    {   // proxy dsound.dll: recognized by its marker, never replacing or removing a file that is not ours
+        const auto game = root / L"proxy-game";
+        const std::string ours = std::string("MZ...") + U9CHT_PROXY_MARKER + "...build A", newer = std::string("MZ") + U9CHT_PROXY_MARKER + " build B";
+        write(root / L"U9ChtProxy.dll", ours);
+        write(root / L"other.dll", "MZ somebody else's dsound wrapper");
+        fs::create_directories(game);
+        check(is_proxy(root / L"U9ChtProxy.dll") && !is_proxy(root / L"other.dll") && !is_proxy(root / L"absent.dll"), "marker");
+        check(remove_proxy(game), "nothing to remove");
+        check(install_proxy(game, root / L"U9ChtProxy.dll").ok && read(game / L"dsound.dll") == ours, "installed");
+        write(root / L"U9ChtProxy.dll", newer);
+        check(install_proxy(game, root / L"U9ChtProxy.dll").ok && read(game / L"dsound.dll") == newer, "a leftover of ours from another build is replaced");
+        check(remove_proxy(game) && !fs::exists(game / L"dsound.dll"), "removed");
+        write(game / L"dsound.dll", "MZ somebody else's dsound wrapper");
+        check(!install_proxy(game, root / L"U9ChtProxy.dll").ok, "the player's own dsound.dll is not overwritten");
+        check(remove_proxy(game) && read(game / L"dsound.dll") == "MZ somebody else's dsound wrapper", "and not removed");
+        check(!install_proxy(game, root / L"other.dll").ok && !install_proxy(game, root / L"absent.dll").ok, "only our proxy is installed");
+    }
+
     {   // JSON hash objects
         const std::string a(64, 'a'), b(64, 'b');
         const std::string json = "{\"x\": 1, \"source_game_sha256\": {\"text.flx\": \"" + a + "\", \"BOOKS-EN.FLX\": \"" + b +

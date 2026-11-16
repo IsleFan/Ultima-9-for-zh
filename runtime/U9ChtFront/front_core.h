@@ -70,4 +70,12 @@ bool write_bytes(const fs::path& p, const std::string& data);
 // Undo an install whose receipt is in `backup`. Files changed by anything else are left alone and reported.
 Result recover(const fs::path& game, const fs::path& backup);
 Result install(const fs::path& game, const fs::path& data, const Manifest& m, const fs::path& backup);
+
+// Proxy loading (protocol.h): U9ChtProxy.dll is copied to <game>/dsound.dll for one session. A dsound.dll already
+// there is replaced or removed only when it holds the proxy's marker, i.e. it is a copy of ours from any build;
+// anything else belongs to the player and is refused / left alone.
+bool is_proxy(const fs::path& file);
+Result install_proxy(const fs::path& game, const fs::path& proxy);
+// True when no proxy of ours is left in the game folder afterwards.
+bool remove_proxy(const fs::path& game);
 }

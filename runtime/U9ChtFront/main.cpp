@@ -41,6 +41,7 @@ struct Hit { RECT r; Id id; bool enabled; int arg = 0; };
 
 struct App {
     fs::path base, data, runtime, fonts;
+    std::wstring load = L"proxy";       // how the launcher loads the runtime: "proxy" (dsound.dll) or "inject" (--load)
     std::vector<fs::path> candidates;   // installs found by the last search (GOG, Steam, ...)
     std::wstring edition;               // of the selected folder: "GOG", "Steam" or ""
     Settings s;
@@ -350,8 +351,9 @@ void start_game() {
     const auto launcher = app.runtime / L"U9ChtLauncher.exe", dll = app.runtime / L"U9ChtRuntime.dll";
     const auto pack = app.data / L"runtime" / L"allowlist.u9ct";
     std::error_code ec;
-    if (!fs::is_regular_file(launcher, ec) || !fs::is_regular_file(dll, ec) || !fs::is_regular_file(pack, ec)) {
-        set_message(L"程式檔不完整：找不到 U9ChtLauncher.exe、U9ChtRuntime.dll 或 allowlist.u9ct。", true); return;
+    if (!fs::is_regular_file(launcher, ec) || !fs::is_regular_file(dll, ec) || !fs::is_regular_file(pack, ec) ||
+        (app.load == L"proxy" && !is_proxy(app.runtime / L"U9ChtProxy.dll"))) {
+        set_message(L"程式檔不完整：找不到 U9ChtLauncher.exe、U9ChtRuntime.dll、U9ChtProxy.dll 或 allowlist.u9ct。", true); return;
     }
     if (!app.s.width && !supported(game_resolution(app.s.game_dir))) {
         set_message(L"遊戲目前的解析度中文化不支援，請選 800×600 或 1600×1200。", true); return;
@@ -365,7 +367,7 @@ void start_game() {
     const auto err = app.base / L"logs" / (name + L"-launcher.txt");
     std::wstring command = L"\"" + launcher.wstring() + L"\" --game-dir \"" + app.s.game_dir + L"\" --runtime \"" + dll.wstring() +
         L"\" --log \"" + log.wstring() + L"\" --mode render --allowlist \"" + pack.wstring() + L"\" --config \"" +
-        app.launcher_ini().wstring() + L"\" --restore-backup \"" + app.backup().wstring() + L"\"";
+        app.launcher_ini().wstring() + L"\" --restore-backup \"" + app.backup().wstring() + L"\" --load " + app.load;
     SECURITY_ATTRIBUTES sa{sizeof(sa), nullptr, TRUE};
     HANDLE out = CreateFileW(err.c_str(), GENERIC_WRITE, FILE_SHARE_READ, &sa, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     STARTUPINFOW si{}; si.cb = sizeof(si);
@@ -390,6 +392,7 @@ void start_game() {
 void game_ended(DWORD code) {
     app.running = false; app.game_window = nullptr;
     if (app.keys_saved_while_running) { keymap::select(app.s.game_dir); app.keys_saved_while_running = false; }
+    remove_proxy(app.s.game_dir);   // the launcher removes it when the game ends; this covers a launcher that could not
     const auto r = recover(app.s.game_dir, app.backup());
     refresh_game();
     if (!r.ok) set_message(r.message, true);
@@ -661,6 +664,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
         else if (key == L"--runtime") app.runtime = argv[i + 1];
         else if (key == L"--screenshot") screenshot = argv[i + 1];
         else if (key == L"--page") page = argv[i + 1];   // with --screenshot: "keys" or "keys:N" (tab N)
+        else if (key == L"--load" && (std::wstring(argv[i + 1]) == L"inject" || std::wstring(argv[i + 1]) == L"proxy")) app.load = argv[i + 1];
     }
     if (argv) LocalFree(argv);
     std::error_code ec;
@@ -673,6 +677,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     if (app.s.font.empty() || !fs::is_regular_file(app.s.font, ec)) app.s.font = default_font().wstring();
     app.manifest = read_manifest(app.data / L"build-manifest.json");
     if (!app.s.game_dir.empty()) {
+        remove_proxy(app.s.game_dir);   // a proxy dsound.dll left by a session that was cut short (inert, but ours)
         const auto undo = recover(app.s.game_dir, app.backup());   // a session cut short by a crash or power loss
         if (!undo.ok) set_message(undo.message, true);
         else if (!undo.message.empty()) set_message(L"上次沒有正常結束，" + undo.message, false);

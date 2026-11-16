@@ -1,6 +1,6 @@
 # Loading the runtime without process injection (proxy DLL)
 
-2026-11-15. Static research only. Nothing was built or run, and no game file was changed.
+2026-11-15: static research. 2026-11-16: implemented with the user's authorization and tried in game (see "Implemented" at the end).
 
 ## Why
 
@@ -92,7 +92,38 @@ Risks and open points:
 - **The Steam release** starts `u9.exe` through Steam only when the player uses Steam. The front page starts it directly, as today. No change.
 - The `Config` handshake fields that the launcher reads back (`state`, `process_id`, `image_base`, `wrapper_base`) would come from the log instead.
 
-## Effort (rough)
+## Implemented (2026-11-16)
+
+What was built:
+- `runtime/U9ChtProxy/proxy.cpp` and `dsound.def` build `U9ChtProxy.dll`. It forwards the 12 exports with the system's names and ordinals and holds a marker string.
+- `U9ChtLauncher.exe --load proxy`:
+  1. validates and builds `Config` as before;
+  2. copies the proxy to `<game>\dsound.dll` (`front::install_proxy`);
+  3. writes a `LaunchFile` (`protocol.h`) beside the log;
+  4. starts `u9.exe` with a plain `CreateProcess` and `U9CHT_LAUNCH` in its environment;
+  5. waits for the proxy's `LaunchResult`;
+  6. after the game ends, removes the proxy and the launch files.
+- `--load inject` (the launcher's default) keeps the old path for comparison.
+- The front page passes `--load proxy`. The session tool has `--load`.
+
+Differences from the proposal above:
+- The launcher stays the parent and still builds `Config`; the proxy only reads the launch file. No code moved to `common`.
+- On a failed initialize the proxy rolls the runtime back and **ends the game with exit code 2**, as the injection path does. It does not continue as the English game, because the static files in the folder are the Chinese ones.
+- A `dsound.dll` already in the game folder is replaced or removed only when it holds the proxy's marker. Anything else is the player's: the launch is refused and the file is left alone.
+- When the entry bytes are not the expected five, or no result arrives within 120 s, the launcher stops the game it started.
+
+Tests:
+- `U9ChtProxyForwardTests`: loads the proxy without the variable and compares calls through it with the system `dsound.dll` (names, ordinals, `DirectSoundEnumerateA/W`, `DirectSoundCreate`, an invalid call, `DllCanUnloadNow`).
+- `U9ChtFrontCoreTests`: install, replace a leftover of ours, remove, refuse a foreign file.
+
+**Session 61 (session tool, `--load proxy`, private Steam copy), CONFIRMED in game:**
+- log: `proxy_installed`, `game_created load:proxy`, the runtime's own start events, `runtime_ready` with 28 hooks, `handshake_ready load:proxy`;
+- the human saw Chinese text as usual and heard music, speech and effects;
+- the game exited with code 0; `proxy_removed ok`; no `dsound.dll` and no launch file was left; the session's restore checks passed.
+
+**Still open: whether Microsoft Defender accepts this path (UNKNOWN).** The folder was excluded from scanning during these tests. It has to be tried once through the front page with the exclusion removed.
+
+## Effort (rough, as estimated before the work)
 
 - The proxy DLL: about 150 lines, plus a `.def` file with ordinals.
 - Moving the settings-to-`Config` code to `common`: small.

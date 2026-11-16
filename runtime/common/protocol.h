@@ -67,4 +67,30 @@ inline bool valid_protocol(const Config& c) {
            c.journal_letter_spacing <= MaxJournalLetterSpacing && c.journal_line_spacing <= MaxJournalLineSpacing &&
            (c.features & ~AllFeatures) == 0 && c.hover_delay_ms >= MinHoverDelayMs && c.hover_delay_ms <= MaxHoverDelayMs;
 }
+
+// Proxy loading (2026-11-16; docs/research/U9_PROXY_DLL_LOADING.md). U9ChtLauncher --load proxy copies
+// U9ChtProxy.dll to <game>\dsound.dll, writes a LaunchFile, and starts u9.exe normally with LaunchVariable naming
+// that file. The proxy loads the runtime at the game's entry point and writes a LaunchResult to
+// <launch file> + LaunchResultSuffix. Without the variable the proxy only forwards dsound.
+inline constexpr wchar_t LaunchVariable[] = L"U9CHT_LAUNCH";
+inline constexpr wchar_t LaunchResultSuffix[] = L".result";
+inline constexpr wchar_t ProxyInstalledName[] = L"dsound.dll";
+inline constexpr uint32_t LaunchMagic = 0x464C3955;   // "U9LF"
+// A byte string inside U9ChtProxy.dll: a dsound.dll in the game folder is ours only when it holds this.
+#define U9CHT_PROXY_MARKER "U9ChtProxy/dsound-forwarder/3b1d7a52-9c0e-4f6b-8a47-5e2f0c9d1a66"
+enum class LaunchStage : uint32_t { LaunchFile, LoadRuntime, Initialize, Ready };
+struct LaunchFile {
+    uint32_t magic = LaunchMagic;
+    uint32_t config_size = sizeof(Config);
+    Config config;
+    wchar_t runtime_path[PathCapacity]{};
+};
+struct LaunchResult {
+    uint32_t magic = LaunchMagic;
+    uint32_t ok = 0;
+    LaunchStage stage = LaunchStage::LaunchFile;   // how far the proxy got
+    uint32_t rolled_back = 0;                      // after a failed initialize: U9ChtShutdown returned 1
+    Config config;                                 // as U9ChtInitialize left it
+};
+static_assert(std::is_trivially_copyable_v<LaunchFile> && std::is_trivially_copyable_v<LaunchResult>);
 }

@@ -309,6 +309,29 @@ Result apply_resolution(const fs::path& game, Resolution r) {
     return {};
 }
 
+bool is_proxy(const fs::path& file) {
+    std::string bytes;
+    return read_bytes(file, bytes) && bytes.find(U9CHT_PROXY_MARKER) != std::string::npos;
+}
+
+Result install_proxy(const fs::path& game, const fs::path& proxy) {
+    if (!is_proxy(proxy)) return {false, L"找不到 U9ChtProxy.dll，或檔案不正確。"};
+    const auto target = game / ProxyInstalledName;
+    std::error_code ec;
+    if (fs::exists(target, ec) && !is_proxy(target))
+        return {false, L"遊戲資料夾裡已經有別的 dsound.dll（不是中文化程式放的），為了不覆蓋它，沒有啟動遊戲。"};
+    if (!copy_verified(proxy, target, hash_or_empty(proxy))) return {false, L"無法把 dsound.dll 放進遊戲資料夾。"};
+    return {};
+}
+
+bool remove_proxy(const fs::path& game) {
+    const auto target = game / ProxyInstalledName;
+    std::error_code ec;
+    if (!fs::exists(target, ec)) return true;
+    if (!is_proxy(target)) return true;   // the player's own file: not ours to remove
+    return fs::remove(target, ec) && !ec;
+}
+
 Result recover(const fs::path& game, const fs::path& backup) {
     const auto receipt = backup / Receipt;
     std::error_code ec;
