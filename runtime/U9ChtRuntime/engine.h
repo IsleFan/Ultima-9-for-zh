@@ -264,6 +264,10 @@ struct Engine {
     // Ctrl+Shift+K in game: bring up the front page's key bindings page (protocol.h). Game thread, input hook.
     uint64_t key_page_requests = 0, key_page_missing = 0;
     void open_key_bindings() noexcept;
+    // Research probe, read only (2026-11-16, jump/climb on one key): logs once where the Avatar's climb and jump
+    // routines are. Game thread (flip, outside `mutex`).
+    bool movement_probed = false;
+    void probe_movement() noexcept;
     bool overlay_draw = true;   // developer marker overlay_draw.off: overlays compute but draw nothing
     bool status_numbers = false;
     uint64_t status_frames = 0, status_misses = 0, status_unreadable = 0;

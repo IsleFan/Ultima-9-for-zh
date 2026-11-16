@@ -12,7 +12,8 @@
 - 啟動器在遊戲結束時就先還原遊戲檔（`--restore-backup`），首頁被防毒移除也不會留下中文檔。
 - 遊戲中按 **Ctrl+Shift+K** 叫出首頁的按鍵設定頁，「回到遊戲」切回：首頁全螢幕實測通過（2026-11-15）。**還沒測：遊戲中經首頁「儲存按鍵」後即時生效**（session 60 是直接換檔測的）。
 - 啟動器負責還原：首頁實測兩次，遊戲結束後都已還原（`restore_after_game ok`）。
-- 不注入的載入方式（代理 `dsound.dll`）：靜態研究完成，見 `docs/research/U9_PROXY_DLL_LOADING.md`；**尚未授權實作**。
+- **不注入的載入方式（代理 `dsound.dll`）已實作**（2026-11-16，使用者授權）：`U9ChtProxy.dll`、啟動器 `--load proxy`；首頁預設用它，session 工具加 `--load proxy` 才用。session 61 遊戲內通過（中文、聲音、結束後移除）。**還沒測：拿掉 Defender 排除後經首頁啟動會不會被擋。** 見 `docs/research/U9_PROXY_DLL_LOADING.md`。
+- 一鍵跳躍／攀爬：研究中，見 `docs/research/U9_JUMP_CLIMB.md`；runtime 有一筆唯讀診斷 `movement_probe`。**尚未授權實作**。
 - 首頁新增「按鍵設定」頁（2026-11-15；session 57、58 遊戲內驗證通過）：
   - 研究與遊戲讀按鍵檔的規則：`docs/research/U9_EXTENDED_SETUP_TOOL.md`；用法：`runtime/U9ChtFront/README.md`。
   - 程式：`runtime/U9ChtFront/keymap.h`、`keymap.cpp`；測試 `U9ChtKeymapTests`、`U9ChtKeymapLiveTests`（C++ 測試現在是 13 個）。
@@ -41,7 +42,7 @@
      --keymap .local/p10-misc/keymap/U9CHT-TEST.kmp
    python scripts/run_p8_0_session.py finish --session .local/p10-misc/session-NN
    ```
-   - 下一個 session 編號從 **61** 開始。
+   - 下一個 session 編號從 **62** 開始。
    - 不加 `--keymap` 就用原本的按鍵檔：沒有作弊鍵、作弊提示和施法攔截。
    - 要關掉個別功能，就用另一個設定檔，加上 `[features]` 區段。範例：`.local/p10-misc/bisect/u9cht-newfeatures-off.ini`。
 5. Runtime 版本號：
@@ -58,7 +59,7 @@
   - Steam：`.local/steam-game`。最近的測試都用它。
   - GOG：`.local/runtime-game`。建置中文化資料時用它的原版檔。
 - 測試：
-  - C++：13/13（2026-11-15）。
+  - C++：14/14（2026-11-16）。
   - Python：上次是 166 OK（3 skipped）。
 - Runtime：`U9ChtRuntime/0.2.45-p11`，建置在 `.local/p10-misc/build/Release`。
 - 中文化資料最新建置：`.local/p10-misc/out-m26`。

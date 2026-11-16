@@ -785,6 +785,32 @@ std::string read_text(const std::filesystem::path& path) {
 }
 }   // namespace
 
+// The movement controller [0x131F668] asks for an action through 0x5B0B60: action 10 (climb) calls vtable +0x7C of
+// the object at [[controller]+0xE8], action 11 (jump) calls +0x80 with a target. Those are run-time pointers, so
+// the addresses are read here once the Avatar exists. Nothing is called and nothing is written.
+namespace {
+struct MovementProbe { uintptr_t controller, actor, mover, vtable, climb, jump; };
+bool read_movement(MovementProbe& p) noexcept {
+    __try {
+        p.controller = word(0x131F668); if (!p.controller) return false;
+        p.actor = word(p.controller); if (!p.actor) return false;
+        p.mover = word(p.actor+0xE8); if (!p.mover) return false;
+        p.vtable = word(p.mover); if (!p.vtable) return false;
+        p.climb = word(p.vtable+0x7C); p.jump = word(p.vtable+0x80);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
+}
+void Engine::probe_movement() noexcept {
+    if (movement_probed) return;
+    MovementProbe p{};
+    if (!read_movement(p)) return;
+    movement_probed = true;
+    log->event("movement_probe","\"controller\":"+std::to_string(p.controller)+",\"actor\":"+std::to_string(p.actor)+
+               ",\"mover\":"+std::to_string(p.mover)+",\"vtable\":"+std::to_string(p.vtable)+
+               ",\"climb\":"+std::to_string(p.climb)+",\"jump\":"+std::to_string(p.jump));
+}
+
 keymap_live::Stamp Engine::keymap_stamp() noexcept {
     keymap_live::Stamp s;
     try {
@@ -842,7 +868,7 @@ uintptr_t __fastcall flip_hook(uintptr_t self, void*) {
     Guard guard;
     // Live keymap reload, outside `mutex` for the same reason as the death unlock below: freeing the old keys
     // re-enters this runtime through the free hook.
-    if (guard.state) guard.state->poll_keymap();
+    if (guard.state) { guard.state->poll_keymap(); guard.state->probe_movement(); }
     // Outside `mutex`: the clear routine frees the target marker, which re-enters this runtime through the free and
     // destroy hooks; holding the lock here deadlocked the game on death (session-55).
     if (uintptr_t manager = 0; guard.state && avatar_dead_locked(manager)) {
