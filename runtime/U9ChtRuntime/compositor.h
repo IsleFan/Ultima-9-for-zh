@@ -84,6 +84,7 @@ using SurfaceLock = HRESULT(WINAPI*)(void*,RECT*,DDSURFACEDESC2*,DWORD,HANDLE);
 using SurfaceUnlock = HRESULT(WINAPI*)(void*,RECT*);
 struct SurfaceAccess { void* object; uintptr_t backend; SurfaceLock lock; SurfaceUnlock unlock; };
 enum class PaintStatus { Painted, LockFailed, InvalidDescriptor, UnlockFailed };
-struct PaintResult { PaintStatus status; uint64_t pixels; };
+// lock_ticks / unlock_ticks: QueryPerformanceCounter ticks spent inside the surface's Lock and Unlock calls.
+struct PaintResult { PaintStatus status; uint64_t pixels; uint64_t lock_ticks = 0, unlock_ticks = 0; };
 PaintResult paint_surface(const SurfaceAccess& access, Rect rect, const FrameList& frame, SurfaceTracker& tracker) noexcept;
 }

@@ -3,6 +3,7 @@
 #include "identity.h"
 #include "platform.h"
 #include "compositor.h"
+#include "gpu_overlay.h"
 #include "raster_runs.h"
 #include "misc_marker.h"
 #include "clock_text.h"
@@ -142,6 +143,13 @@ struct Engine {
     uint32_t max_rasters = 0, max_queues = 0;
     uint64_t composite_count = 0, unicode_runs = 0, pixel_writes = 0, lock_failures = 0, unlock_failures = 0;
     uint64_t skipped_frames = 0, compositor_ticks = 0, compositor_max_ticks = 0;
+    // Where a composited frame's time goes (docs/research/U9_PERFORMANCE.md): inside Lock, inside Unlock, and the
+    // summed area of the locked rectangles. Read-only timing; the rest of compositor_ticks is the blend.
+    uint64_t lock_ticks = 0, unlock_ticks = 0, locked_pixels = 0, lock_frames = 0;
+    // Direct3D path for the same commands (gpu_overlay.h; user authorization 2026-11-16). The Lock path is its fallback.
+    gpu::Overlay gpu;
+    bool gpu_overlay = false;
+    uint64_t gpu_ticks = 0;
     uint32_t max_frame_records = 0;
     std::atomic<DWORD> render_thread{0};
     std::array<LifeEvent,16384> life_events{}; // Peak observed: 2560 in one 5s snapshot.

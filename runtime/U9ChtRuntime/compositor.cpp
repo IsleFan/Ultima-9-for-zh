@@ -94,10 +94,15 @@ PaintResult paint_surface(const SurfaceAccess& a, Rect locked, const FrameList& 
     RECT rect{locked.left,locked.top,locked.right,locked.bottom};
     DDSURFACEDESC2 desc{}; desc.dwSize = sizeof(desc);
     static_assert(sizeof(desc) == 124);
-    if (FAILED(a.lock(a.object,&rect,&desc,0x801,nullptr))) {
-        tracker.invalidate(); return {PaintStatus::LockFailed,0};
+    LARGE_INTEGER t0{},t1{},t2{},t3{};
+    QueryPerformanceCounter(&t0);
+    const auto locked_hr = a.lock(a.object,&rect,&desc,0x801,nullptr);
+    QueryPerformanceCounter(&t1);
+    const auto lock_ticks = uint64_t(t1.QuadPart-t0.QuadPart);
+    if (FAILED(locked_hr)) {
+        tracker.invalidate(); return {PaintStatus::LockFailed,0,lock_ticks,0};
     }
-    PaintResult result{PaintStatus::InvalidDescriptor,0};
+    PaintResult result{PaintStatus::InvalidDescriptor,0,lock_ticks,0};
     const auto& pf = desc.ddpfPixelFormat;
     const bool format = pf.dwSize == 32 && pf.dwFlags == DDPF_RGB && pf.dwFourCC == 0 &&
         pf.dwRGBBitCount == 32 && pf.dwRBitMask == 0xFF0000 && pf.dwGBitMask == 0xFF00 &&
@@ -106,9 +111,13 @@ PaintResult paint_surface(const SurfaceAccess& a, Rect locked, const FrameList& 
         desc.dwWidth == frame.width && desc.dwHeight == frame.height && desc.lpSurface &&
         desc.lPitch >= int32_t(frame.width*4) && desc.lPitch <= 0x10000 && desc.lPitch%4 == 0) {
         tracker.accept({a.backend,reinterpret_cast<uintptr_t>(a.object),desc.dwWidth,desc.dwHeight,uint32_t(desc.lPitch),32});
-        result = {PaintStatus::Painted,blend(static_cast<uint8_t*>(desc.lpSurface),uint32_t(desc.lPitch),locked,frame)};
+        result.status = PaintStatus::Painted;
+        result.pixels = blend(static_cast<uint8_t*>(desc.lpSurface),uint32_t(desc.lPitch),locked,frame);
     } else tracker.invalidate();
+    QueryPerformanceCounter(&t2);
     const auto hr = a.unlock(a.object,&rect);
+    QueryPerformanceCounter(&t3);
+    result.unlock_ticks = uint64_t(t3.QuadPart-t2.QuadPart);
     desc.lpSurface = nullptr;
     if (FAILED(hr)) { tracker.invalidate(); result.status = PaintStatus::UnlockFailed; }
     return result;

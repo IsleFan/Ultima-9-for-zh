@@ -2186,14 +2186,25 @@ void Engine::compose(uintptr_t backend) noexcept {
     auto lock = reinterpret_cast<SurfaceLock>(word(word(back)+0x64));
     auto unlock = reinterpret_cast<SurfaceUnlock>(word(word(back)+0x80));
     LARGE_INTEGER begin{},end{};
-    QueryPerformanceCounter(&begin);
     uint32_t error = 0; bool composed = false;
+    if (gpu_overlay && !gpu.disabled()) {
+        // gpu_overlay.h: quads through the game's own device, no back buffer Lock. The device is
+        // the one the game ends its scene with (0x59A0CA: [backend+0x3FC3BC], vtable +0x18).
+        QueryPerformanceCounter(&begin);
+        composed = gpu.draw(reinterpret_cast<void*>(word(backend+0x3FC3BC)),reinterpret_cast<void*>(back),list) == gpu::Status::Drawn;
+        QueryPerformanceCounter(&end);
+        gpu_ticks += uint64_t(end.QuadPart-begin.QuadPart);
+    }
+    if (!composed) {
+    QueryPerformanceCounter(&begin);
     {
         // Acquire the disk-log exclusion BEFORE Lock. The worker never performs
         // I/O while this gate is held. No own heap/GDI/logging inside this block.
         Exclusive io(io_gate);
         const auto result = paint_surface({reinterpret_cast<void*>(back),backend,lock,unlock},locked,list,surface);
         pixel_writes += result.pixels;
+        lock_ticks += result.lock_ticks; unlock_ticks += result.unlock_ticks;
+        locked_pixels += uint64_t(locked.right-locked.left)*uint64_t(locked.bottom-locked.top);
         composed = result.status == PaintStatus::Painted;
         if (!composed) ++skipped_frames;
         if (result.status == PaintStatus::LockFailed) ++lock_failures;
@@ -2203,6 +2214,8 @@ void Engine::compose(uintptr_t backend) noexcept {
     QueryPerformanceCounter(&end);
     const auto ticks = uint64_t(end.QuadPart-begin.QuadPart);
     compositor_ticks += ticks; compositor_max_ticks = std::max(compositor_max_ticks,ticks);
+    ++lock_frames;
+    }
     if (composed) {
         ++composite_count; unicode_runs += list.records;
         for (uint32_t i = 0; i < list.records; ++i) if (const auto* r = raster(list.sources[i].raster))
@@ -2342,6 +2355,11 @@ void Engine::install(const Config& config, Logger& logger) {
             // Bisect aid (developer marker): overlay_draw.off keeps the overlay features computing but draws nothing.
             overlay_draw = !exists(L"overlay_draw.off");
             log->event("overlay_draw","\"enabled\":"+std::string(overlay_draw?"true":"false"));
+            // Chinese is drawn through the game's Direct3D device instead of locking the back buffer
+            // (docs/research/U9_PERFORMANCE.md; on by default since 2026-11-17, sessions 63-64). The developer
+            // marker gpu_overlay.off forces the Lock path, which also remains the automatic fallback.
+            gpu_overlay = !exists(L"gpu_overlay.off");
+            log->event("gpu_overlay","\"enabled\":"+std::string(gpu_overlay?"true":"false"));
             o.wheel = (config.features & FeatureWheelPages) && !exists(L"wheel_pages.off");
             o.zoom = (config.features & FeatureWheelZoom) != 0;
             o.hover = (config.features & FeatureHoverNames) && !exists(L"hover_names.off");
@@ -2593,6 +2611,14 @@ void Engine::snapshot(const char* event) noexcept {
             ",\"unlock_failures\":"+std::to_string(unlock_failures)+",\"skipped_frames\":"+std::to_string(skipped_frames)+
             ",\"max_frame_records\":"+std::to_string(max_frame_records)+",\"pixel_writes\":"+std::to_string(pixel_writes)+
             ",\"compositor_ticks\":"+std::to_string(compositor_ticks)+",\"compositor_max_ticks\":"+std::to_string(compositor_max_ticks)+
+            ",\"lock_ticks\":"+std::to_string(lock_ticks)+",\"unlock_ticks\":"+std::to_string(unlock_ticks)+
+            ",\"locked_pixels\":"+std::to_string(locked_pixels)+",\"lock_frames\":"+std::to_string(lock_frames)+
+            ",\"gpu_frames\":"+std::to_string(gpu.frames)+",\"gpu_fallbacks\":"+std::to_string(gpu.fallbacks)+
+            ",\"gpu_ticks\":"+std::to_string(gpu_ticks)+",\"gpu_glyphs\":"+std::to_string(gpu.glyphs())+
+            ",\"gpu_uploads\":"+std::to_string(gpu.uploads)+",\"gpu_resets\":"+std::to_string(gpu.resets)+
+            ",\"gpu_restore_failures\":"+std::to_string(gpu.restore_failures)+
+            ",\"gpu_strip_frames\":"+std::to_string(gpu.strip_frames)+",\"gpu_masked_frames\":"+std::to_string(gpu.masked_frames)+",\"gpu_disabled\":"+std::string(gpu.disabled()?"true":"false")+
+            ",\"gpu_last_status\":"+std::to_string(gpu.last_status)+",\"gpu_last_hresult\":"+std::to_string(gpu.last_hresult)+
             ",\"occluder_masks\":"+std::to_string(occluder_masks)+",\"occluder_rejects\":["+std::to_string(occluder_rejects[0])+","+std::to_string(occluder_rejects[1])+","+
             std::to_string(occluder_rejects[2])+","+std::to_string(occluder_rejects[3])+","+std::to_string(occluder_rejects[4])+","+std::to_string(occluder_rejects[5])+
             "],\"skip_reasons\":["+std::to_string(skip_reasons[0])+","+std::to_string(skip_reasons[1])+","+std::to_string(skip_reasons[2])+","+std::to_string(skip_reasons[3])+","+std::to_string(skip_reasons[4])+

@@ -1,4 +1,4 @@
-# U9-CHT Handoff（2026-11-16）
+# U9-CHT Handoff（2026-11-17）
 
 給下一個工作階段（人或 AI Agent）的交接。
 開工前仍須依 `AGENTS.md` 讀取 `AGENTS.md` 與 `ULTIMA_IX_CHT_MASTER_PLAN.md`。
@@ -9,6 +9,10 @@
 - 啟動器在遊戲結束時自己還原遊戲檔（`--restore-backup`）。
 - **改用代理 `dsound.dll` 載入 runtime，不再注入**；Defender 不再攔截（這台電腦、一次）。
 - 跳躍鍵自動攀爬（首頁開關，預設關）。
+
+**2026-11-16～17 追加**，細節見第 3f 節：
+- 幀率低的主因找到並修正：中文改經遊戲的 Direct3D 裝置繪製，不再每幀鎖定畫面緩衝區。
+- 評估了 U9GL（OpenGL 渲染器專案）：只當參考，目前不能和我們同時使用。
 
 ---
 
@@ -27,7 +31,7 @@
    python scripts/run_p8_0_session.py start --session .local/p10-misc/session-NN --label "..."      --game-dir .local/steam-game --build .local/p10-misc/out-m26 --runtime .local/p10-misc/build/Release      --config .local/p9-2/u9cht.ini --preserve-saves --seed-saves .local/p10-misc/session-29/final-savegame      --load proxy --keymap .local/p10-misc/keymap/U9CHT-TEST.kmp
    python scripts/run_p8_0_session.py finish --session .local/p10-misc/session-NN
    ```
-   - 下一個 session 編號從 **62** 開始。
+   - 下一個 session 編號從 **65** 開始。
    - `--load proxy`：用代理 `dsound.dll` 載入（和首頁相同）。不加就是舊的注入方式（啟動器的預設），留作對照。
    - 不加 `--keymap` 就用 `Options.ini` 目前指定的按鍵檔（見第 1 節「私人副本」），沒有作弊鍵。
    - 要關掉個別功能，就用另一個設定檔，加上 `[features]` 區段。範例：`.local/p10-misc/bisect/u9cht-newfeatures-off.ini`。
@@ -52,7 +56,7 @@
     - 因此 `session-56/backup/Options.ini` 不再是可用的比對基準。要比對時以 session 工具 start 時自己備份的 `backup/` 為準。
   - GOG：`.local/runtime-game`。建置中文化資料時用它的原版檔。
 - 測試：
-  - C++：14/14（2026-11-16）。
+  - C++：15/15（2026-11-17）。
   - Python：166 OK（3 skipped）。
 - Runtime：`U9ChtRuntime/0.2.45-p11`，建置在 `.local/p10-misc/build/Release`。
 - 中文化資料最新建置：`.local/p10-misc/out-m26`。
@@ -248,6 +252,29 @@
 
 **runtime 的唯讀診斷**：`movement_probe`（每場記一次聖者攀爬／跳躍函式位址）。研究用，正式版前可移除。
 
+### 3f. 效能與 U9GL 評估（2026-11-16～17）
+
+文件：`docs/research/U9_PERFORMANCE.md`、`docs/research/U9GL_REFERENCE.md`。
+
+**幀率低的主因（CONFIRMED）**：體力／法力數值、飄字、敵人血條讓幾乎每一幀都要合成中文，而合成要鎖定後備緩衝區。
+鎖定一次 7～10 ms，和範圍無關（session 62：合成時間的 97% 在 Lock 呼叫裡）。診斷記錄不是原因。
+
+**修正：經 Direct3D 裝置繪製**（`runtime/U9ChtRuntime/gpu_overlay.h`／`.cpp`，測試 `U9ChtGpuOverlayTests`；使用者授權 2026-11-16）：
+- 字形放進一張 1024×1024 貼圖，每個繪製指令畫成半透明矩形。裝置是 `[backend+0x3FC3BC]`。沒有新的遊戲 hook。
+- 游標壓在中文字上時，把字切成條狀矩形避開被蓋住的像素。
+- 會動到的繪圖狀態先讀出、畫完還原。任何一步失敗就退回鎖定路徑；連續失敗 8 次、例外或還原失敗就整場停用。
+- **預設開啟**（使用者決定 2026-11-17）。中文化資料的 `runtime/` 資料夾放 `gpu_overlay.off` 可強制走鎖定路徑。
+- 驗證：session 63、64（視窗模式 1600×1200）。每幀 0.6 ms（原本 8.7 ms），session 64 沒有任何一幀鎖定，錯誤 0。使用者目視確認字形、游標、遊戲畫面都正常，體感較順。
+- `runtime_counters` 新欄位：`lock_ticks`、`unlock_ticks`、`locked_pixels`、`lock_frames`、`gpu_*`。
+
+**還沒驗證**：全螢幕（經首頁啟動）、800×600、原版在同一場景的幀率。
+
+**U9GL**（`theGreyWanderer-uc/tgwUltima9GL`，0.5.8）：
+- 和我們衝突：它的載入器也叫 `dsound.dll`；它要求 Glide 再換成自己的渲染器，我們的中文繪製綁定 DX7 渲染器。
+- 授權是非商業 copyleft，不可複製程式碼；位址表可當線索，要自己驗證。
+- 使用者實測它沒有比較順。結論：只當參考，說明檔要寫「目前不能同時使用」。
+- 本機副本在 `.local/upstream/tgwUltima9GL`。
+
 ## 4. 用中文手冊校對文本（2026-11-11 完成）
 
 ### 4.0 結果
@@ -318,6 +345,7 @@
   - 存讀檔頁；
   - 法術書：儀式清單的長標籤，例如「重聚肉體與靈魂儀式」，看會不會超出；
   - 狀態頁：新用語，例如機敏、神力、長程武器、生命力。
+- **新的繪製路徑在全螢幕（經首頁啟動）和 800×600 下是否正常**：字形、游標、遊戲畫面、切換視窗後回來（貼圖遺失後的復原沒實測過）。
 - 首頁版面：強化功能現在有 8 個勾選框（列距 30），截圖檢查過、使用者也用過，但還沒在高 DPI 螢幕上看過。
 - 這一波的功能，還沒測到的部分：
   - **遊戲中經首頁「儲存按鍵」後即時生效**（Ctrl+Shift+K → 改鍵 → 儲存 → 回到遊戲 → 新鍵有效）。
@@ -343,7 +371,7 @@
   - 也要寫：「鎖定敵人時死亡，讀檔前先解除鎖定（T），否則遊戲會閃退」（原版 bug）。A 鍵很可能沒作用，見第 5 節。runtime 已有繞過方法，這段提醒可視情況省略。
   - 也要寫：防毒軟體可能攔截，以及處理方法。
 
-- 效能（2026-11-12 使用者提出，只記錄）：在現代電腦上仍不順。
+- 效能（2026-11-12 使用者提出）：主因已修正，見第 3f 節。以下是當時的記錄，其中「診斷記錄可能有負擔」已排除。剩下的幀率起伏（30～120 fps 隨場景）要先量原版才知道是不是遊戲本身。
   - GitHub 上沒找到 U9 專用的效能專案；社群建議都是 `Options.ini` 調整（`StreamDuration=3000`、`DeadPoolSize=3200`、裁切距離），未驗證。
   - 我們的 runtime 會寫大量診斷紀錄（一場約 1.4 萬筆 `glyph_cache_warm`），可能有負擔。
   - 下一步：同一存檔、同一路線比較三種情況：原版、中文化、中文化但降低紀錄量。先問清楚是低幀率、規律頓挫，還是轉視角卡。
