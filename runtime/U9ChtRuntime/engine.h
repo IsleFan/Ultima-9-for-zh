@@ -267,6 +267,10 @@ struct Engine {
     // Research probe, read only (2026-11-16, jump/climb on one key): logs once where the Avatar's climb and jump
     // routines are. Game thread (flip, outside `mutex`).
     bool movement_probed = false;
+    // FeatureSmartJump (user authorization 2026-11-16; docs/research/U9_JUMP_CLIMB.md): the Avatar's jump first
+    // tries the game's own climb. Set once at start; counted from the game thread (jump_hook).
+    bool smart_jump = false;
+    std::atomic<uint64_t> smart_climbs{0}, smart_jumps{0}, smart_faults{0};
     void probe_movement() noexcept;
     bool overlay_draw = true;   // developer marker overlay_draw.off: overlays compute but draw nothing
     bool status_numbers = false;

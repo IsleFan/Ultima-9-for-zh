@@ -94,7 +94,7 @@ Settings load_settings(const fs::path& launcher_ini, const fs::path& front_ini) 
         {L"hover_names", FeatureHoverNames}, {L"wheel_pages", FeatureWheelPages}, {L"wheel_zoom", FeatureWheelZoom},
         {L"movie_subtitles", FeatureMovieSubtitles}, {L"input_probe", FeatureInputProbe},
         {L"status_numbers", FeatureStatusNumbers}, {L"floating_numbers", FeatureFloatingNumbers},
-        {L"target_bar", FeatureTargetBar}};
+        {L"target_bar", FeatureTargetBar}, {L"smart_jump", FeatureSmartJump}};
     for (const auto& [key, bit] : bits)
         if (read_number(launcher_ini, L"features", key, v) && v <= 1) s.features = v ? (s.features | bit) : (s.features & ~bit);
     if (read_number(launcher_ini, L"features", L"hover_delay_ms", v))
@@ -113,7 +113,8 @@ void save_settings(const Settings& s, const fs::path& launcher_ini, const fs::pa
       << L"\r\nmovie_subtitles = " << flag(FeatureMovieSubtitles) << L"\r\ninput_probe = " << flag(FeatureInputProbe)
       << L"\r\nstatus_numbers = " << flag(FeatureStatusNumbers)
       << L"\r\nfloating_numbers = " << flag(FeatureFloatingNumbers)
-      << L"\r\ntarget_bar = " << flag(FeatureTargetBar) << L"\r\n";
+      << L"\r\ntarget_bar = " << flag(FeatureTargetBar)
+      << L"\r\nsmart_jump = " << flag(FeatureSmartJump) << L"\r\n";
     write_utf16(launcher_ini, l.str());
     std::wostringstream f;
     f << L"; Written by U9Cht.exe (the front page).\r\n[game]\r\ndir = " << s.game_dir << L"\r\n";

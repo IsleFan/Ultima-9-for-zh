@@ -32,7 +32,7 @@ constexpr COLORREF Background = RGB(27, 21, 16), Gold = RGB(226, 180, 90), Text 
 constexpr int Width = 900, Height = 818;
 
 enum Id {
-    None, BrowseGame, SearchGame, Hover, DelayMinus, DelayPlus, Wheel, Zoom, Movies, Status, Floating, TargetBar,
+    None, BrowseGame, SearchGame, Hover, DelayMinus, DelayPlus, Wheel, Zoom, Movies, Status, Floating, TargetBar, SmartJump,
     FontPick, FontDefault, LetterMinus, LetterPlus, LineMinus, LinePlus, ResPrev, ResNext, Start, Help, Report, Quit, Choice0, Choice1, Choice2,
     Keys, KeyTab, KeyAdd, KeyRemove, KeySave, KeyDefaults, KeyRevert, KeyBack
 };
@@ -262,12 +262,14 @@ void paint(HDC dc) {
     const auto on = [](uint32_t bit) { return (app.s.features & bit) != 0; };
     p.check(44, 314, L"游標停留顯示名稱", L"不必按住 X，停在物品上就顯示名稱", on(FeatureHoverNames), Hover, idle);
     p.stepper(626, 314, L"延遲", std::to_wstring(app.s.hover_delay_ms) + L" ms", DelayMinus, DelayPlus, idle && on(FeatureHoverNames));
-    p.check(44, 348, L"滾輪翻頁", L"日誌、法術書、書本", on(FeatureWheelPages), Wheel, idle);
-    p.check(44, 382, L"Ctrl＋滾輪縮放鏡頭", L"往上拉近，往下拉遠", on(FeatureWheelZoom), Zoom, idle);
-    p.check(44, 416, L"影片中文字幕", L"開場與劇情影片", on(FeatureMovieSubtitles), Movies, idle);
-    p.check(44, 450, L"體力／法力數值", L"在畫面下方的兩條橫條上顯示數字", on(FeatureStatusNumbers), Status, idle);
-    p.check(44, 484, L"傷害／法力飄字", L"扣血、回血與施法耗魔時跳出數字", on(FeatureFloatingNumbers), Floating, idle);
-    p.check(44, 518, L"敵人血條", L"鎖定或攻擊中的敵人顯示在畫面上方", on(FeatureTargetBar), TargetBar, idle);
+    // Eight rows, 30 apart (the first stays at 314 for its stepper).
+    p.check(44, 344, L"滾輪翻頁", L"日誌、法術書、書本", on(FeatureWheelPages), Wheel, idle);
+    p.check(44, 374, L"Ctrl＋滾輪縮放鏡頭", L"往上拉近，往下拉遠", on(FeatureWheelZoom), Zoom, idle);
+    p.check(44, 404, L"影片中文字幕", L"開場與劇情影片", on(FeatureMovieSubtitles), Movies, idle);
+    p.check(44, 434, L"體力／法力數值", L"在畫面下方的兩條橫條上顯示數字", on(FeatureStatusNumbers), Status, idle);
+    p.check(44, 464, L"傷害／法力飄字", L"扣血、回血與施法耗魔時跳出數字", on(FeatureFloatingNumbers), Floating, idle);
+    p.check(44, 494, L"敵人血條", L"鎖定或攻擊中的敵人顯示在畫面上方", on(FeatureTargetBar), TargetBar, idle);
+    p.check(44, 524, L"跳躍鍵自動攀爬", L"前面有可以爬的地方就攀爬，沒有才跳躍", on(FeatureSmartJump), SmartJump, idle);
 
     p.heading_line(560, L"畫面與字型");
     const fs::path font(app.s.font);
@@ -522,6 +524,7 @@ void act(Id id, int arg = 0) {
     case Status: toggle(FeatureStatusNumbers); break;
     case Floating: toggle(FeatureFloatingNumbers); break;
     case TargetBar: toggle(FeatureTargetBar); break;
+    case SmartJump: toggle(FeatureSmartJump); break;
     case DelayMinus: s.hover_delay_ms = std::max(MinHoverDelayMs, s.hover_delay_ms - 50); break;
     case DelayPlus: s.hover_delay_ms = std::min(MaxHoverDelayMs, s.hover_delay_ms + 50); break;
     case LetterMinus: if (s.letter_spacing) --s.letter_spacing; break;

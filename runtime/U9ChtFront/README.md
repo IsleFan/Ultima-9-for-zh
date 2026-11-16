@@ -10,7 +10,7 @@ puts the original files back.
 | --- | --- | --- |
 | 遊戲位置 | Folder holding `u9.exe`. Found automatically from the GOG registry entries, the Steam libraries (`libraryfolders.vdf`), uninstall entries and common GOG folders, or chosen by hand. When more than one install is found, 切換版本 buttons let the player choose. Checks the `u9.exe` hash (GOG or Steam release), `ddraw.dll` and the four static files. | `front.ini` `[game] dir` |
 | 中文化資料 | State of `data/` (the `build_localization.py` output) and its plan count. | — |
-| 強化功能 | Hover names (with the delay), wheel paging, Ctrl+wheel zoom, movie subtitles. | `u9cht.ini` `[features]` |
+| 強化功能 | Hover names (with the delay), wheel paging, Ctrl+wheel zoom, movie subtitles, status numbers, floating numbers, enemy bars, and 跳躍鍵自動攀爬 (the jump key climbs when the game finds something to climb; off by default; `docs/research/U9_JUMP_CLIMB.md`). | `u9cht.ini` `[features]` |
 | 畫面與字型 | Chinese font, journal letter and line spacing, resolution (keep, 800×600 or 1600×1200). | `u9cht.ini` `[font]` and `[journal]`; `front.ini` `[display]` |
 | Buttons | 開始遊戲, 按鍵設定, 說明 (`說明.txt`), 回報問題 (GitHub Issues), 結束. | — |
 | 按鍵設定 (its own page) | Key bindings for 97 game commands in six tabs, cheats included. | `<game>\U9CHT.kmp`; `Options.ini` `Current_Keymap` |

@@ -18,8 +18,9 @@ inline constexpr size_t PathCapacity = 1024;
 // Protocol 3: player-selectable enhancements ([features] in the settings INI, the front page's switches).
 inline constexpr uint32_t FeatureHoverNames = 1, FeatureWheelPages = 2, FeatureWheelZoom = 4,
                           FeatureMovieSubtitles = 8, FeatureInputProbe = 16, FeatureStatusNumbers = 32,
-                          FeatureFloatingNumbers = 64, FeatureTargetBar = 128;
-inline constexpr uint32_t AllFeatures = 255;
+                          FeatureFloatingNumbers = 64, FeatureTargetBar = 128,
+                          FeatureSmartJump = 256;   // the jump key climbs when the game finds something to climb
+inline constexpr uint32_t AllFeatures = 511;
 inline constexpr uint32_t DefaultFeatures = FeatureHoverNames | FeatureWheelPages | FeatureWheelZoom | FeatureMovieSubtitles |
                                             FeatureStatusNumbers | FeatureFloatingNumbers |
                                             FeatureTargetBar;

@@ -79,7 +79,8 @@ int main() {
         check(d.features == DefaultFeatures && d.hover_delay_ms == DefaultHoverDelayMs && d.letter_spacing == 2, "defaults");
         Settings s = d;
         s.game_dir = L"C:\\遊戲\\Ultima 9"; s.font = L"D:\\字型\\a.ttf"; s.letter_spacing = 4; s.line_spacing = 7;
-        s.features = FeatureWheelZoom | FeatureMovieSubtitles; s.hover_delay_ms = 400;
+        check(!(d.features & FeatureSmartJump), "smart jump is off by default");
+        s.features = FeatureWheelZoom | FeatureMovieSubtitles | FeatureSmartJump; s.hover_delay_ms = 400;
         save_settings(s, ini, front);
         const auto t = load_settings(ini, front);
         check(t.game_dir == s.game_dir && t.font == s.font && t.letter_spacing == 4 && t.line_spacing == 7 &&

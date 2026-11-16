@@ -16,6 +16,7 @@ Engine* engine = nullptr;
 namespace {
 void* ctor_gateway = nullptr;
 void* cast_gateway = nullptr;
+void* jump_gateway = nullptr;
 void* copy_gateway = nullptr;
 void* layout_after = reinterpret_cast<void*>(0x5C7BBA);
 void* bounds_after = reinterpret_cast<void*>(0x5C5F62);
@@ -1634,6 +1635,44 @@ uint32_t handle_object(uint32_t handle) noexcept {
     __try { const auto table = word(0x8515D0); return table && handle && handle < 0x100000 ? uint32_t(word(table+uintptr_t(handle)*12+8)) : 0; }
     __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
 }
+// FeatureSmartJump: the Avatar's jump routine 0x4193A0 (thiscall, one argument: the jump target). Before jumping,
+// the game's own climb routine (vtable +0x15C, 0x57EF00) is run on the same object. It probes the ground ahead with
+// the game's own limits and either starts a climb or returns having changed nothing; only a started climb writes
+// +0x146 (0x57F249). So:
+//   - +0x146 gets a sentinel and +0x148 (the action in progress) becomes 10, as the queue does for a real climb;
+//   - the failure callback at +0x628 is taken out for the call, so a climb that does not start stays silent;
+//   - a started climb ends the jump; otherwise the three fields are put back and the jump goes on as usual.
+// Not tried while +0x68E is set: the jump key then toggles something else (0x4193A3). POD only (SEH).
+int try_climb(uintptr_t avatar) noexcept {
+    __try {
+        if (*reinterpret_cast<const uint8_t*>(avatar+0x68E)) return 0;
+        const auto climb = word(word(avatar)+0x15C);
+        if (!climb) return 0;
+        auto& previous = *reinterpret_cast<uint16_t*>(avatar+0x146);
+        auto& action = *reinterpret_cast<uint16_t*>(avatar+0x148);
+        auto& failed = *reinterpret_cast<uintptr_t*>(avatar+0x628);
+        const uint16_t old_previous = previous, old_action = action;
+        const uintptr_t old_failed = failed;
+        previous = 0xFFFF; action = 10; failed = 0;
+        reinterpret_cast<void(__thiscall*)(uintptr_t)>(climb)(avatar);
+        failed = old_failed;
+        if (previous != 0xFFFF) return 1;   // the climb started
+        previous = old_previous; action = old_action;
+        return 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return -1; }
+}
+void __fastcall jump_hook(uintptr_t self, void*, uintptr_t target) {
+    {
+        // No runtime lock is held while the game's climb routine runs.
+        Guard guard;
+        if (guard.state && guard.state->smart_jump) {
+            const int climbed = try_climb(self);
+            if (climbed > 0) { ++guard.state->smart_climbs; return; }
+            if (climbed < 0) ++guard.state->smart_faults; else ++guard.state->smart_jumps;
+        }
+    }
+    reinterpret_cast<void(__thiscall*)(uintptr_t,uintptr_t)>(jump_gateway)(self,target);
+}
 uintptr_t __fastcall cast_hook(uintptr_t self, void*, uint32_t caster, uint32_t spell, uint32_t target,
                                uint32_t a4, uint32_t a5, uint32_t a6) {
     using Cast = uintptr_t(__thiscall*)(uintptr_t,uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,uint32_t);
@@ -2462,6 +2501,10 @@ void Engine::install(const Config& config, Logger& logger) {
     flip_gateway = prepare("pre_flip",0x597B00,flip_hook,{0x56,0x8B,0xF1,0x8A,0x86,9,0xC5,0x3F,0},{1,2,6});
     // Developer notices only: the Avatar's spell casts (see cast_hook).
     if (!cheat_bindings.empty()) cast_gateway = prepare("spell_cast",0x5ED950,cast_hook,{0x6A,0xFF,0x68,0x15,0x3E,0x73,0},{2,5});
+    // FeatureSmartJump: push esi; mov esi,ecx; mov al,[esi+0x68E] at the Avatar's jump routine.
+    smart_jump = render && (config.features & FeatureSmartJump) != 0;
+    if (smart_jump) jump_gateway = prepare("avatar_jump",0x4193A0,jump_hook,{0x56,0x8B,0xF1,0x8A,0x86,0x8E,0x06,0,0},{1,2,6});
+    log->event("smart_jump","\"enabled\":"+std::string(smart_jump?"true":"false"));
     wide_original = &WideCharToMultiByte;
     exit_original = &ExitProcess;
     hooks.prepare_pointer("wide_conversion",reinterpret_cast<uintptr_t*>(0x74010C),
@@ -2669,7 +2712,7 @@ void Engine::snapshot(const char* event) noexcept {
               ",\"leaks\":"+std::to_string(misc_leaks)+",\"draw_strips\":"+std::to_string(misc_draw_strips)+
               ",\"bounded\":"+std::to_string(misc_bounded)+",\"book_overwritten\":"+std::to_string(book_overwritten)+
               ",\"measures\":"+std::to_string(misc_measures)+",\"measure_faults\":"+std::to_string(misc_measure_faults)+
-              ",\"message_insets\":"+std::to_string(message_insets)+",\"cheat_presses\":"+std::to_string(cheat_presses)+",\"cheat_notices\":"+std::to_string(cheat_notices)+",\"notice_frames\":"+std::to_string(notice_frames)+",\"notice_glyph_misses\":"+std::to_string(notice_glyph_misses)+",\"misc_label_binds\":"+std::to_string(misc_label_binds)+",\"target_misses\":"+std::to_string(target_misses)+",\"target_lock_frames\":"+std::to_string(target_lock_frames)+",\"last_target_raw\":"+std::to_string(last_target_raw)+",\"death_unlocks\":"+std::to_string(death_unlocks)+",\"death_unlock_faults\":"+std::to_string(death_unlock_faults)+",\"combat_hits\":"+std::to_string(combat_hits)+",\"recent_hits\":"+[&]{ std::string r="["; for (const auto& x : recent_hits) if (x.max) r += (r.size()>1?",":"")+std::string("[")+std::to_string(x.record)+","+std::to_string(x.before)+","+std::to_string(x.after)+","+std::to_string(x.max)+","+std::to_string(x.object)+","+std::to_string(x.locked)+"]"; return r+"]"; }()+",\"combat_resyncs\":"+std::to_string(combat_resyncs)+",\"target_bar_frames\":"+std::to_string(target_bar_frames)+",\"target_frames\":"+std::to_string(target_frames)+",\"target_overflow\":"+std::to_string(target_overflow)+",\"targets_seen\":"+[&]{ std::string r="["; for (const auto& t : targets_seen) if (t.frames) r += (r.size()>1?",":"")+std::string("[")+std::to_string(t.handle)+","+std::to_string(t.lock)+","+std::to_string(t.type)+","+std::to_string(t.hp)+","+std::to_string(t.max)+","+std::to_string(t.min_hp)+","+std::to_string(t.frames)+"]"; return r+"]"; }()+",\"floaters\":"+std::to_string(floaters_spawned)+",\"floater_frames\":"+std::to_string(floater_frames)+",\"floater_misses\":"+std::to_string(floater_misses)+",\"status_frames\":"+std::to_string(status_frames)+",\"status_misses\":"+std::to_string(status_misses)+",\"status_unreadable\":"+std::to_string(status_unreadable)+",\"status_last\":["+std::to_string(status_last[0])+","+std::to_string(status_last[1])+","+std::to_string(status_last[2])+","+std::to_string(status_last[3])+","+std::to_string(status_last[4])+"],\"cast_calls\":"+std::to_string(cast_calls)+",\"recent_casts\":"+[&]{ std::string r="["; for (const auto& x : recent_casts) if (x.spell) r += (r.size()>1?",":"")+std::string("[")+std::to_string(x.caster)+","+std::to_string(x.avatar)+","+std::to_string(x.spell)+"]"; return r+"]"; }()+",\"spell_casts\":"+std::to_string(spell_casts)+",\"last_spell\":"+std::to_string(last_spell)+",\"small_em_glyphs\":"+std::to_string(small_em_glyphs)+",\"book_messages\":"+std::to_string(book_messages)+
+              ",\"message_insets\":"+std::to_string(message_insets)+",\"cheat_presses\":"+std::to_string(cheat_presses)+",\"cheat_notices\":"+std::to_string(cheat_notices)+",\"notice_frames\":"+std::to_string(notice_frames)+",\"notice_glyph_misses\":"+std::to_string(notice_glyph_misses)+",\"misc_label_binds\":"+std::to_string(misc_label_binds)+",\"target_misses\":"+std::to_string(target_misses)+",\"target_lock_frames\":"+std::to_string(target_lock_frames)+",\"last_target_raw\":"+std::to_string(last_target_raw)+",\"smart_climbs\":"+std::to_string(smart_climbs.load())+",\"smart_jumps\":"+std::to_string(smart_jumps.load())+",\"smart_faults\":"+std::to_string(smart_faults.load())+",\"death_unlocks\":"+std::to_string(death_unlocks)+",\"death_unlock_faults\":"+std::to_string(death_unlock_faults)+",\"combat_hits\":"+std::to_string(combat_hits)+",\"recent_hits\":"+[&]{ std::string r="["; for (const auto& x : recent_hits) if (x.max) r += (r.size()>1?",":"")+std::string("[")+std::to_string(x.record)+","+std::to_string(x.before)+","+std::to_string(x.after)+","+std::to_string(x.max)+","+std::to_string(x.object)+","+std::to_string(x.locked)+"]"; return r+"]"; }()+",\"combat_resyncs\":"+std::to_string(combat_resyncs)+",\"target_bar_frames\":"+std::to_string(target_bar_frames)+",\"target_frames\":"+std::to_string(target_frames)+",\"target_overflow\":"+std::to_string(target_overflow)+",\"targets_seen\":"+[&]{ std::string r="["; for (const auto& t : targets_seen) if (t.frames) r += (r.size()>1?",":"")+std::string("[")+std::to_string(t.handle)+","+std::to_string(t.lock)+","+std::to_string(t.type)+","+std::to_string(t.hp)+","+std::to_string(t.max)+","+std::to_string(t.min_hp)+","+std::to_string(t.frames)+"]"; return r+"]"; }()+",\"floaters\":"+std::to_string(floaters_spawned)+",\"floater_frames\":"+std::to_string(floater_frames)+",\"floater_misses\":"+std::to_string(floater_misses)+",\"status_frames\":"+std::to_string(status_frames)+",\"status_misses\":"+std::to_string(status_misses)+",\"status_unreadable\":"+std::to_string(status_unreadable)+",\"status_last\":["+std::to_string(status_last[0])+","+std::to_string(status_last[1])+","+std::to_string(status_last[2])+","+std::to_string(status_last[3])+","+std::to_string(status_last[4])+"],\"cast_calls\":"+std::to_string(cast_calls)+",\"recent_casts\":"+[&]{ std::string r="["; for (const auto& x : recent_casts) if (x.spell) r += (r.size()>1?",":"")+std::string("[")+std::to_string(x.caster)+","+std::to_string(x.avatar)+","+std::to_string(x.spell)+"]"; return r+"]"; }()+",\"spell_casts\":"+std::to_string(spell_casts)+",\"last_spell\":"+std::to_string(last_spell)+",\"small_em_glyphs\":"+std::to_string(small_em_glyphs)+",\"book_messages\":"+std::to_string(book_messages)+
               ",\"name_count_labels\":"+std::to_string(name_count_labels)+
               ",\"misc_message_strips\":"+std::to_string(misc_message_strips)+",\"shop_converts\":"+std::to_string(shop_converts)+
               ",\"shop_short\":"+std::to_string(shop_short)+",\"clock_rewrites\":"+std::to_string(clock_rewrites)+
