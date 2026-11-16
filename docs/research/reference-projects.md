@@ -6,6 +6,7 @@ Recorded 2026-10-28; batch completed 2026-10-29 (Asia/Taipei).
 | --- | --- | --- |
 | [theGreyWanderer-uc/tgwUltima](https://github.com/theGreyWanderer-uc/tgwUltima/tree/2b6ee659cb153254ea8e3d2787d601a6fa79f3d2) | `2b6ee659cb153254ea8e3d2787d601a6fa79f3d2` | TITAN 0.7.8, U9 archive/text format reference |
 | [Fenyx4/UltimaPatcher](https://github.com/Fenyx4/UltimaPatcher/tree/c5db7b77b93a3b99b27556c3e5d8654d1679ced5) | `c5db7b77b93a3b99b27556c3e5d8654d1679ced5` | Reference pin only; no patch downloaded or applied |
+| [theGreyWanderer-uc/tgwUltima9GL](https://github.com/theGreyWanderer-uc/tgwUltima9GL/tree/8c3affc91db2c66ecb197f68510ccd2814dbcb25) | `8c3affc91db2c66ecb197f68510ccd2814dbcb25` | U9GL 0.5.8, read-only reference for `u9.exe` addresses and original bugs; non-commercial copyleft licence, no code copied (see `U9GL_REFERENCE.md`) |
 
 Pins were obtained with `git ls-remote <repository-url> HEAD`. They describe this
 batch's reference versions, not an instruction to update to a future HEAD.
