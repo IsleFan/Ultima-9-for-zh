@@ -197,6 +197,17 @@ struct Engine {
     uint64_t journal_markers = 0, journal_marker_short = 0, journal_expansions = 0, journal_spans = 0, journal_day_headers = 0;
     uint64_t journal_width_overrides = 0, journal_breaks_dropped = 0, journal_spaces_kept = 0, journal_leading_applied = 0;
     uint32_t journal_letter = 0, journal_line = 0;
+    // Player spacing for bound text.flx text (speech, subtitles, dialogue choices); never item-name labels.
+    uint32_t dialogue_letter = 0, dialogue_line = 0;
+    uint64_t dialogue_leading_applied = 0, dialogue_leading_skipped = 0;
+    // Diagnostic: who calls the dialogue layout 0x5C7E50 with bound text, how often, and the last entry id
+    // (to find which path lays out the dialogue choices).
+    // chain: likely return addresses found on the stack above the call (first call only), to find the choice menu.
+    struct LayoutCaller { uintptr_t caller = 0; uint64_t calls = 0; uint32_t entry = 0; std::array<uintptr_t,8> chain{}; };
+    std::array<LayoutCaller,8> layout_callers{};
+    uint32_t dialogue_advance(uint32_t plan, uint32_t base) const noexcept {
+        return pack.plans[plan].is_name() ? base : base + dialogue_letter;
+    }
     uint32_t journal_advance(uint8_t previous, uint32_t base, uint32_t& lead) const noexcept;
     uint64_t journal_unknown_markers = 0, journal_stale = 0, journal_alloc_failures = 0;
     uint64_t texture_glyphs = 0, texture_pixels = 0, texture_faults = 0;
@@ -243,6 +254,11 @@ struct Engine {
     // Developer cheat notices (cheat_notice.h): bindings of the active keymap, the press waiting for the game to
     // act on it, and the line shown at the top of the screen until `notice_until`.
     std::vector<cheat::Binding> cheat_bindings;
+    // Keys bound to open_world_map in the active keymap (default ctrl+m). The map window closes on any key press,
+    // so the hover feature's synthetic X is held back while it is open (input_hooks::block_hover).
+    std::vector<cheat::Binding> map_bindings;
+    std::atomic<uint64_t> map_key_presses{0};
+    bool opens_map(UINT vk, UINT mods) noexcept;
     struct PendingCheat { int binding = -1; uint64_t tick = 0; int before = -1; } pending_cheat;
     std::wstring notice;
     uint64_t notice_until = 0, cheat_presses = 0, cheat_notices = 0, notice_frames = 0, notice_glyph_misses = 0;

@@ -5,7 +5,7 @@
 
 namespace u9cht {
 inline constexpr uint32_t ProtocolMagic = 0x31484355;
-inline constexpr uint32_t ProtocolVersion = 3;
+inline constexpr uint32_t ProtocolVersion = 4;
 inline constexpr uint32_t RuntimeVersion = 0x00020000;
 enum class Mode : uint32_t { Bootstrap, Observe, Render };
 enum class State : uint32_t { Empty, Initializing, Ready, Fail, Stopped };
@@ -54,18 +54,26 @@ struct Config {
     uint32_t journal_line_spacing = 0;
     uint32_t features = DefaultFeatures;
     uint32_t hover_delay_ms = DefaultHoverDelayMs;
+    // Protocol 4: spoken text, subtitles and dialogue choices ([dialogue] in the settings INI). Logical units.
+    uint32_t dialogue_letter_spacing = 0;
+    uint32_t dialogue_line_spacing = 0;
 };
 inline constexpr uint32_t MaxJournalLetterSpacing = 8;
 inline constexpr uint32_t MaxJournalLineSpacing = 16;
+// Dialogue lines are broken when the translation is built: at most 33 cells of 16 units (528) in a raster 595
+// units wide (translation/resource-capabilities.json). Two more units per character still fit: 33*18 = 594.
+inline constexpr uint32_t MaxDialogueLetterSpacing = 2;
+inline constexpr uint32_t MaxDialogueLineSpacing = 8;
 static_assert(sizeof(void*) == 4, "runtime ABI is x86 only");
 static_assert(sizeof(char16_t) == 2 && sizeof(wchar_t) == 2);
 static_assert(std::is_trivially_copyable_v<Config>);
-static_assert(sizeof(Config) == 8256);
+static_assert(sizeof(Config) == 8264);
 inline bool valid_protocol(const Config& c) {
     return c.magic == ProtocolMagic && c.size == sizeof(Config) &&
            c.protocol == ProtocolVersion && c.runtime_version == RuntimeVersion &&
            c.mode <= Mode::Render && (c.flags & ~ForceFailure) == 0 &&
            c.journal_letter_spacing <= MaxJournalLetterSpacing && c.journal_line_spacing <= MaxJournalLineSpacing &&
+           c.dialogue_letter_spacing <= MaxDialogueLetterSpacing && c.dialogue_line_spacing <= MaxDialogueLineSpacing &&
            (c.features & ~AllFeatures) == 0 && c.hover_delay_ms >= MinHoverDelayMs && c.hover_delay_ms <= MaxHoverDelayMs;
 }
 

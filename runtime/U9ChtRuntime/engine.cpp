@@ -34,6 +34,7 @@ void* flip_gateway = nullptr;
 void* draw_gateway = nullptr;
 void* measure_gateway = nullptr;
 void* flow_gateway = nullptr;
+void* dialogue_layout_gateway = nullptr;
 void* triangle_original = reinterpret_cast<void*>(0x589F50);
 decltype(&WideCharToMultiByte) wide_original = nullptr;
 decltype(&ExitProcess) exit_original = nullptr;
@@ -618,6 +619,65 @@ bool scan_misc_lead(uintptr_t text, uintptr_t end, uint32_t& length, bool& found
 // P10-1 M1: draw-string routine 0x5C5C00 (thiscall, text, end). Labels such as the options page (widget vtable
 // 0x742D18, text +0x24, draw 0x41F710) draw marked misctext copies here without a text flow. An unbounded call
 // strips the label's own buffer in place before the native loop reads it; bounded calls are only counted.
+// Dialogue line spacing (user authorization 2026-11-17; docs/research/U9_DIALOGUE_SPACING.md). Speech, subtitles
+// and dialogue choices are laid out by 0x5C7E50 (thiscall, 7 stack arguments, RET 0x1C). Argument 1 is an array of
+// text pointers and argument 2 their count (0x5C7EE0, 0x5C81D4); the choices are one call with one text per choice.
+// Inside it, 0x5C7870 advances each line by the font's height plus font record +8 (0x5C7CF4), the field the
+// journal's line spacing raises. When any of the texts is bound non-name text, that field is raised for the call
+// and restored after it; the raster bounds (0x5C5DA0) follow the laid-out line positions.
+uintptr_t __fastcall dialogue_layout_hook(uintptr_t self, void*, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4,
+                                          uintptr_t a5, uintptr_t a6, uintptr_t a7) {
+    Guard guard;
+    const auto fn = reinterpret_cast<uintptr_t(__thiscall*)(uintptr_t,uintptr_t,uintptr_t,uintptr_t,uintptr_t,uintptr_t,uintptr_t,uintptr_t)>(dialogue_layout_gateway);
+    std::array<int32_t,64> saved{}; uint32_t records = 0; uintptr_t table = 0; int32_t extra = 0;
+    if (guard.state && guard.state->render && guard.state->dialogue_line && a1 && a2) {
+        std::array<uintptr_t,32> texts{};
+        const auto count = uint32_t(std::min<uintptr_t>(a2,texts.size()));
+        if (copy_guarded(a1,reinterpret_cast<char*>(texts.data()),count*sizeof(uintptr_t))) {
+            Exclusive lock(guard.state->mutex);
+            Located m{};
+            for (uint32_t i = 0; i < count && !m.binding; ++i) if (texts[i]) {
+                m = guard.state->locate(texts[i]);
+                if (m.binding && guard.state->pack.plans[m.binding->plan].is_name()) m = Located{};
+            }
+            if (m.binding) {
+                const auto caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
+                for (auto& c : guard.state->layout_callers) if (!c.caller || c.caller == caller) {
+                    if (!c.caller) {
+                        // Read-only stack scan: a dword in game code right after a call instruction is taken as
+                        // a return address. Heuristic; for finding the menu code only.
+                        std::array<uintptr_t,256> stack{}; uint32_t found = 0;
+                        if (copy_guarded(reinterpret_cast<uintptr_t>(&a7)+sizeof a7,reinterpret_cast<char*>(stack.data()),sizeof stack))
+                            for (const auto v : stack) {
+                                if (found == c.chain.size()) break;
+                                if (v < 0x401006 || v >= 0x734000) continue;
+                                uint8_t b[6]{};   // the 6 bytes before v: b[0] = v-6 ... b[5] = v-1
+                                const bool call = copy_guarded(v-6,reinterpret_cast<char*>(b),6) &&
+                                                  (b[1] == 0xE8 || b[0] == 0xFF || b[3] == 0xFF || b[4] == 0xFF);
+                                if (call) c.chain[found++] = v;
+                            }
+                    }
+                    c.caller = caller; ++c.calls; c.entry = guard.state->pack.plans[m.binding->plan].entry; break;
+                }
+            }
+            if (m.binding && !guard.state->pack.plans[m.binding->plan].is_name()) {
+                table = word(0x1325A60); records = uint32_t(word(0x1325A64));
+                if (!table || records > saved.size()) { records = 0; ++guard.state->dialogue_leading_skipped; }
+                else extra = int32_t(guard.state->dialogue_line);
+            }
+        }
+    }
+    for (uint32_t i = 0; i < records; ++i) {
+        auto* field = reinterpret_cast<int32_t*>(table+i*12+8);
+        saved[i] = *field; *field += extra;
+    }
+    const auto result = fn(self,a1,a2,a3,a4,a5,a6,a7);
+    if (records) {
+        for (uint32_t i = 0; i < records; ++i) *reinterpret_cast<int32_t*>(table+i*12+8) = saved[i];
+        Exclusive lock(guard.state->mutex); ++guard.state->dialogue_leading_applied;
+    }
+    return result;
+}
 uintptr_t __fastcall draw_hook(uintptr_t self, void*, uintptr_t text, uintptr_t end) {
     Guard guard;
     const auto fn = reinterpret_cast<uintptr_t(__thiscall*)(uintptr_t,uintptr_t,uintptr_t)>(draw_gateway);
@@ -853,6 +913,10 @@ void Engine::poll_keymap() noexcept {
         for (const auto& keys : parsed.keys) bindings += keys.size();
         // Cheat notices follow the new bindings only when they were set up at start (glyphs warmed, hooks in place).
         size_t cheats = 0;
+        {
+            auto maps = cheat::command_bindings(text,"open_world_map");
+            Exclusive lock(mutex); map_bindings = std::move(maps);
+        }
         if (cheat_notices_on) {
             auto updated = cheat::parse_bindings(text);
             std::erase_if(updated,[](const cheat::Binding& b) { return !cheat::text_for(b.command); });
@@ -942,7 +1006,7 @@ extern "C" uintptr_t __cdecl dispatch(uint32_t stage, CpuFrame* f) noexcept {
                 const auto font = stage == 1 ? f->ecx : f->edx;
                 const auto record = stage == 1 ? f->esi : f->ecx;
                 const auto spacing = word(record+4);
-                const auto advance = e.pack.plans[m.binding->plan].advances[m.offset];
+                const auto advance = e.dialogue_advance(m.binding->plan,e.pack.plans[m.binding->plan].advances[m.offset]);
                 if (!logical_metric(spacing,advance)) e.fail(16);
                 else {
                     metric_header[0] = logical_metric(spacing,advance);
@@ -1058,11 +1122,13 @@ extern "C" uintptr_t __cdecl dispatch(uint32_t stage, CpuFrame* f) noexcept {
             }
             else if (e.render && e.pack.plans[plan].wide[m.offset] >= 128) {
                 const auto spacing = word(f->ecx+4);
-                const auto advance = e.pack.plans[plan].advances[m.offset];
+                const auto base = e.pack.plans[plan].advances[m.offset];
+                const auto advance = e.dialogue_advance(plan,base);
                 if ((s[3]&255) != 0x7F || !logical_metric(spacing,advance) || r->count >= r->placements.size()) e.fail(17);
                 else {
                     // The font in use, not the raster, decides color: labels sharing a raster stay independent.
-                    r->placements[r->count++] = {m.offset,int32_t(s[1]),int32_t(s[2]),r->runs.index(run),e.font_style(f->ecx).rgb};
+                    // Player letter spacing is split around the glyph, as in the journal.
+                    r->placements[r->count++] = {m.offset,int32_t(s[1])+int32_t((advance-base)/2),int32_t(s[2]),r->runs.index(run),e.font_style(f->ecx).rgb};
                     ++run->drawn;
                     ++e.stats[plan].unicode_draws;
                     metric_header[0] = logical_metric(spacing,advance);
@@ -1608,6 +1674,7 @@ int read_toggle(cheat::Kind kind) noexcept {
 void key_press(UINT vk, UINT mods) {
     if (!engine) return;
     if (vk == OpenKeyBindingsVk && mods == (cheat::ModCtrl | cheat::ModShift)) { engine->open_key_bindings(); return; }
+    if (engine->opens_map(vk,mods)) input_hooks::block_hover();
     engine->on_cheat_key(vk,mods);
 }
 constexpr uint64_t NoticeMs = 2500, ToggleWaitMs = 600;
@@ -1722,6 +1789,11 @@ void Engine::open_key_bindings() noexcept {
     ++key_page_requests;
     log->event("key_bindings_hotkey","\"front_page\":true,\"posted\":"+std::string(posted?"true":"false")+
                ",\"requests\":"+std::to_string(key_page_requests));
+}
+bool Engine::opens_map(UINT vk, UINT mods) noexcept {
+    Exclusive lock(mutex);
+    for (const auto& b : map_bindings) if (b.vk == vk && b.mods == mods) { ++map_key_presses; return true; }
+    return false;
 }
 void Engine::on_cheat_key(UINT vk, UINT mods) noexcept {
     Exclusive lock(mutex);
@@ -2320,6 +2392,8 @@ void Engine::install(const Config& config, Logger& logger) {
     require(config.journal_letter_spacing <= MaxJournalLetterSpacing && config.journal_line_spacing <= MaxJournalLineSpacing,
             "journal spacing outside supported range");
     journal_letter = config.journal_letter_spacing; journal_line = config.journal_line_spacing;
+    dialogue_letter = config.dialogue_letter_spacing; dialogue_line = config.dialogue_line_spacing;
+    log->event("dialogue_settings","\"letter_spacing\":"+std::to_string(dialogue_letter)+",\"line_spacing\":"+std::to_string(dialogue_line));
     log->event("journal_settings","\"letter_spacing\":"+std::to_string(journal_letter)+",\"line_spacing\":"+std::to_string(journal_line));
     const auto load_started = GetTickCount64();
     pack.load(config_path(config.allowlist_path), render);
@@ -2373,8 +2447,11 @@ void Engine::install(const Config& config, Logger& logger) {
                 };
                 const auto keymap = cheat::current_keymap(read_all(game / L"Options.ini"));
                 if (!keymap.empty() && keymap.find_first_of("/\\:") == std::string::npos) {
-                    cheat_bindings = cheat::parse_bindings(read_all(game / std::filesystem::path(keymap)));
+                    const auto keymap_text = read_all(game / std::filesystem::path(keymap));
+                    cheat_bindings = cheat::parse_bindings(keymap_text);
                     std::erase_if(cheat_bindings,[](const cheat::Binding& b) { return !cheat::text_for(b.command); });
+                    map_bindings = cheat::command_bindings(keymap_text,"open_world_map");
+                    log->event("map_bindings","\"count\":"+std::to_string(map_bindings.size()));
                 }
                 if (!cheat_bindings.empty()) {
                     std::wstring chars = cheat::all_notice_characters() + L"聖者施展法術#0123456789";
@@ -2514,6 +2591,8 @@ void Engine::install(const Config& config, Logger& logger) {
         name_destroy_gateway = prepare("name_destroy",0x41AE40,name_destroy_hook,{0x56,0x8B,0xF1,0x8B,0x46,0x6C},{1,2,3});
     }
     flow_gateway = prepare("text_flow_init",0x5C7620,flow_hook,{0x8B,0x44,0x24,0x08,0x53},{4,1});
+    // mov eax,0x1884 (then the stack probe call, left in place). Only when the player asked for dialogue line spacing.
+    if (render && dialogue_line) dialogue_layout_gateway = prepare("dialogue_layout",0x5C7E50,dialogue_layout_hook,{0xB8,0x84,0x18,0,0},{5});
     draw_gateway = prepare("draw_string",0x5C5C00,draw_hook,{0x8B,0x44,0x24,0x08,0x53},{4,1});
     measure_gateway = prepare("string_width",0x5C6240,measure_hook,{0x57,0x8B,0x7C,0x24,0x08,0x33,0xC0},{1,4,2});
     flip_gateway = prepare("pre_flip",0x597B00,flip_hook,{0x56,0x8B,0xF1,0x8A,0x86,9,0xC5,0x3F,0},{1,2,6});
@@ -2617,6 +2696,16 @@ void Engine::snapshot(const char* event) noexcept {
             ",\"gpu_ticks\":"+std::to_string(gpu_ticks)+",\"gpu_glyphs\":"+std::to_string(gpu.glyphs())+
             ",\"gpu_uploads\":"+std::to_string(gpu.uploads)+",\"gpu_resets\":"+std::to_string(gpu.resets)+
             ",\"gpu_restore_failures\":"+std::to_string(gpu.restore_failures)+
+            ",\"dialogue_leading_applied\":"+std::to_string(dialogue_leading_applied)+",\"dialogue_leading_skipped\":"+std::to_string(dialogue_leading_skipped)+
+            ",\"dialogue_layout_callers\":["+[&] {
+                std::string s;
+                for (const auto& c : layout_callers) if (c.caller)
+                {
+                    std::string chain;
+                    for (const auto v : c.chain) if (v) chain += (chain.empty()?"":",")+std::to_string(v);
+                    s += (s.empty()?"":",")+std::string("[")+std::to_string(c.caller)+","+std::to_string(c.calls)+","+std::to_string(c.entry)+",["+chain+"]]";
+                }
+                return s; }()+"]"+
             ",\"gpu_strip_frames\":"+std::to_string(gpu.strip_frames)+",\"gpu_masked_frames\":"+std::to_string(gpu.masked_frames)+",\"gpu_disabled\":"+std::string(gpu.disabled()?"true":"false")+
             ",\"gpu_last_status\":"+std::to_string(gpu.last_status)+",\"gpu_last_hresult\":"+std::to_string(gpu.last_hresult)+
             ",\"occluder_masks\":"+std::to_string(occluder_masks)+",\"occluder_rejects\":["+std::to_string(occluder_rejects[0])+","+std::to_string(occluder_rejects[1])+","+

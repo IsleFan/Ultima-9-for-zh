@@ -34,6 +34,10 @@ struct Options {
     void (*on_key)(UINT vk, UINT mods) = nullptr;
 };
 void configure(const Options& options);
+// The hover feature presses X for the player. Some game screens close on ANY key press (the world map window,
+// u9.exe 0x5D0800), so the synthetic X would close them. block_hover() stops the hover presses until the player's
+// next real key press or mouse button, which is also what closes such a screen. Game thread.
+void block_hover();
 bool any_enabled();
 
 extern PeekFn peek_original;

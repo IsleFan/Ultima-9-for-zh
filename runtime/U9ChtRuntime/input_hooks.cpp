@@ -27,7 +27,7 @@ std::vector<std::string> samples;
 
 // ---- feature counters ----
 std::atomic<long> wheel_pages{0}, wheel_zoom{0}, wheel_skipped_modifier{0}, hover_presses{0}, hover_releases{0},
-                  chars_suppressed{0}, board_overrides{0}, modifier_releases{0}, preempted_releases{0};
+                  chars_suppressed{0}, board_overrides{0}, modifier_releases{0}, preempted_releases{0}, hover_blocks{0}, win_keys_dropped{0};
 
 // ---- synthetic messages (game thread only) ----
 constexpr WORD Marker = 0xA901;      // repeat-count field of synthetic key messages
@@ -37,6 +37,12 @@ HWND game_window = nullptr;          // window that receives the game's mouse me
 POINT last_cursor{-1,-1};
 DWORD last_move = 0, last_repeat = 0;
 bool hover_active = false;
+bool hover_blocked = false;   // block_hover(); cleared by the next real key or button press
+// Diagnostic (docs/research/U9_WORLD_MAP_HOVER.md): every key and button message handed to the game during the
+// 4 s after the map key, to find what closes the map. Read-only; drained with the counters.
+DWORD map_watch_until = 0, map_watch_start = 0;
+std::vector<std::string> map_trace;
+std::mutex map_trace_lock;   // drain_fields runs on the logging thread
 constexpr DWORD RepeatMs = 100;      // mimic keyboard auto-repeat while the synthetic X is held (session 18)
 
 bool synthetic(const MSG& m) { return LOWORD(m.lParam) == Marker; }
@@ -153,6 +159,7 @@ void update_hover() {
     }
     if (!focused) seen_modifiers = 0;
     if (!focused || !inside || busy || down('X') || !modifiers_clear()) return;
+    if (hover_blocked) { ++hover_blocks; return; }
     if (now - last_move < options.hover_delay_ms) return;
     queue_key(game_window,'X',ScanX,false,false);
     hover_active = true; last_repeat = now; ++hover_presses;
@@ -162,8 +169,35 @@ bool transforming() { return options.wheel || options.zoom || options.hover || o
 bool in_filter(const MSG& m, UINT min, UINT max) { return (!min && !max) || (m.message >= min && m.message <= max); }
 
 // Rewrites a removed message for the features. Returns the message to hand to the game.
+void trace_after_map(const MSG& m) {
+    if (!map_watch_until) return;
+    const DWORD now = GetTickCount();
+    if (int32_t(now - map_watch_until) > 0) { map_watch_until = 0; return; }
+    const bool key = m.message >= WM_KEYFIRST && m.message <= WM_KEYLAST;
+    const bool button = m.message >= WM_LBUTTONDOWN && m.message <= WM_MBUTTONDBLCLK;
+    if (!key && !button) return;
+    std::lock_guard<std::mutex> lock(map_trace_lock);
+    if (map_trace.size() >= 24) return;
+    map_trace.push_back("[" + std::to_string(now - map_watch_start) + "," + std::to_string(m.message) + "," + std::to_string(m.wParam & 0xFF) +
+                        "," + std::to_string(synthetic(m) ? 1 : 0) + "," + std::to_string((m.lParam >> 30) & 1) + "," + std::to_string(hover_blocked ? 1 : 0) + "]");
+}
+// Windows keys and VK 0xFF never reach the game (docs/research/U9_WORLD_MAP_HOVER.md). The game's key name table
+// has neither, so no command can be bound to them; but screens that close on any key press (the world map) did
+// close on them. Key remappers send exactly these: releasing a Copilot key mapped to Ctrl produced LWin down,
+// 0xFF down/up, LWin up (front page log 2026-11-17). Windows still acts on the Windows key itself.
+bool hidden_key(const MSG& m) {
+    if (m.message != WM_KEYDOWN && m.message != WM_KEYUP && m.message != WM_SYSKEYDOWN && m.message != WM_SYSKEYUP) return false;
+    const auto vk = m.wParam & 0xFF;
+    return vk == VK_LWIN || vk == VK_RWIN || vk == 0xFF;
+}
 void transform(MSG& m) {
     track_modifiers(m);
+    trace_after_map(m);
+    if (hidden_key(m)) { m.message = WM_NULL; m.wParam = 0; m.lParam = 0; ++win_keys_dropped; return; }
+    // Before on_key: the press that opens the map sets the block again right below.
+    if (hover_blocked && !synthetic(m) &&
+        (((m.message == WM_KEYDOWN || m.message == WM_SYSKEYDOWN) && !(m.lParam & (1 << 30))) ||
+         m.message == WM_LBUTTONDOWN || m.message == WM_RBUTTONDOWN || m.message == WM_MBUTTONDOWN)) hover_blocked = false;
     if (options.on_key && (m.message == WM_KEYDOWN || m.message == WM_SYSKEYDOWN) && !synthetic(m) && !(m.lParam & (1 << 30))) {
         const UINT mods = (key_state_down(VK_CONTROL) ? 1U : 0U) | (key_state_down(VK_SHIFT) ? 2U : 0U) | (key_state_down(VK_MENU) ? 4U : 0U);
         options.on_key(UINT(m.wParam), mods);
@@ -217,6 +251,12 @@ std::string table(const char* key, std::atomic<long>* values) {
 }
 
 void configure(const Options& o) { options = o; }
+void block_hover() {
+    hover_blocked = true; release_hover(true);
+    map_watch_start = GetTickCount(); map_watch_until = map_watch_start + 4000;
+    std::lock_guard<std::mutex> lock(map_trace_lock);
+    if (map_trace.size() < 24) map_trace.push_back("\"map\"");
+}
 bool any_enabled() { return options.probe || transforming(); }
 
 BOOL WINAPI peek_hook(LPMSG msg, HWND hwnd, UINT min, UINT max, UINT remove) {
@@ -274,7 +314,14 @@ std::string drain_fields() {
     const auto count = [&](const char* key, std::atomic<long>& v) { if (const long n = v.exchange(0)) add("\"" + std::string(key) + "\":" + std::to_string(n)); };
     count("wheel_pages",wheel_pages); count("wheel_zoom",wheel_zoom); count("wheel_skipped_modifier",wheel_skipped_modifier);
     count("hover_presses",hover_presses); count("hover_releases",hover_releases);
-    count("chars_suppressed",chars_suppressed); count("modifier_releases",modifier_releases); count("preempted_releases",preempted_releases); count("board_overrides",board_overrides);
+    count("chars_suppressed",chars_suppressed); count("modifier_releases",modifier_releases); count("hover_blocks",hover_blocks); count("win_keys_dropped",win_keys_dropped); count("preempted_releases",preempted_releases); count("board_overrides",board_overrides);
+    {   // [ms after the map key, message, vk, synthetic, repeat, hover blocked]
+        std::lock_guard<std::mutex> lock(map_trace_lock);
+        std::string t;
+        for (const auto& x : map_trace) { t += t.empty() ? "" : ","; t += x; }
+        map_trace.clear();
+        if (!t.empty()) add("\"after_map\":[" + t + "]");
+    }
     if (options.probe) {
         count("peek_calls",peek_calls); count("get_calls",get_calls); count("keyboard_state_calls",board_calls);
         count("mouse_move",mouse_move); count("char",char_msgs);

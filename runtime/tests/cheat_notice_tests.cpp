@@ -32,6 +32,15 @@ int main() {
     }
     check(parse_bindings("[Cheat Commands]\nshift+ctrl+1=recharge_mana").size() == 1, "LF and no spaces");
     check(parse_bindings("").empty() && parse_bindings("[CHEAT COMMANDS]\n").empty(), "empty");
+    {   // one command's bindings in any section (the map key, for the hover block)
+        const char* text = "[INTERACTION COMMANDS]\r\nctrl+m = open_world_map\r\nj = open_journal\r\n"
+                           "[CHEAT COMMANDS]\r\nshift+ctrl+1 = fill_spellbook\r\n[OTHER]\r\nF9=Open_World_Map ; second key\r\ntab = open_world_map\r\n";
+        const auto maps = command_bindings(text,"open_world_map");
+        check(maps.size() == 2 && maps[0].vk == 'M' && maps[0].mods == ModCtrl && maps[1].vk == 0x78 && maps[1].mods == 0,
+              "map bindings from every section; unknown key names left out");
+        check(command_bindings(text,"no_such_command").empty(), "no binding of an unbound command");
+        check(parse_bindings(text).size() == 1 && parse_bindings(text,true).size() == 4, "cheat section only unless asked");
+    }
     check(current_keymap("[Controls]\r\nCurrent_Keymap=U9CHT-TEST.kmp\r\n") == "U9CHT-TEST.kmp", "current keymap");
     check(current_keymap("[Controls]\r\n").empty(), "no keymap");
 

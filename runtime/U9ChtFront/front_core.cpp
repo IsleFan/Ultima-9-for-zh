@@ -83,6 +83,15 @@ Settings load_settings(const fs::path& launcher_ini, const fs::path& front_ini) 
         uint32_t w = 0, h = 0;
         if (read_number(front_ini, L"display", L"width", w) && read_number(front_ini, L"display", L"height", h))
             for (const auto& r : Resolutions) if (r.width == w && r.height == h) { s.width = w; s.height = h; }
+        uint32_t windowed = 0;
+        if (read_number(front_ini, L"display", L"windowed", windowed)) s.windowed = windowed == 1;
+        // Values the front page itself copied out of dxcfg.ini; anything unexpected is dropped.
+        const auto plain = [](const std::wstring& v) {
+            return !v.empty() && v.size() <= 32 &&
+                   std::all_of(v.begin(), v.end(), [](wchar_t c) { return c < 128 && (iswalnum(c) || c == L'@' || c == L'_' || c == L'-' || c == L'.'); });
+        };
+        const auto presentation = read_ini(front_ini, L"display", L"saved_presentation"), display = read_ini(front_ini, L"display", L"saved_display");
+        if (plain(presentation)) { s.saved_presentation = presentation; if (plain(display)) s.saved_display = display; }
     }
     if (!fs::is_regular_file(launcher_ini, ec)) return s;
     const auto font = read_ini(launcher_ini, L"font", L"file");
@@ -90,6 +99,8 @@ Settings load_settings(const fs::path& launcher_ini, const fs::path& front_ini) 
     uint32_t v = 0;
     if (read_number(launcher_ini, L"journal", L"letter_spacing", v)) s.letter_spacing = std::min(v, MaxJournalLetterSpacing);
     if (read_number(launcher_ini, L"journal", L"line_spacing", v)) s.line_spacing = std::min(v, MaxJournalLineSpacing);
+    if (read_number(launcher_ini, L"dialogue", L"letter_spacing", v)) s.dialogue_letter = std::min(v, MaxDialogueLetterSpacing);
+    if (read_number(launcher_ini, L"dialogue", L"line_spacing", v)) s.dialogue_line = std::min(v, MaxDialogueLineSpacing);
     const std::pair<const wchar_t*, uint32_t> bits[] = {
         {L"hover_names", FeatureHoverNames}, {L"wheel_pages", FeatureWheelPages}, {L"wheel_zoom", FeatureWheelZoom},
         {L"movie_subtitles", FeatureMovieSubtitles}, {L"input_probe", FeatureInputProbe},
@@ -108,6 +119,7 @@ void save_settings(const Settings& s, const fs::path& launcher_ini, const fs::pa
     l << L"; Written by U9Cht.exe (the front page). Read by U9ChtLauncher.exe.\r\n";
     if (!s.font.empty()) l << L"[font]\r\nfile = " << s.font << L"\r\n";
     l << L"[journal]\r\nletter_spacing = " << s.letter_spacing << L"\r\nline_spacing = " << s.line_spacing << L"\r\n";
+    l << L"[dialogue]\r\nletter_spacing = " << s.dialogue_letter << L"\r\nline_spacing = " << s.dialogue_line << L"\r\n";
     l << L"[features]\r\nhover_names = " << flag(FeatureHoverNames) << L"\r\nhover_delay_ms = " << s.hover_delay_ms
       << L"\r\nwheel_pages = " << flag(FeatureWheelPages) << L"\r\nwheel_zoom = " << flag(FeatureWheelZoom)
       << L"\r\nmovie_subtitles = " << flag(FeatureMovieSubtitles) << L"\r\ninput_probe = " << flag(FeatureInputProbe)
@@ -118,7 +130,11 @@ void save_settings(const Settings& s, const fs::path& launcher_ini, const fs::pa
     write_utf16(launcher_ini, l.str());
     std::wostringstream f;
     f << L"; Written by U9Cht.exe (the front page).\r\n[game]\r\ndir = " << s.game_dir << L"\r\n";
-    f << L"[display]\r\nwidth = " << s.width << L"\r\nheight = " << s.height << L"\r\n";
+    f << L"[display]\r\nwidth = " << s.width << L"\r\nheight = " << s.height << L"\r\nwindowed = " << (s.windowed ? 1 : 0) << L"\r\n";
+    if (!s.saved_presentation.empty()) {
+        f << L"saved_presentation = " << s.saved_presentation << L"\r\n";
+        if (!s.saved_display.empty()) f << L"saved_display = " << s.saved_display << L"\r\n";
+    }
     write_utf16(front_ini, f.str());
 }
 
@@ -307,6 +323,39 @@ Result apply_resolution(const fs::path& game, Resolution r) {
     const auto new_wrapper = std::regex_replace(wrapper, display, "display=" + w + "x" + h, first);
     if (new_options != options && !write_bytes(game / L"Options.ini", new_options)) return {false, L"無法寫入 Options.ini。"};
     if (new_wrapper != wrapper && !write_bytes(game / L"dxcfg.ini", new_wrapper)) return {false, L"無法寫入 dxcfg.ini。"};
+    return {};
+}
+
+Result apply_presentation(const fs::path& game, Settings& s, uint32_t refresh) {
+    if (!s.windowed && s.saved_presentation.empty()) return {};   // nothing of ours to put back
+    std::string wrapper;
+    if (!read_bytes(game / L"dxcfg.ini", wrapper)) return {false, L"找不到 dxcfg.ini，無法設定視窗化。"};
+    const std::regex presentation("presentation=([A-Za-z0-9_]+)"), display("display=([A-Za-z0-9_@.x-]+)");
+    std::smatch p, d;
+    if (!std::regex_search(wrapper, p, presentation)) return {false, L"dxcfg.ini 裡找不到 presentation，沒有修改視窗設定。"};
+    const std::string now = p[1].str(), shown = std::regex_search(wrapper, d, display) ? d[1].str() : std::string();
+    const auto first = std::regex_constants::format_first_only;
+    const auto narrow = [](const std::wstring& v) { std::string out; for (const auto c : v) out.push_back(char(c)); return out; };   // ASCII by load_settings
+    std::string updated = wrapper;
+    if (s.windowed) {
+        if (now != "windowed") { s.saved_presentation.assign(now.begin(), now.end()); s.saved_display.assign(shown.begin(), shown.end()); }
+        updated = std::regex_replace(updated, presentation, "presentation=windowed", first);
+        // A window needs a size: display=desktop (the Steam release) would fill the screen.
+        if (!shown.empty() && !std::regex_match(shown, std::regex("\\d{1,5}x\\d{1,5}(@\\d{1,3})?"))) {
+            const Resolution r = s.width ? Resolution{s.width, s.height} : game_resolution(game);
+            if (!r.width || !r.height) return {false, L"讀不到遊戲的解析度，無法設定視窗大小。"};
+            updated = std::regex_replace(updated, display, "display=" + std::to_string(r.width) + "x" + std::to_string(r.height) +
+                                                           "@" + std::to_string(refresh ? refresh : 60), first);
+        }
+    } else {
+        // Only undo our own change: a player who chose a window in the wrapper's own tool keeps it.
+        if (now == "windowed") {
+            updated = std::regex_replace(updated, presentation, "presentation=" + narrow(s.saved_presentation), first);
+            if (!s.saved_display.empty()) updated = std::regex_replace(updated, display, "display=" + narrow(s.saved_display), first);
+        }
+        s.saved_presentation.clear(); s.saved_display.clear();
+    }
+    if (updated != wrapper && !write_bytes(game / L"dxcfg.ini", updated)) return {false, L"無法寫入 dxcfg.ini。"};
     return {};
 }
 

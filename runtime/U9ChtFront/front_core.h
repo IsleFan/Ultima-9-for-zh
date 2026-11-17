@@ -22,6 +22,11 @@ struct Settings {
     uint32_t features = 0;          // protocol.h Feature* bits
     uint32_t hover_delay_ms = 0;
     uint32_t width = 0, height = 0;  // front.ini [display]; 0 = keep the game's own setting
+    uint32_t dialogue_letter = 0, dialogue_line = 0;   // u9cht.ini [dialogue]
+    // front.ini [display]: run the game in a window. saved_* hold what dxcfg.ini said before the front page
+    // switched it to a window, so that clearing the box puts it back; empty = the front page changed nothing.
+    bool windowed = false;
+    std::wstring saved_presentation, saved_display;
 };
 struct Resolution { uint32_t width = 0, height = 0; };
 // The sizes the Chinese runtime draws at (engine.cpp: 20 px glyphs at 800x600, 40 px at 1600x1200). Any other
@@ -37,6 +42,10 @@ Resolution game_resolution(const fs::path& game);
 // of both files stays as it is. The change is persistent, like changing it in the game's own options.
 struct Result;
 Result apply_resolution(const fs::path& game, Resolution r);
+// dxcfg.ini presentation= (and display= when it names no size): a window when s.windowed, otherwise whatever it
+// was before the front page made it a window. `refresh` is used only when a display size has to be written.
+// Updates s.saved_*; the caller saves the settings. Every other byte of dxcfg.ini stays as it is.
+Result apply_presentation(const fs::path& game, Settings& s, uint32_t refresh);
 Settings default_settings();
 // Missing files or keys keep the defaults; out-of-range values are clamped.
 Settings load_settings(const fs::path& launcher_ini, const fs::path& front_ini);

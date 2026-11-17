@@ -48,6 +48,7 @@ std::vector<std::wstring> ini_list(const wchar_t* section, const std::filesystem
 std::map<std::wstring, std::wstring> read_settings(const std::filesystem::path& file) {
     static const std::map<std::wstring, std::vector<std::wstring>> known = {
         {L"font", {L"file"}}, {L"journal", {L"letter_spacing", L"line_spacing"}},
+        {L"dialogue", {L"letter_spacing", L"line_spacing"}},
         {L"features", {L"hover_names", L"hover_delay_ms", L"wheel_pages", L"wheel_zoom", L"movie_subtitles", L"input_probe", L"status_numbers", L"floating_numbers", L"target_bar", L"smart_jump"}}};
     need(std::filesystem::is_regular_file(file), "settings file not found");
     std::map<std::wstring, std::wstring> values;
@@ -215,6 +216,8 @@ int wmain(int argc, wchar_t** argv) {
             }
             number(L"journal.letter_spacing", MaxJournalLetterSpacing, config.journal_letter_spacing);
             number(L"journal.line_spacing", MaxJournalLineSpacing, config.journal_line_spacing);
+            number(L"dialogue.letter_spacing", MaxDialogueLetterSpacing, config.dialogue_letter_spacing);
+            number(L"dialogue.line_spacing", MaxDialogueLineSpacing, config.dialogue_line_spacing);
             if (settings.count(L"font.file")) {
                 require(!options.count(L"--font"), "font given both by --font and by the settings file");
                 options[L"--font"] = settings.at(L"font.file");

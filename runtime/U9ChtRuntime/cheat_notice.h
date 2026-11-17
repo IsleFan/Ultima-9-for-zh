@@ -44,17 +44,18 @@ inline uint32_t key_code(std::string_view name) {
     }
     return 0;
 }
-// The [CHEAT COMMANDS] bindings of a keymap text ("shift+ctrl+1 = fill_spellbook"). Comments start with ';'.
-inline std::vector<Binding> parse_bindings(std::string_view kmp) {
+// The [CHEAT COMMANDS] bindings of a keymap text ("shift+ctrl+1 = fill_spellbook"), or with `every_section` the
+// bindings of all sections. Comments start with ';'.
+inline std::vector<Binding> parse_bindings(std::string_view kmp, bool every_section = false) {
     std::vector<Binding> out;
-    bool inside = false;
+    bool inside = every_section;
     while (!kmp.empty()) {
         const auto end = kmp.find('\n');
         auto line = trim(kmp.substr(0,end));
         kmp = end == std::string_view::npos ? std::string_view{} : kmp.substr(end+1);
         if (const auto c = line.find(';'); c != std::string_view::npos) line = trim(line.substr(0,c));
         if (line.empty()) continue;
-        if (line.front() == '[') { inside = lower(line) == "[cheat commands]"; continue; }
+        if (line.front() == '[') { inside = every_section || lower(line) == "[cheat commands]"; continue; }
         const auto eq = line.find('=');
         if (!inside || eq == std::string_view::npos) continue;
         const auto keys = lower(trim(line.substr(0,eq)));
@@ -75,6 +76,12 @@ inline std::vector<Binding> parse_bindings(std::string_view kmp) {
         if (ok && b.vk) out.push_back(std::move(b));
     }
     return out;
+}
+// Every binding of one command, whatever its section. Keys key_code() does not know are left out.
+inline std::vector<Binding> command_bindings(std::string_view kmp, std::string_view command) {
+    auto all = parse_bindings(kmp,true);
+    std::erase_if(all,[&](const Binding& b) { return b.command != command; });
+    return all;
 }
 // Current_Keymap=<file> in Options.ini, or "" when absent.
 inline std::string current_keymap(std::string_view options) {

@@ -115,6 +115,61 @@ int main() {
         write(front, "[display]\r\nwidth = 1234\r\nheight = 5\r\n");
         check(load_settings(ini, front).width == 0, "unoffered size ignored");
     }
+    {   // Window or full screen: only presentation= (and a display= that names no size) change, and it can be undone
+        const auto game = root / L"win";
+        const std::string steam = "[general]\r\ndisplay=desktop\r\npresentation=application\r\naspect=enabled\r\n";
+        write(game / L"Options.ini", "[Video]\r\nGameScreenWidth=1600\r\nGameScreenHeight=1200\r\n");
+        write(game / L"dxcfg.ini", steam);
+        auto s = default_settings();
+        check(apply_presentation(game, s, 144).ok && read(game / L"dxcfg.ini") == steam && s.saved_presentation.empty(),
+              "box clear and nothing saved: untouched");
+        s.windowed = true;
+        check(apply_presentation(game, s, 144).ok, "window applied");
+        check(read(game / L"dxcfg.ini") == "[general]\r\ndisplay=1600x1200@144\r\npresentation=windowed\r\naspect=enabled\r\n",
+              "desktop display gets the game's size");
+        check(s.saved_presentation == L"application" && s.saved_display == L"desktop", "previous values remembered");
+        check(apply_presentation(game, s, 60).ok && s.saved_presentation == L"application" && s.saved_display == L"desktop" &&
+              read(game / L"dxcfg.ini") == "[general]\r\ndisplay=1600x1200@144\r\npresentation=windowed\r\naspect=enabled\r\n",
+              "applying again changes nothing and keeps what was remembered");
+        const auto ini = root / L"w-u9cht.ini", front = root / L"w-front.ini";
+        s.dialogue_letter = 2; s.dialogue_line = 5;
+        save_settings(s, ini, front);
+        auto t = load_settings(ini, front);
+        check(t.windowed && t.saved_presentation == L"application" && t.saved_display == L"desktop" &&
+              t.dialogue_letter == 2 && t.dialogue_line == 5, "window and dialogue settings survive a save");
+        t.windowed = false;
+        check(apply_presentation(game, t, 60).ok && read(game / L"dxcfg.ini") == steam && t.saved_presentation.empty() && t.saved_display.empty(),
+              "clearing the box restores the file byte for byte");
+        // A wrapper that already names a size keeps it; the resolution step owns that value.
+        write(game / L"dxcfg.ini", "[general]\r\ndisplay=800x600@120\r\npresentation=application\r\n");
+        auto u = default_settings(); u.windowed = true;
+        check(apply_presentation(game, u, 60).ok && read(game / L"dxcfg.ini") == "[general]\r\ndisplay=800x600@120\r\npresentation=windowed\r\n" &&
+              u.saved_display == L"800x600@120", "a sized display is left alone");
+        // The player's own window (not made by the front page) is not undone.
+        auto own = default_settings();
+        check(apply_presentation(game, own, 60).ok && read(game / L"dxcfg.ini") == "[general]\r\ndisplay=800x600@120\r\npresentation=windowed\r\n",
+              "a window the front page did not make stays");
+        // The chosen resolution wins over the game's current one; a missing size or key is refused untouched.
+        write(game / L"dxcfg.ini", steam);
+        auto chosen = default_settings(); chosen.windowed = true; chosen.width = 800; chosen.height = 600;
+        check(apply_presentation(game, chosen, 0).ok && read(game / L"dxcfg.ini").find("display=800x600@60") != std::string::npos,
+              "chosen resolution and default refresh");
+        write(game / L"dxcfg.ini", steam); write(game / L"Options.ini", "[Video]\r\n");
+        auto blind = default_settings(); blind.windowed = true;
+        check(!apply_presentation(game, blind, 60).ok && read(game / L"dxcfg.ini") == steam, "no known size: refused untouched");
+        write(game / L"dxcfg.ini", "[general]\r\ndisplay=desktop\r\n");
+        check(!apply_presentation(game, blind, 60).ok && read(game / L"dxcfg.ini") == "[general]\r\ndisplay=desktop\r\n",
+              "no presentation key: refused untouched");
+        check(!apply_presentation(root / L"nowhere", blind, 60).ok, "missing dxcfg.ini");
+        // Settings: defaults, clamping, and a tampered saved value is dropped.
+        const auto d = default_settings();
+        check(!d.windowed && d.dialogue_letter == 0 && d.dialogue_line == 0, "window and dialogue defaults");
+        write(ini, "[dialogue]\r\nletter_spacing = 9\r\nline_spacing = 99\r\n");
+        write(front, "[display]\r\nwindowed = 1\r\nsaved_presentation = a b\r\nsaved_display = desktop\r\n");
+        const auto c = load_settings(ini, front);
+        check(c.dialogue_letter == MaxDialogueLetterSpacing && c.dialogue_line == MaxDialogueLineSpacing, "dialogue values clamped");
+        check(c.windowed && c.saved_presentation.empty() && c.saved_display.empty(), "unexpected saved value dropped");
+    }
     {   // Install and recover on a synthetic game folder
         const auto game = root / L"game", data = root / L"data", backup = root / L"backup";
         write(game / L"static" / L"text.flx", "english text");

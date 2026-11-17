@@ -32,6 +32,7 @@
    python scripts/run_p8_0_session.py finish --session .local/p10-misc/session-NN
    ```
    - 下一個 session 編號從 **65** 開始。
+   - 較新的測試存檔：`.local/p10-misc/saves/2026-11-17-front`（使用者 2026-11-17 從首頁玩到的進度，最新是 `u9game13.sav`；雜湊在 `saves/2026-11-17-front.sha256`）。要從這裡開始，把 `--seed-saves` 換成這個資料夾。
    - `--load proxy`：用代理 `dsound.dll` 載入（和首頁相同）。不加就是舊的注入方式（啟動器的預設），留作對照。
    - 不加 `--keymap` 就用 `Options.ini` 目前指定的按鍵檔（見第 1 節「私人副本」），沒有作弊鍵。
    - 要關掉個別功能，就用另一個設定檔，加上 `[features]` 區段。範例：`.local/p10-misc/bisect/u9cht-newfeatures-off.ini`。
