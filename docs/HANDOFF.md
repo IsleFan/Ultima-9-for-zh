@@ -284,7 +284,7 @@
   多行對白確認有效；**對話選項之間的距離沒有變**，使用者決定先不處理。見 `docs/research/U9_DIALOGUE_SPACING.md`。
 - **世界地圖放開 Ctrl 就關**：原因是使用者電腦上的按鍵對應軟體（Copilot 鍵對應成 Ctrl），放開時送出 Win 鍵和鍵碼 0xFF，
   地圖對任何按鍵都會關。現在 Win 鍵與 0xFF 不交給遊戲（遊戲本來也綁不到它們）。使用者確認修好。見 `docs/research/U9_WORLD_MAP_HOVER.md`。
-- **點擊任意處跳過對白**（首頁開關，預設關，`FeatureClickSkip`）：hook 對白項目 `0x41C070`／`0x41C190` 與選項選單
+- **點擊任意處跳過對白**（首頁開關，預設開啟，`FeatureClickSkip`）：hook 對白項目 `0x41C070`／`0x41C190` 與選項選單
   `0x41C3D0`／`0x41C590`（使用者授權）。使用者確認四項正常。見 `docs/research/U9_CLICK_SKIP.md`。
 - 原版本來就有、可以寫進說明檔的操作：**按 Enter 跳下一句對白**；**按數字鍵 1～N 直接選對話選項**（後者是靜態分析，未實測）。
 

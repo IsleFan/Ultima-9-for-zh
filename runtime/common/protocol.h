@@ -24,7 +24,7 @@ inline constexpr uint32_t FeatureHoverNames = 1, FeatureWheelPages = 2, FeatureW
 inline constexpr uint32_t AllFeatures = 1023;
 inline constexpr uint32_t DefaultFeatures = FeatureHoverNames | FeatureWheelPages | FeatureWheelZoom | FeatureMovieSubtitles |
                                             FeatureStatusNumbers | FeatureFloatingNumbers |
-                                            FeatureTargetBar;
+                                            FeatureTargetBar | FeatureClickSkip;
 inline constexpr uint32_t MinHoverDelayMs = 100, MaxHoverDelayMs = 2000, DefaultHoverDelayMs = 250;
 // In-game hotkey Ctrl+Shift+K (2026-11-15): the runtime posts OpenKeyBindingsMessage (RegisterWindowMessageW) to the
 // front page's window, with the game's window in wParam; the front page opens its key bindings page. The game itself
