@@ -32,6 +32,9 @@ struct Options {
     // Called on the game thread for each real (non-synthetic, non-repeat) key press, before the game sees it.
     // mods: cheat_notice.h ModCtrl|ModShift|ModAlt. Used for the developer cheat notices.
     void (*on_key)(UINT vk, UINT mods) = nullptr;
+    // FeatureClickSkip: asked on the game thread for each real left button press. True = the press (with its
+    // release and the polled button state until then) is kept from the game; the runtime skips the line instead.
+    bool (*click_skip)() = nullptr;
 };
 void configure(const Options& options);
 // The hover feature presses X for the player. Some game screens close on ANY key press (the world map window,

@@ -19,8 +19,9 @@ inline constexpr size_t PathCapacity = 1024;
 inline constexpr uint32_t FeatureHoverNames = 1, FeatureWheelPages = 2, FeatureWheelZoom = 4,
                           FeatureMovieSubtitles = 8, FeatureInputProbe = 16, FeatureStatusNumbers = 32,
                           FeatureFloatingNumbers = 64, FeatureTargetBar = 128,
-                          FeatureSmartJump = 256;   // the jump key climbs when the game finds something to climb
-inline constexpr uint32_t AllFeatures = 511;
+                          FeatureSmartJump = 256,   // the jump key climbs when the game finds something to climb
+                          FeatureClickSkip = 512;   // in a conversation, a click anywhere skips the spoken line
+inline constexpr uint32_t AllFeatures = 1023;
 inline constexpr uint32_t DefaultFeatures = FeatureHoverNames | FeatureWheelPages | FeatureWheelZoom | FeatureMovieSubtitles |
                                             FeatureStatusNumbers | FeatureFloatingNumbers |
                                             FeatureTargetBar;

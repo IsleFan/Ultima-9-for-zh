@@ -27,7 +27,7 @@ std::vector<std::string> samples;
 
 // ---- feature counters ----
 std::atomic<long> wheel_pages{0}, wheel_zoom{0}, wheel_skipped_modifier{0}, hover_presses{0}, hover_releases{0},
-                  chars_suppressed{0}, board_overrides{0}, modifier_releases{0}, preempted_releases{0}, hover_blocks{0}, win_keys_dropped{0};
+                  chars_suppressed{0}, board_overrides{0}, modifier_releases{0}, preempted_releases{0}, hover_blocks{0}, win_keys_dropped{0}, clicks_taken{0};
 
 // ---- synthetic messages (game thread only) ----
 constexpr WORD Marker = 0xA901;      // repeat-count field of synthetic key messages
@@ -38,6 +38,7 @@ POINT last_cursor{-1,-1};
 DWORD last_move = 0, last_repeat = 0;
 bool hover_active = false;
 bool hover_blocked = false;   // block_hover(); cleared by the next real key or button press
+bool left_taken = false;      // a left press went to click_skip; its release and button state follow
 // Diagnostic (docs/research/U9_WORLD_MAP_HOVER.md): every key and button message handed to the game during the
 // 4 s after the map key, to find what closes the map. Read-only; drained with the counters.
 DWORD map_watch_until = 0, map_watch_start = 0;
@@ -165,7 +166,7 @@ void update_hover() {
     hover_active = true; last_repeat = now; ++hover_presses;
 }
 
-bool transforming() { return options.wheel || options.zoom || options.hover || options.on_key; }
+bool transforming() { return options.wheel || options.zoom || options.hover || options.on_key || options.click_skip; }
 bool in_filter(const MSG& m, UINT min, UINT max) { return (!min && !max) || (m.message >= min && m.message <= max); }
 
 // Rewrites a removed message for the features. Returns the message to hand to the game.
@@ -194,6 +195,12 @@ void transform(MSG& m) {
     track_modifiers(m);
     trace_after_map(m);
     if (hidden_key(m)) { m.message = WM_NULL; m.wParam = 0; m.lParam = 0; ++win_keys_dropped; return; }
+    if (options.click_skip && !synthetic(m)) {
+        if ((m.message == WM_LBUTTONDOWN || m.message == WM_LBUTTONDBLCLK) && options.click_skip()) {
+            left_taken = true; m.message = WM_NULL; m.wParam = 0; m.lParam = 0; ++clicks_taken; return;
+        }
+        if (m.message == WM_LBUTTONUP && left_taken) { left_taken = false; m.message = WM_NULL; m.wParam = 0; m.lParam = 0; return; }
+    }
     // Before on_key: the press that opens the map sets the block again right below.
     if (hover_blocked && !synthetic(m) &&
         (((m.message == WM_KEYDOWN || m.message == WM_SYSKEYDOWN) && !(m.lParam & (1 << 30))) ||
@@ -291,12 +298,14 @@ BOOL WINAPI get_hook(LPMSG msg, HWND hwnd, UINT min, UINT max) {
     return got;
 }
 SHORT WINAPI async_hook(int vk) {
-    const SHORT r = async_original(vk);
+    SHORT r = async_original(vk);
+    if (left_taken && vk == VK_LBUTTON) r = SHORT(r & ~0x8001);
     if (options.probe && vk >= 0 && vk < 256) { ++async_calls[vk]; if (r & 0x8000) ++async_down[vk]; }
     return r;
 }
 SHORT WINAPI state_hook(int vk) {
-    const SHORT r = state_original(vk);
+    SHORT r = state_original(vk);
+    if (left_taken && vk == VK_LBUTTON) r = SHORT(r & ~0x8000);
     if (options.probe && vk >= 0 && vk < 256) ++state_calls[vk];
     return r;
 }
@@ -305,6 +314,7 @@ BOOL WINAPI board_hook(PBYTE keys) {
     const BOOL ok = board_original(keys);
     // The synthetic hold also shows in the polled key-state array (HYPOTHESIS: the game may poll X here).
     if (ok && keys && hover_active) { keys['X'] |= 0x80; ++board_overrides; }
+    if (ok && keys && left_taken) keys[VK_LBUTTON] &= 0x7F;
     return ok;
 }
 
@@ -314,7 +324,7 @@ std::string drain_fields() {
     const auto count = [&](const char* key, std::atomic<long>& v) { if (const long n = v.exchange(0)) add("\"" + std::string(key) + "\":" + std::to_string(n)); };
     count("wheel_pages",wheel_pages); count("wheel_zoom",wheel_zoom); count("wheel_skipped_modifier",wheel_skipped_modifier);
     count("hover_presses",hover_presses); count("hover_releases",hover_releases);
-    count("chars_suppressed",chars_suppressed); count("modifier_releases",modifier_releases); count("hover_blocks",hover_blocks); count("win_keys_dropped",win_keys_dropped); count("preempted_releases",preempted_releases); count("board_overrides",board_overrides);
+    count("chars_suppressed",chars_suppressed); count("modifier_releases",modifier_releases); count("hover_blocks",hover_blocks); count("win_keys_dropped",win_keys_dropped); count("clicks_taken",clicks_taken); count("preempted_releases",preempted_releases); count("board_overrides",board_overrides);
     {   // [ms after the map key, message, vk, synthetic, repeat, hover blocked]
         std::lock_guard<std::mutex> lock(map_trace_lock);
         std::string t;

@@ -133,10 +133,12 @@ int main() {
               "applying again changes nothing and keeps what was remembered");
         const auto ini = root / L"w-u9cht.ini", front = root / L"w-front.ini";
         s.dialogue_letter = 2; s.dialogue_line = 5;
+        s.features |= FeatureClickSkip;
         save_settings(s, ini, front);
         auto t = load_settings(ini, front);
         check(t.windowed && t.saved_presentation == L"application" && t.saved_display == L"desktop" &&
               t.dialogue_letter == 2 && t.dialogue_line == 5, "window and dialogue settings survive a save");
+        check((t.features & FeatureClickSkip) != 0 && (default_settings().features & FeatureClickSkip) == 0, "click skip saved; off by default");
         t.windowed = false;
         check(apply_presentation(game, t, 60).ok && read(game / L"dxcfg.ini") == steam && t.saved_presentation.empty() && t.saved_display.empty(),
               "clearing the box restores the file byte for byte");

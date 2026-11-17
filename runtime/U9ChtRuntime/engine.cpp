@@ -35,6 +35,10 @@ void* draw_gateway = nullptr;
 void* measure_gateway = nullptr;
 void* flow_gateway = nullptr;
 void* dialogue_layout_gateway = nullptr;
+void* line_ctor_gateway = nullptr;
+void* line_dtor_gateway = nullptr;
+void* menu_ctor_gateway = nullptr;
+void* menu_dtor_gateway = nullptr;
 void* triangle_original = reinterpret_cast<void*>(0x589F50);
 decltype(&WideCharToMultiByte) wide_original = nullptr;
 decltype(&ExitProcess) exit_original = nullptr;
@@ -788,6 +792,62 @@ bool avatar_dead_locked(uintptr_t& manager) noexcept {
         return *reinterpret_cast<const uint16_t*>(records+uintptr_t(type)*0x13C+0x34) == 0;
     } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
 }
+// FeatureClickSkip. A spoken line of a conversation is an item built by 0x41C070 (thiscall, 10 stack arguments,
+// RET 0x28; called only by the conversation code at 0x6179FD and 0x6198B1; vtable 0x742490) and destroyed by
+// 0x41C190. Its mouse method (vtable slot 2, 0x41BEF0) takes a button-down event (type 2) as "next page": the next
+// page of the line, or the line closes after its last (vtable +0x4C). A click on the text does exactly that.
+// The choice menu (0x41C3D0, 7 arguments, RET 0x1C; destructor 0x41C590) takes clicks for itself: no skip while one
+// lives.
+constexpr uintptr_t TalkLineVtable = 0x742490, TalkLineMouse = 0x41BEF0;
+constexpr uint64_t SkipAfterMs = 300;   // a click right as the line appears (say, the one that chose it) does not skip
+uintptr_t __fastcall line_ctor_hook(uintptr_t self, void*, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5,
+                                    uintptr_t a6, uintptr_t a7, uintptr_t a8, uintptr_t a9, uintptr_t a10) {
+    Guard guard;
+    const auto caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
+    using Fn = uintptr_t(__thiscall*)(uintptr_t,uintptr_t,uintptr_t,uintptr_t,uintptr_t,uintptr_t,uintptr_t,uintptr_t,uintptr_t,uintptr_t,uintptr_t);
+    const auto result = reinterpret_cast<Fn>(line_ctor_gateway)(self,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10);
+    if (guard.state) {
+        auto& e = *guard.state; Exclusive lock(e.mutex);
+        for (auto& c : e.subtitle_creators) if (!c.caller || c.caller == caller) { c.caller = caller; ++c.count; break; }
+        e.talk_line = self; e.talk_line_born = GetTickCount64(); e.skip_pending = false;
+    }
+    return result;
+}
+void __fastcall line_dtor_hook(uintptr_t self, void*) {
+    Guard guard;
+    if (guard.state) {
+        auto& e = *guard.state; Exclusive lock(e.mutex);
+        if (e.talk_line == self) { e.talk_line = 0; e.skip_pending = false; }
+    }
+    reinterpret_cast<void(__thiscall*)(uintptr_t)>(line_dtor_gateway)(self);
+}
+uintptr_t __fastcall menu_ctor_hook(uintptr_t self, void*, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5,
+                                    uintptr_t a6, uintptr_t a7) {
+    Guard guard;
+    using Fn = uintptr_t(__thiscall*)(uintptr_t,uintptr_t,uintptr_t,uintptr_t,uintptr_t,uintptr_t,uintptr_t,uintptr_t);
+    const auto result = reinterpret_cast<Fn>(menu_ctor_gateway)(self,a1,a2,a3,a4,a5,a6,a7);
+    if (guard.state) {
+        auto& e = *guard.state; Exclusive lock(e.mutex);
+        for (auto& m : e.choice_menus) if (!m) { m = self; break; }
+    }
+    return result;
+}
+void __fastcall menu_dtor_hook(uintptr_t self, void*) {
+    Guard guard;
+    if (guard.state) {
+        auto& e = *guard.state; Exclusive lock(e.mutex);
+        for (auto& m : e.choice_menus) if (m == self) m = 0;
+    }
+    reinterpret_cast<void(__thiscall*)(uintptr_t)>(menu_dtor_gateway)(self);
+}
+bool advance_line(uintptr_t line) noexcept {
+    __try {
+        if (*reinterpret_cast<const uintptr_t*>(line) != TalkLineVtable) return false;
+        uint32_t event[8]{2};   // button down
+        reinterpret_cast<uint32_t(__thiscall*)(uintptr_t,void*)>(TalkLineMouse)(line,event);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
 bool clear_target_lock(uintptr_t manager) noexcept {
     __try { reinterpret_cast<void(__thiscall*)(uintptr_t,uint32_t)>(0x4F90C0)(manager,0); return true; }
     __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
@@ -936,6 +996,16 @@ uintptr_t __fastcall flip_hook(uintptr_t self, void*) {
     if (guard.state) { guard.state->poll_keymap(); guard.state->probe_movement(); }
     // Outside `mutex`: the clear routine frees the target marker, which re-enters this runtime through the free and
     // destroy hooks; holding the lock here deadlocked the game on death (session-55).
+    // FeatureClickSkip: outside `mutex` too, since closing the line destroys it through the destructor hook.
+    if (guard.state && guard.state->click_skip) {
+        uintptr_t target = 0;
+        { Exclusive lock(guard.state->mutex); if (guard.state->skip_pending) target = guard.state->talk_line; guard.state->skip_pending = false; }
+        if (target) {
+            const bool done = advance_line(target);
+            Exclusive lock(guard.state->mutex);
+            if (done) ++guard.state->skips_done; else ++guard.state->skip_faults;
+        }
+    }
     if (uintptr_t manager = 0; guard.state && avatar_dead_locked(manager)) {
         const bool cleared = clear_target_lock(manager);
         Exclusive lock(guard.state->mutex);
@@ -1671,6 +1741,7 @@ int read_toggle(cheat::Kind kind) noexcept {
 }
 // Every real key press (input_hooks on_key): the key bindings hotkey, then the cheat notices (no-op without bindings).
 // The key still reaches the game, which binds nothing to Ctrl+Shift+K.
+bool click_skip_request() { return engine && engine->request_skip(); }
 void key_press(UINT vk, UINT mods) {
     if (!engine) return;
     if (vk == OpenKeyBindingsVk && mods == (cheat::ModCtrl | cheat::ModShift)) { engine->open_key_bindings(); return; }
@@ -1789,6 +1860,14 @@ void Engine::open_key_bindings() noexcept {
     ++key_page_requests;
     log->event("key_bindings_hotkey","\"front_page\":true,\"posted\":"+std::string(posted?"true":"false")+
                ",\"requests\":"+std::to_string(key_page_requests));
+}
+bool Engine::request_skip() noexcept {
+    Exclusive lock(mutex);
+    if (!click_skip || !talk_line) return false;
+    for (const auto m : choice_menus) if (m) { ++skips_menu; return false; }
+    if (GetTickCount64() - talk_line_born < SkipAfterMs) { ++skips_too_early; return false; }
+    skip_pending = true; ++skips_requested;
+    return true;
 }
 bool Engine::opens_map(UINT vk, UINT mods) noexcept {
     Exclusive lock(mutex);
@@ -2475,6 +2554,9 @@ void Engine::install(const Config& config, Logger& logger) {
                 if (keymap_live) { keymap_game = game; keymap_watch.start(keymap_stamp()); }
                 log->event("keymap_live_watch","\"enabled\":"+std::string(keymap_live?"true":"false")+",\"keymap\":\""+keymap_name+"\"");
             }
+            click_skip = render && (config.features & FeatureClickSkip) != 0;
+            if (click_skip) o.click_skip = click_skip_request;
+            log->event("click_skip","\"enabled\":"+std::string(click_skip?"true":"false"));
             input_hooks::configure(o);
             // Status numbers: digits and '/' at both screen sizes, proportional (not CJK cells).
             if (render && (config.features & FeatureStatusNumbers)) {
@@ -2592,6 +2674,13 @@ void Engine::install(const Config& config, Logger& logger) {
     }
     flow_gateway = prepare("text_flow_init",0x5C7620,flow_hook,{0x8B,0x44,0x24,0x08,0x53},{4,1});
     // mov eax,0x1884 (then the stack probe call, left in place). Only when the player asked for dialogue line spacing.
+    // FeatureClickSkip: each of the four starts with push -1; push <its unwind handler>.
+    if (render && (config.features & FeatureClickSkip)) {
+        line_ctor_gateway = prepare("talk_line_ctor",0x41C070,line_ctor_hook,{0x6A,0xFF,0x68,0xB6,0x8A,0x72,0},{2,5});
+        line_dtor_gateway = prepare("talk_line_dtor",0x41C190,line_dtor_hook,{0x6A,0xFF,0x68,0xDE,0x8A,0x72,0},{2,5});
+        menu_ctor_gateway = prepare("choice_menu_ctor",0x41C3D0,menu_ctor_hook,{0x6A,0xFF,0x68,0x03,0x8B,0x72,0},{2,5});
+        menu_dtor_gateway = prepare("choice_menu_dtor",0x41C590,menu_dtor_hook,{0x6A,0xFF,0x68,0x18,0x8B,0x72,0},{2,5});
+    }
     if (render && dialogue_line) dialogue_layout_gateway = prepare("dialogue_layout",0x5C7E50,dialogue_layout_hook,{0xB8,0x84,0x18,0,0},{5});
     draw_gateway = prepare("draw_string",0x5C5C00,draw_hook,{0x8B,0x44,0x24,0x08,0x53},{4,1});
     measure_gateway = prepare("string_width",0x5C6240,measure_hook,{0x57,0x8B,0x7C,0x24,0x08,0x33,0xC0},{1,4,2});
@@ -2696,6 +2785,14 @@ void Engine::snapshot(const char* event) noexcept {
             ",\"gpu_ticks\":"+std::to_string(gpu_ticks)+",\"gpu_glyphs\":"+std::to_string(gpu.glyphs())+
             ",\"gpu_uploads\":"+std::to_string(gpu.uploads)+",\"gpu_resets\":"+std::to_string(gpu.resets)+
             ",\"gpu_restore_failures\":"+std::to_string(gpu.restore_failures)+
+            ",\"skips_requested\":"+std::to_string(skips_requested)+",\"skips_done\":"+std::to_string(skips_done)+
+            ",\"skip_faults\":"+std::to_string(skip_faults)+",\"skips_too_early\":"+std::to_string(skips_too_early)+
+            ",\"skips_menu\":"+std::to_string(skips_menu)+
+            ",\"subtitle_creators\":["+[&] {
+                std::string s;
+                for (const auto& c : subtitle_creators) if (c.caller)
+                    s += (s.empty()?"":",")+std::string("[")+std::to_string(c.caller)+","+std::to_string(c.count)+"]";
+                return s; }()+"]"+
             ",\"dialogue_leading_applied\":"+std::to_string(dialogue_leading_applied)+",\"dialogue_leading_skipped\":"+std::to_string(dialogue_leading_skipped)+
             ",\"dialogue_layout_callers\":["+[&] {
                 std::string s;

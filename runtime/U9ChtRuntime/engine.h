@@ -259,6 +259,16 @@ struct Engine {
     std::vector<cheat::Binding> map_bindings;
     std::atomic<uint64_t> map_key_presses{0};
     bool opens_map(UINT vk, UINT mods) noexcept;
+    // FeatureClickSkip (user authorization 2026-11-18; docs/research/U9_CLICK_SKIP.md): the conversation's spoken
+    // line (0x41C070 .. destructor 0x41C190) and the live choice menus (0x41C3D0 .. destructor 0x41C590).
+    bool click_skip = false, skip_pending = false;
+    uintptr_t talk_line = 0;
+    uint64_t talk_line_born = 0;
+    std::array<uintptr_t,4> choice_menus{};
+    uint64_t skips_requested = 0, skips_done = 0, skip_faults = 0, skips_too_early = 0, skips_menu = 0;
+    struct SubtitleCreator { uintptr_t caller = 0; uint64_t count = 0; };
+    std::array<SubtitleCreator,8> subtitle_creators{};
+    bool request_skip() noexcept;   // game thread, from input_hooks
     struct PendingCheat { int binding = -1; uint64_t tick = 0; int before = -1; } pending_cheat;
     std::wstring notice;
     uint64_t notice_until = 0, cheat_presses = 0, cheat_notices = 0, notice_frames = 0, notice_glyph_misses = 0;
