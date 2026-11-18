@@ -40,7 +40,7 @@ The Steam release ships `dxcfg.ini` with `display=desktop`, which scales the gam
 
 A release ships `data/patches/<name>.u9cp` instead of `data/static/<name>` (the built FLX hold the game's English
 text). `prepare_static` (called by `install`) builds each missing or wrong file from the player's original, taken
-from the game folder or, while an install is in place, from `backup\`, and checks it against the manifest. See
+from the game folder or, while an install is in place, from `backup/`, and checks it against the manifest. See
 `docs/release/PATCH_FORMAT.md`.
 
 ## Key bindings page
