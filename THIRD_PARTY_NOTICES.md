@@ -31,3 +31,11 @@ The package includes `LICENSE.txt`; source reference tag 1.3.23 resolves to
 The package is deprecated upstream; using its pinned applier here reproduces
 the patcher's behavior rather than upgrading an experimental protocol client.
 The small Python metadata inspectors are project-written and are not appliers.
+
+## Shipped in releases
+
+The release's default Chinese font is **jf open huninn 2.1** (jf open 粉圓) by justfont, under the SIL Open Font
+License 1.1; its Hanzi derive from Kosugi Maru (Apache-2.0). The license text is shipped as
+`fonts/jf-openhuninn-LICENSE.txt` (kept in the repository as `release/jf-openhuninn-LICENSE.txt`, taken from
+[justfont/open-huninn-font](https://github.com/justfont/open-huninn-font/tree/f240f9071a78298f379bc087cae2010df11cf477)
+`LICENSE`). The font file itself is not kept in the repository.

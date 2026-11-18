@@ -220,6 +220,38 @@ int main() {
         r = install(game, data, m, backup);
         check(!r.ok && read(game / L"static/text.flx") == "english text", "damaged data refused");
     }
+    {   // A release: data/patches only, built from the player's originals (flx_patch.h)
+        const auto game = root / L"pgame", data = root / L"pdata", backup = root / L"pbackup";
+        write(game / L"static" / L"text.flx", "english text");
+        const std::string chinese = "chinese text";   // "text" is copied from the original
+        std::string patch = std::string("U9CP") + std::string("   ", 4);
+        const auto u32 = [&](uint32_t v) { for (int i = 0; i < 4; ++i) patch += char(v >> (8*i)); };
+        u32(12); u32(uint32_t(chinese.size())); u32(2);
+        patch += char(1); u32(8); patch += "chinese ";
+        patch += char(0); u32(8); u32(4);
+        write(data / L"patches" / L"text.flx.u9cp", patch);
+        write(root / L"want.flx", chinese);
+        write(data / L"build-manifest.json", "{\"source_game_sha256\": {\"text.flx\": \"" + hex(game / L"static/text.flx") +
+              "\"}, \"resource_output_sha256\": {\"text.flx\": \"" + hex(root / L"want.flx") + "\"}}");
+        const auto m = read_manifest(data / L"build-manifest.json");
+        auto r = prepare_static(game, data, m, backup);
+        check(r.ok && read(data / L"static/text.flx") == chinese && !r.message.empty(), "patch builds the Chinese file");
+        r = prepare_static(game, data, m, backup);
+        check(r.ok && r.message.empty(), "already built: nothing to do");
+        check(install(game, data, m, backup).ok && read(game / L"static/text.flx") == chinese, "install from a release");
+        fs::remove(data / L"static" / L"text.flx", ec);
+        check(prepare_static(game, data, m, backup).ok && read(data / L"static/text.flx") == chinese,
+              "while installed the original comes from the backup");
+        check(recover(game, backup).ok && read(game / L"static/text.flx") == "english text", "recover after a release install");
+        fs::remove(data / L"static" / L"text.flx", ec);
+        write(game / L"static" / L"text.flx", "other version");
+        check(!prepare_static(game, data, m, backup).ok && !fs::exists(data / L"static/text.flx"), "other game version refused");
+        write(game / L"static" / L"text.flx", "english text");
+        write(data / L"patches" / L"text.flx.u9cp", patch.substr(0, patch.size() - 1));
+        check(!prepare_static(game, data, m, backup).ok && !fs::exists(data / L"static/text.flx"), "damaged patch refused");
+        fs::remove(data / L"patches" / L"text.flx.u9cp", ec);
+        check(!prepare_static(game, data, m, backup).ok, "missing patch refused");
+    }
     fs::remove_all(root, ec);
     if (failures) { std::cerr << failures << " failure(s)\n"; return 1; }
     std::cout << "front core tests passed\n";

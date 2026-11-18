@@ -20,14 +20,12 @@ How the files are handled:
 - `U9ChtLauncher.exe` validates `u9cht.ini` strictly and passes `[features]` to the runtime in `Config`.
   This is protocol 3: `features`, `hover_delay_ms`.
 
-**Resolution.** The runtime draws Chinese at only two sizes:
-- 800×600 with 20 px glyphs;
-- 1600×1200 with 40 px glyphs.
-
-Any other size makes the runtime end the game safely with error 18. This was CONFIRMED with 1024×768 and 1280×960 on 2026-11-12.
+**Resolution.** The runtime draws Chinese at any 4:3 size from 480 to 1536 lines, with glyphs of height/30
+pixels (`common/screen.h`, `docs/research/U9_RESOLUTIONS.md`). Other sizes make it end the game safely with
+error 18.
 
 The page therefore:
-- offers only those two sizes;
+- offers 800×600, 1024×768, 1280×960 and 1600×1200;
 - refuses to start while the game itself is set to another size and the page is set to keep it.
 
 Choosing a size changes only these values; every other byte of both files is kept:
@@ -37,6 +35,13 @@ Choosing a size changes only these values; every other byte of both files is kep
 The change is persistent, like changing it in the game's own options.
 
 The Steam release ships `dxcfg.ini` with `display=desktop`, which scales the game to the desktop. That line names no size, so it is left as it is and only `Options.ini` changes.
+
+## Releases: data built from patches
+
+A release ships `data/patches/<name>.u9cp` instead of `data/static/<name>` (the built FLX hold the game's English
+text). `prepare_static` (called by `install`) builds each missing or wrong file from the player's original, taken
+from the game folder or, while an install is in place, from `backup\`, and checks it against the manifest. See
+`docs/release/PATCH_FORMAT.md`.
 
 ## Key bindings page
 

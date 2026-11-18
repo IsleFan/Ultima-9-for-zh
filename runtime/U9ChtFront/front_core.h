@@ -82,6 +82,11 @@ bool read_bytes(const fs::path& p, std::string& out);
 bool write_bytes(const fs::path& p, const std::string& data);
 // Undo an install whose receipt is in `backup`. Files changed by anything else are left alone and reported.
 Result recover(const fs::path& game, const fs::path& backup);
+// A release ships no FLX (they hold the game's English text) but data/patches/<name>.u9cp (flx_patch.h). Builds
+// data/static/<name> from the player's original, taken from the game folder or, while an install is still in
+// place, from `backup`, and checks it against the manifest. Files already there with the right hash are kept.
+Result prepare_static(const fs::path& game, const fs::path& data, const Manifest& m, const fs::path& backup);
+// Calls prepare_static first.
 Result install(const fs::path& game, const fs::path& data, const Manifest& m, const fs::path& backup);
 
 // Proxy loading (protocol.h): U9ChtProxy.dll is copied to <game>/dsound.dll for one session. A dsound.dll already

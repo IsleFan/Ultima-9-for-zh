@@ -1,4 +1,5 @@
 #include "front_core.h"
+#include "flx_patch.h"
 #include "platform.h"
 #include "protocol.h"
 #include "version_manifest.h"
@@ -405,8 +406,38 @@ Result recover(const fs::path& game, const fs::path& backup) {
     return {true, L"已還原遊戲原本的檔案。"};
 }
 
-Result install(const fs::path& game, const fs::path& data, const Manifest& m, const fs::path& backup) {
+Result prepare_static(const fs::path& game, const fs::path& data, const Manifest& m, const fs::path& backup) {
     if (!m.ok) return {false, L"中文化資料不完整（build-manifest.json）。"};
+    std::error_code ec;
+    int built = 0;
+    for (const auto& [name, out] : m.output) {
+        const auto target = data / L"static" / name;
+        if (hash_or_empty(target) == out) continue;
+        const auto patch_file = data / L"patches" / (name + L".u9cp");
+        std::string patch;
+        if (!read_bytes(patch_file, patch)) return {false, L"中文化資料不完整：找不到 " + patch_file.filename().wstring()};
+        fs::path source_file;
+        for (const auto& candidate : {game / L"static" / name, backup / name})
+            if (hash_or_empty(candidate) == m.source.at(name)) { source_file = candidate; break; }
+        if (source_file.empty()) return {false, L"遊戲檔案和中文化資料的版本不符：" + name};
+        std::string source;
+        if (!read_bytes(source_file, source)) return {false, L"無法讀取遊戲檔案：" + name};
+        std::string why;
+        const auto result = patch::apply(std::vector<uint8_t>(source.begin(), source.end()),
+                                         std::vector<uint8_t>(patch.begin(), patch.end()), &why);
+        if (!result) return {false, L"中文化資料損毀：" + name + L"（" + std::wstring(why.begin(), why.end()) + L"）"};
+        fs::create_directories(target.parent_path(), ec);
+        if (!write_bytes(target, std::string(result->begin(), result->end())) || hash_or_empty(target) != out) {
+            fs::remove(target, ec);
+            return {false, L"中文化資料產生後檢查不符：" + name};
+        }
+        ++built;
+    }
+    return {true, built ? L"已從遊戲檔產生中文化資料。" : L""};
+}
+
+Result install(const fs::path& game, const fs::path& data, const Manifest& m, const fs::path& backup) {
+    if (const auto prepared = prepare_static(game, data, m, backup); !prepared.ok) return prepared;
     std::error_code ec;
     if (fs::is_regular_file(backup / Receipt, ec)) return {false, L"上次的安裝還沒還原，請重新開啟本程式。"};
     for (const auto& [name, out] : m.output) {
