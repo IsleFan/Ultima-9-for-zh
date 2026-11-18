@@ -99,6 +99,7 @@ struct JournalBuffer {
     uintptr_t base = 0;
     uint32_t size = 0, entries = 0;
     bool misc = false; // P10-1: stripped misctext UI text; its CJK em follows the native font height
+    uint64_t used = 0; // journal_clock when last registered or read; the least recently used slot is replaced
     std::vector<JournalSegment> segments;
 };
 struct FlowProbe {
@@ -184,6 +185,7 @@ struct Engine {
     // P10-1: output buffer of the last book conversion (0x42E64A); signs pass it to the message holder.
     uintptr_t pending_book_buffer = 0;
     uint64_t book_messages = 0, misc_message_strips = 0, shop_converts = 0, shop_short = 0;
+    uint64_t shop_scrolls = 0;   // wheel turns and PgUp/PgDn presses used on a shop list (scroll_shop)
     // P10-2 clock: one-character plan per ClockScalars entry (-1 when the pack lacks it; then clock is off).
     std::array<int32_t,sizeof(ClockScalars)/sizeof(char16_t)-1> clock_plans{};
     bool clock_enabled = false;
@@ -195,6 +197,11 @@ struct Engine {
     bool input_hooks_enabled = false;  // input probe / wheel pages / hover names (see input_hooks.h)
     uint32_t movie_cue_rejects = 0;
     uint32_t journal_next = 0;
+    // A new buffer takes an empty slot or the least recently used one (2026-11-19). The slots were taken in turn
+    // before, so text still on screen (shop names and headings, stripped in place and never registered again) lost
+    // its binding once enough new text had come through, and turned into dots after a few scrolls of a shop list.
+    uint64_t journal_clock = 0, journal_evictions = 0;
+    JournalBuffer& journal_slot() noexcept;   // caller holds `mutex`
     uint64_t journal_markers = 0, journal_marker_short = 0, journal_expansions = 0, journal_spans = 0, journal_day_headers = 0;
     uint64_t journal_width_overrides = 0, journal_breaks_dropped = 0, journal_spaces_kept = 0, journal_leading_applied = 0;
     uint32_t journal_letter = 0, journal_line = 0;

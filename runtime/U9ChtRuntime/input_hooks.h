@@ -35,6 +35,10 @@ struct Options {
     // FeatureClickSkip: asked on the game thread for each real left button press. True = the press (with its
     // release and the polled button state until then) is kept from the game; the runtime skips the line instead.
     bool (*click_skip)() = nullptr;
+    // Shop lists: asked on the game thread before a plain wheel turn becomes PgUp/PgDn (wheel paging on) and for
+    // each real PgUp / PgDn press without modifiers. `notches` > 0 = down. True = the runtime scrolled a shop list
+    // with it; nothing reaches the game.
+    bool (*wheel_scroll)(int notches) = nullptr;
 };
 void configure(const Options& options);
 // The hover feature presses X for the player. Some game screens close on ANY key press (the world map window,

@@ -924,6 +924,37 @@ Gold change_gold(int64_t& before, int64_t& after, const wchar_t*& text) noexcept
         return result;
     } __except (EXCEPTION_EXECUTE_HANDLER) { return Gold::Fault; }
 }
+// Shop lists (2026-11-19, docs/research/U9_SHOP_SCROLL.md). A shop is a book ([0x83D268], class 0x422580) whose
+// page objects form a list from [book+0x16C] linked through +4. The list's two arrows are objects of vtable 0x742E80
+// (+0x1B8 non-zero: the down arrow). Their mouse slot 0x422470 (thiscall: event, x, y; RET 0xC) takes a button-down
+// (event type 2) inside the arrow's rectangle (+0x10) and moves every row one row up or down, if the list can go
+// that way. The wheel and PgUp/PgDn "click" the arrow through that slot, so the game's own rules apply. Paging a
+// shop with PgUp/PgDn instead rebuilds the page and its Chinese names turn into dots, so such a turn or press over
+// an open shop never reaches the game. (2026-11-18 first try changed +0x30 of vtable 0x742E60: that is a row's
+// purchase quantity, not the list.)
+// Returns 0 no shop list, 1 used.
+constexpr uintptr_t ShopArrowVtable = 0x742E80, ShopArrowMouse = 0x422470;
+int scroll_shop(int notches, bool& stepped) noexcept {
+    stepped = false;
+    __try {
+        const auto book = word(OpenBook);
+        if (!book || !notches) return 0;
+        const bool down = notches > 0;
+        uint32_t steps = 0;
+        for (auto obj = word(book+0x16C); obj && steps < 512; obj = word(obj+4), ++steps) {
+            if (word(obj) != ShopArrowVtable || (word(obj+0x1B8) != 0) != down) continue;
+            const auto rect = reinterpret_cast<const int32_t*>(obj+0x10);
+            const int32_t x = (rect[0] + rect[2]) / 2, y = (rect[1] + rect[3]) / 2;
+            for (int i = 0; i < (down ? notches : -notches); ++i) {
+                uint32_t event[8]{2};   // button down
+                reinterpret_cast<uint32_t(__thiscall*)(uintptr_t,void*,int32_t,int32_t)>(ShopArrowMouse)(obj,event,x,y);
+            }
+            stepped = true;
+            return 1;
+        }
+        return 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
+}
 bool clear_target_lock(uintptr_t manager) noexcept {
     __try { reinterpret_cast<void(__thiscall*)(uintptr_t,uint32_t)>(0x4F90C0)(manager,0); return true; }
     __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
@@ -1490,6 +1521,16 @@ uint32_t Engine::texture_em(uintptr_t record, bool misc) const noexcept {
     if (!blob || !read_byte(blob+4,probe)) return TextureEm;
     return texture_em_for_height(word(blob+4));
 }
+JournalBuffer& Engine::journal_slot() noexcept {
+    ++journal_next;
+    JournalBuffer* pick = &journal_buffers[0];
+    for (auto& b : journal_buffers) {
+        if (!b.base) { pick = &b; break; }
+        if (b.used < pick->used) pick = &b;
+    }
+    if (pick->base) ++journal_evictions;
+    return *pick;
+}
 int Engine::journal_locate(uintptr_t source, uint32_t& offset, uint8_t* previous, bool* misc) noexcept {
     for (auto& b : journal_buffers) {
         if (!b.base || source < b.base || source >= b.base+b.size) continue;
@@ -1504,6 +1545,7 @@ int Engine::journal_locate(uintptr_t source, uint32_t& offset, uint8_t* previous
         if (*reinterpret_cast<const uint8_t*>(source) != p.slots[offset]) { ++journal_stale; b = {}; return -1; }
         if (previous) *previous = at ? *reinterpret_cast<const uint8_t*>(source-1) : 0;
         if (misc) *misc = b.misc;
+        b.used = ++journal_clock;
         return int(g.plan);
     }
     return -1;
@@ -1529,8 +1571,8 @@ bool Engine::bind_book(uintptr_t text, uint32_t length, uint32_t plan, bool lock
         if (segments.size() != wides.size()) return with_lock([&] { ++book_mismatch; return false; });
         return with_lock([&] {
             for (auto& v : journal_buffers) if (v.base == text) v = {};
-            auto& b = journal_buffers[journal_next++ % journal_buffers.size()];
-            b = {}; b.base = text; b.size = length+1; b.entries = 1; b.segments = std::move(segments);
+            auto& b = journal_slot();
+            b = {}; b.used = ++journal_clock; b.base = text; b.size = length+1; b.entries = 1; b.segments = std::move(segments);
             ++book_bound;
             return true;
         });
@@ -1598,8 +1640,8 @@ bool Engine::expand_journal(uintptr_t text_ref, uintptr_t text, uint32_t length)
         *reinterpret_cast<uintptr_t*>(text_ref) = reinterpret_cast<uintptr_t>(copy);
         reinterpret_cast<void(__cdecl*)(uintptr_t)>(0x7108E0)(text);
         Exclusive lock(mutex);
-        auto& b = journal_buffers[journal_next++ % journal_buffers.size()];
-        b = {}; b.base = reinterpret_cast<uintptr_t>(copy); b.size = uint32_t(out.size()+1); b.entries = count;
+        auto& b = journal_slot();
+        b = {}; b.used = ++journal_clock; b.base = reinterpret_cast<uintptr_t>(copy); b.size = uint32_t(out.size()+1); b.entries = count;
         b.segments = std::move(segments);
         ++journal_expansions; journal_spans += count; journal_day_headers += headers; journal_unknown_markers += unknown; journal_breaks_dropped += dropped; journal_spaces_kept += kept;
         return true;
@@ -1646,8 +1688,8 @@ bool Engine::strip_misc(uintptr_t text, uint32_t length, bool locked) noexcept {
             misc_stripped += r.markers; misc_invalid += r.invalid; misc_partial += r.partial;
             if (r.segments.empty()) return false;
             for (auto& b : journal_buffers) if (b.base == text) b = {};
-            auto& b = journal_buffers[journal_next++ % journal_buffers.size()];
-            b = {}; b.base = text; b.size = r.length+1; b.entries = r.markers; b.misc = true;
+            auto& b = journal_slot();
+            b = {}; b.used = ++journal_clock; b.base = text; b.size = r.length+1; b.entries = r.markers; b.misc = true;
             b.segments.reserve(r.segments.size());
             for (const auto& g : r.segments) b.segments.push_back({g.offset,g.plan,0,g.length});
             ++misc_buffers;
@@ -1708,8 +1750,8 @@ bool Engine::rewrite_clock(uintptr_t dest, uint32_t length) noexcept {
         }
         if (!write_guarded(dest,slots.c_str(),uint32_t(slots.size()+1))) return false;
         for (auto& b : journal_buffers) if (b.base == dest) b = {};
-        auto& b = journal_buffers[journal_next++ % journal_buffers.size()];
-        b = {}; b.base = dest; b.size = uint32_t(slots.size()+1); b.entries = 1; b.segments = std::move(segments);
+        auto& b = journal_slot();
+        b = {}; b.used = ++journal_clock; b.base = dest; b.size = uint32_t(slots.size()+1); b.entries = 1; b.segments = std::move(segments);
         return true;
     } catch (...) { ++journal_alloc_failures; return false; }
 }
@@ -1844,6 +1886,12 @@ int read_toggle(cheat::Kind kind) noexcept {
 // Every real key press (input_hooks on_key): the key bindings hotkey, then the cheat notices (no-op without bindings).
 // The key still reaches the game, which binds nothing to Ctrl+Shift+K.
 bool click_skip_request() { return engine && engine->request_skip(); }
+bool wheel_scroll_request(int notches) {
+    bool stepped = false;
+    const int r = scroll_shop(notches,stepped);
+    if (engine && r) { Exclusive lock(engine->mutex); if (stepped) ++engine->shop_scrolls; }
+    return r != 0;
+}
 void key_press(UINT vk, UINT mods) {
     if (!engine) return;
     if (vk == OpenKeyBindingsVk && mods == (cheat::ModCtrl | cheat::ModShift)) { engine->open_key_bindings(); return; }
@@ -2659,6 +2707,7 @@ void Engine::install(const Config& config, Logger& logger) {
             gpu_overlay = !exists(L"gpu_overlay.off");
             log->event("gpu_overlay","\"enabled\":"+std::string(gpu_overlay?"true":"false"));
             o.wheel = (config.features & FeatureWheelPages) && !exists(L"wheel_pages.off");
+            if (render) o.wheel_scroll = wheel_scroll_request;   // the wheel only while wheel paging is on
             o.zoom = (config.features & FeatureWheelZoom) != 0;
             o.hover = (config.features & FeatureHoverNames) && !exists(L"hover_names.off");
             o.hover_delay_ms = config.hover_delay_ms;
@@ -3069,7 +3118,7 @@ void Engine::snapshot(const char* event) noexcept {
               ",\"expansions\":"+std::to_string(journal_expansions)+",\"spans\":"+std::to_string(journal_spans)+",\"day_headers\":"+std::to_string(journal_day_headers)+",\"width_overrides\":"+std::to_string(journal_width_overrides)+",\"breaks_dropped\":"+std::to_string(journal_breaks_dropped)+",\"book_converts\":"+std::to_string(book_converts)+",\"book_short\":"+std::to_string(book_short)+
               ",\"book_bound\":"+std::to_string(book_bound)+",\"book_mismatch\":"+std::to_string(book_mismatch)+
               ",\"book_width_overrides\":"+std::to_string(book_width_overrides)+",\"spaces_kept\":"+std::to_string(journal_spaces_kept)+",\"leading_applied\":"+std::to_string(journal_leading_applied)+
-              ",\"unknown_markers\":"+std::to_string(journal_unknown_markers)+",\"stale\":"+std::to_string(journal_stale)+
+              ",\"unknown_markers\":"+std::to_string(journal_unknown_markers)+",\"stale\":"+std::to_string(journal_stale)+",\"evictions\":"+std::to_string(journal_evictions)+
               ",\"alloc_failures\":"+std::to_string(journal_alloc_failures)+",\"glyphs\":"+std::to_string(texture_glyphs)+
               ",\"pixels\":"+std::to_string(texture_pixels)+",\"faults\":"+std::to_string(texture_faults)+
               ",\"rejects\":["+std::to_string(texture_rejects[0])+","+std::to_string(texture_rejects[1])+","+
@@ -3083,7 +3132,8 @@ void Engine::snapshot(const char* event) noexcept {
               ",\"message_insets\":"+std::to_string(message_insets)+",\"cheat_presses\":"+std::to_string(cheat_presses)+",\"cheat_notices\":"+std::to_string(cheat_notices)+",\"notice_frames\":"+std::to_string(notice_frames)+",\"notice_glyph_misses\":"+std::to_string(notice_glyph_misses)+",\"misc_label_binds\":"+std::to_string(misc_label_binds)+",\"target_misses\":"+std::to_string(target_misses)+",\"target_lock_frames\":"+std::to_string(target_lock_frames)+",\"last_target_raw\":"+std::to_string(last_target_raw)+",\"smart_climbs\":"+std::to_string(smart_climbs.load())+",\"smart_jumps\":"+std::to_string(smart_jumps.load())+",\"smart_faults\":"+std::to_string(smart_faults.load())+",\"death_unlocks\":"+std::to_string(death_unlocks)+",\"death_unlock_faults\":"+std::to_string(death_unlock_faults)+",\"combat_hits\":"+std::to_string(combat_hits)+",\"recent_hits\":"+[&]{ std::string r="["; for (const auto& x : recent_hits) if (x.max) r += (r.size()>1?",":"")+std::string("[")+std::to_string(x.record)+","+std::to_string(x.before)+","+std::to_string(x.after)+","+std::to_string(x.max)+","+std::to_string(x.object)+","+std::to_string(x.locked)+"]"; return r+"]"; }()+",\"combat_resyncs\":"+std::to_string(combat_resyncs)+",\"target_bar_frames\":"+std::to_string(target_bar_frames)+",\"target_frames\":"+std::to_string(target_frames)+",\"target_overflow\":"+std::to_string(target_overflow)+",\"targets_seen\":"+[&]{ std::string r="["; for (const auto& t : targets_seen) if (t.frames) r += (r.size()>1?",":"")+std::string("[")+std::to_string(t.handle)+","+std::to_string(t.lock)+","+std::to_string(t.type)+","+std::to_string(t.hp)+","+std::to_string(t.max)+","+std::to_string(t.min_hp)+","+std::to_string(t.frames)+"]"; return r+"]"; }()+",\"floaters\":"+std::to_string(floaters_spawned)+",\"floater_frames\":"+std::to_string(floater_frames)+",\"floater_misses\":"+std::to_string(floater_misses)+",\"status_frames\":"+std::to_string(status_frames)+",\"status_misses\":"+std::to_string(status_misses)+",\"status_unreadable\":"+std::to_string(status_unreadable)+",\"status_last\":["+std::to_string(status_last[0])+","+std::to_string(status_last[1])+","+std::to_string(status_last[2])+","+std::to_string(status_last[3])+","+std::to_string(status_last[4])+"],\"cast_calls\":"+std::to_string(cast_calls)+",\"recent_casts\":"+[&]{ std::string r="["; for (const auto& x : recent_casts) if (x.spell) r += (r.size()>1?",":"")+std::string("[")+std::to_string(x.caster)+","+std::to_string(x.avatar)+","+std::to_string(x.spell)+"]"; return r+"]"; }()+",\"spell_casts\":"+std::to_string(spell_casts)+",\"last_spell\":"+std::to_string(last_spell)+",\"small_em_glyphs\":"+std::to_string(small_em_glyphs)+",\"book_messages\":"+std::to_string(book_messages)+
               ",\"name_count_labels\":"+std::to_string(name_count_labels)+
               ",\"misc_message_strips\":"+std::to_string(misc_message_strips)+",\"shop_converts\":"+std::to_string(shop_converts)+
-              ",\"shop_short\":"+std::to_string(shop_short)+",\"clock_rewrites\":"+std::to_string(clock_rewrites)+
+              ",\"shop_short\":"+std::to_string(shop_short)+
+              ",\"shop_scrolls\":"+std::to_string(shop_scrolls)+",\"clock_rewrites\":"+std::to_string(clock_rewrites)+
               ",\"clock_unmatched\":"+std::to_string(clock_unmatched)+",\"clock_too_long\":"+std::to_string(clock_too_long)+"}";
           { const auto m = movie_graph_stats();
             fields += ",\"movies\":{\"enabled\":"+std::string(movies_enabled?"true":"false")+",\"created\":"+std::to_string(m.created)+

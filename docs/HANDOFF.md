@@ -296,6 +296,8 @@
 - 狀態頁（Ctrl+Z）本來就顯示金幣與箭的數量，使用者確認可見。
 - **游標停留顯示名稱打斷「走過去坐下」**（新遊戲吉普賽人的椅子，劇情卡住）：模擬的 X 鍵取消了動作。修正：真實點擊後，游標離開點擊處 8 像素前不送 X（`click_hold`）。使用者確認修好。見 `docs/research/U9_KNOWN_ISSUES.md` 第 2 節。
 - GOG Galaxy 雲端存檔：把自訂執行檔設成 `U9Cht.exe` 後會同步，使用者測試成功；Steam 未測。見 `docs/release/RELEASE_PROCESS.md`。
+- **商店清單用滾輪或 PageUp／PageDown 捲動**：呼叫遊戲自己的箭頭處理 `0x422470`（vtable `0x742E80`），商店開著時這些輸入不再變成翻頁鍵（翻頁會重建頁面、名稱變小點點）。第一版誤改了購買數量（`0x742E60` 的 `+0x30`），已撤回。見 `docs/research/U9_SHOP_SCROLL.md`。
+- **介面文字捲動幾次後變小點點**（中文化原有錯誤，連點箭頭也會）：`journal_buffers` 64 格原本輪流覆蓋，會蓋掉畫面上仍在用的登記；改成蓋掉最久沒用的（`journal_slot`）。使用者確認商店捲動全部正常。
 - 截圖時出現「Unable to create Primary Surface in Video Memory!」後遊戲結束：已記錄，原因未查，見 `docs/research/U9_KNOWN_ISSUES.md`。
 
 ## 4. 用中文手冊校對文本（2026-11-11 完成）

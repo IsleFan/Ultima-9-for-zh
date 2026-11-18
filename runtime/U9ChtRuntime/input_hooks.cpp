@@ -27,7 +27,7 @@ std::vector<std::string> samples;
 
 // ---- feature counters ----
 std::atomic<long> wheel_pages{0}, wheel_zoom{0}, wheel_skipped_modifier{0}, hover_presses{0}, hover_releases{0},
-                  chars_suppressed{0}, board_overrides{0}, modifier_releases{0}, preempted_releases{0}, hover_blocks{0}, win_keys_dropped{0}, clicks_taken{0}, click_holds{0};
+                  chars_suppressed{0}, board_overrides{0}, modifier_releases{0}, preempted_releases{0}, hover_blocks{0}, win_keys_dropped{0}, clicks_taken{0}, click_holds{0}, wheel_scrolls{0}, page_scrolls{0};
 
 // ---- synthetic messages (game thread only) ----
 constexpr WORD Marker = 0xA901;      // repeat-count field of synthetic key messages
@@ -45,6 +45,7 @@ bool click_hold = false;
 POINT click_spot{};
 constexpr LONG ClickSpotRadius = 8;   // pixels the cursor may drift without ending the hold
 bool left_taken = false;      // a left press went to click_skip; its release and button state follow
+bool page_taken[2] = {};      // a PgUp / PgDn press scrolled a shop list; its release is kept from the game too
 // Diagnostic (docs/research/U9_WORLD_MAP_HOVER.md): every key and button message handed to the game during the
 // 4 s after the map key, to find what closes the map. Read-only; drained with the counters.
 DWORD map_watch_until = 0, map_watch_start = 0;
@@ -174,7 +175,7 @@ void update_hover() {
     hover_active = true; last_repeat = now; ++hover_presses;
 }
 
-bool transforming() { return options.wheel || options.zoom || options.hover || options.on_key || options.click_skip; }
+bool transforming() { return options.wheel || options.zoom || options.hover || options.on_key || options.click_skip || options.wheel_scroll; }
 bool in_filter(const MSG& m, UINT min, UINT max) { return (!min && !max) || (m.message >= min && m.message <= max); }
 
 // Rewrites a removed message for the features. Returns the message to hand to the game.
@@ -203,6 +204,15 @@ void transform(MSG& m) {
     track_modifiers(m);
     trace_after_map(m);
     if (hidden_key(m)) { m.message = WM_NULL; m.wParam = 0; m.lParam = 0; ++win_keys_dropped; return; }
+    // PgUp / PgDn without modifiers over an open shop list scroll it (PgDn down, PgUp up) instead of paging the
+    // shop, which loses its Chinese names (docs/research/U9_SHOP_SCROLL.md). Held keys repeat.
+    if (options.wheel_scroll && !synthetic(m) && (m.wParam == VK_PRIOR || m.wParam == VK_NEXT)) {
+        const int slot = m.wParam == VK_NEXT ? 1 : 0;
+        if ((m.message == WM_KEYDOWN) && !modifier_down() && options.wheel_scroll(slot ? 1 : -1)) {
+            page_taken[slot] = true; ++page_scrolls; m.message = WM_NULL; m.wParam = 0; m.lParam = 0; return;
+        }
+        if (m.message == WM_KEYUP && page_taken[slot]) { page_taken[slot] = false; m.message = WM_NULL; m.wParam = 0; m.lParam = 0; return; }
+    }
     if (options.click_skip && !synthetic(m)) {
         if ((m.message == WM_LBUTTONDOWN || m.message == WM_LBUTTONDBLCLK) && options.click_skip()) {
             left_taken = true; m.message = WM_NULL; m.wParam = 0; m.lParam = 0; ++clicks_taken; return;
@@ -249,6 +259,10 @@ void transform(MSG& m) {
         const bool zoom = options.zoom && key_state_down(VK_CONTROL) && !key_state_down(VK_SHIFT) && !key_state_down(VK_MENU);
         if (!zoom && modifier_down()) { ++wheel_skipped_modifier; return; }
         if (!zoom && !options.wheel) return;               // paging switched off: the game ignores the wheel
+        if (!zoom && options.wheel_scroll) {
+            const int n = std::max(1, std::min(4, std::abs(delta) / WHEEL_DELTA));
+            if (options.wheel_scroll(delta < 0 ? n : -n)) { ++wheel_scrolls; m.message = WM_NULL; m.wParam = 0; m.lParam = 0; return; }
+        }
         // Without modifiers: wheel down = next page = PgUp in the default keymap.
         const bool prior = zoom ? delta > 0 : delta < 0;
         const UINT vk = prior ? VK_PRIOR : VK_NEXT, scan = prior ? ScanPrior : ScanNext;
@@ -337,7 +351,7 @@ std::string drain_fields() {
     const auto count = [&](const char* key, std::atomic<long>& v) { if (const long n = v.exchange(0)) add("\"" + std::string(key) + "\":" + std::to_string(n)); };
     count("wheel_pages",wheel_pages); count("wheel_zoom",wheel_zoom); count("wheel_skipped_modifier",wheel_skipped_modifier);
     count("hover_presses",hover_presses); count("hover_releases",hover_releases);
-    count("chars_suppressed",chars_suppressed); count("modifier_releases",modifier_releases); count("hover_blocks",hover_blocks); count("win_keys_dropped",win_keys_dropped); count("clicks_taken",clicks_taken); count("click_holds",click_holds); count("preempted_releases",preempted_releases); count("board_overrides",board_overrides);
+    count("chars_suppressed",chars_suppressed); count("modifier_releases",modifier_releases); count("hover_blocks",hover_blocks); count("win_keys_dropped",win_keys_dropped); count("clicks_taken",clicks_taken); count("click_holds",click_holds); count("wheel_scrolls",wheel_scrolls); count("page_scrolls",page_scrolls); count("preempted_releases",preempted_releases); count("board_overrides",board_overrides);
     {   // [ms after the map key, message, vk, synthetic, repeat, hover blocked]
         std::lock_guard<std::mutex> lock(map_trace_lock);
         std::string t;
