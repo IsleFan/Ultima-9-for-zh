@@ -29,6 +29,9 @@ inline constexpr uint16_t Shift = 0x100, Alt = 0x200, Ctrl = 0x400, Extended = 0
 // Ctrl+Shift+K brings up this page from the game (protocol.h OpenKeyBindingsVk); it cannot be bound.
 inline constexpr uint16_t PageHotkey = Ctrl | Shift | 0x4B;
 
+// The category u9.exe gives a command it does not know (0x4D25E0).
+inline constexpr int UnknownCategory = 0xFFFF;
+
 struct Command {
     const char* name;      // as the game registers it
     int category;          // the game's category: with the name it decides which command wins a shared key

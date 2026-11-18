@@ -34,11 +34,11 @@ int main() {
             check(names.insert(c.name).second, "command names are unique");
             check(std::string(c.name).size() < 32 && c.page >= 0 && c.page < Pages && c.label && *c.label, "command entry sane");
         }
-        check(commands().size() == 97, "97 bindable commands");
+        check(commands().size() == 98, "98 bindable commands (97 of the game, add_gold of the runtime)");
         check(index_of("abort_targeting") < 0 && index_of("toggle_movement_speed") >= 0, "only commands the game registers");
         int rows[Pages]{};
         for (const auto& c : commands()) ++rows[c.page];
-        for (int n : rows) check(n > 0 && n <= 23, "a tab holds at most 23 rows");
+        for (int n : rows) check(n > 0 && n <= 24, "a tab holds at most 24 rows (main.cpp paint_keys)");
     }
     {   // key text -> code, as u9.exe 0x4D3C30
         check(parse_key("a") == 0x41 && parse_key("A") == 0x41, "letters, any case");

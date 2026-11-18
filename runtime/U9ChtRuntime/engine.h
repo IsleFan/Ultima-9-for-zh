@@ -3,6 +3,7 @@
 #include "identity.h"
 #include "platform.h"
 #include "compositor.h"
+#include "screen.h"
 #include "gpu_overlay.h"
 #include "raster_runs.h"
 #include "misc_marker.h"
@@ -269,6 +270,20 @@ struct Engine {
     struct SubtitleCreator { uintptr_t caller = 0; uint64_t count = 0; };
     std::array<SubtitleCreator,8> subtitle_creators{};
     bool request_skip() noexcept;   // game thread, from input_hooks
+    // FeatureEscContents (user request 2026-11-18; docs/research/U9_JOURNAL_CONTENTS.md): Esc with nothing open
+    // opens the journal at its table of contents. Decided when the key arrives, carried out at the next flip.
+    bool esc_contents = false, contents_pending = false;
+    uint64_t contents_pending_tick = 0;   // a request older than ContentsWaitMs is dropped (a movie took the Esc)
+    uint64_t contents_stale = 0;
+    uint64_t esc_presses = 0, contents_requested = 0, contents_opened = 0, contents_refused = 0, contents_faults = 0;
+    // Why the last Esc presses did not open it: 0 opened, 1 book open, 2 modal input, 3 special mode,
+    // 4 conversation, 5 unreadable. Newest last.
+    std::array<uint8_t,8> esc_reasons{};
+    void on_escape() noexcept;      // game thread, from input_hooks
+    // Developer cheat add_gold (user authorization 2026-11-18; docs/research/U9_GOLD.md).
+    bool gold_pending = false;
+    uint64_t gold_requests = 0, gold_added = 0, gold_full = 0, gold_no_purse = 0, gold_faults = 0;
+    int64_t gold_before = -1, gold_after = -1;
     struct PendingCheat { int binding = -1; uint64_t tick = 0; int before = -1; } pending_cheat;
     std::wstring notice;
     uint64_t notice_until = 0, cheat_presses = 0, cheat_notices = 0, notice_frames = 0, notice_glyph_misses = 0;
@@ -327,9 +342,16 @@ struct Engine {
     // Target bar (FeatureTargetBar, 2026-11-13): the combat target's hp/max in a frame at the top centre. Solid
     // rectangles are runtime-owned glyphs (alpha only), index [scale-1]: shade, trough, fill; the fill is clipped to hp.
     bool target_bar = false;
-    std::array<std::array<Glyph,3>,2> bar_glyphs{};
+    // Target bar rectangles for one screen height (bar_height): built at start for the size Options.ini names.
+    std::array<Glyph,3> bar_glyphs{};
+    uint32_t bar_height = 0;
+    // Screen size named by Options.ini when the runtime started (0 = unreadable or not supported).
+    uint32_t start_width = 0, start_height = 0;
+    std::vector<uint32_t> screen_ems{20,40};   // screen glyph ems prewarmed: 20, 40 and the start size's
     uint64_t target_bar_frames = 0;
-    void build_bar_glyphs() noexcept;
+    void build_bar_glyphs(uint32_t height) noexcept;
+    // An overlay em given at 800x600, at 600, 1200 and the start height (for prewarming).
+    std::vector<uint32_t> overlay_ems(uint32_t em600) const;
     // Combatants (2026-11-14): every frame the 512 stats records ([0x98F31C], 0x27800 bytes, allocated at 0x4F1F68 and
     // re-allocated on load at 0x4F2270) are compared with the previous frame. A record other than the Avatar's whose HP
     // dropped (same max) was hit: it floats its damage and joins the combatant list for CombatantMs. The locked target
@@ -347,7 +369,7 @@ struct Engine {
     struct HitRecord { uint32_t record = 0, before = 0, after = 0, max = 0, object = 0, locked = 0; };
     std::array<HitRecord,12> recent_hits{};   // newest last: evidence for unexpected bars
     void scan_combatants(uint32_t avatar_record, uint32_t locked) noexcept;
-    void draw_combat(uintptr_t backend, uint32_t scale, uint32_t avatar_record) noexcept;
+    void draw_combat(uintptr_t backend, uint32_t height, uint32_t avatar_record) noexcept;
     void floater_for(uint32_t record, uint32_t damage) noexcept;
     std::array<uint32_t,24> dumped{}; uint32_t dumps = 0;
     void dump_record(uint32_t record) noexcept;   // research: record bytes of a new bar's creature

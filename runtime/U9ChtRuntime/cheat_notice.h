@@ -20,7 +20,7 @@
 namespace u9cht::cheat {
 inline constexpr uint32_t ModCtrl = 1, ModShift = 2, ModAlt = 4;
 struct Binding { uint32_t vk = 0, mods = 0; std::string command; };
-enum class Kind { Message, Fast, Fly, Invulnerable };
+enum class Kind { Message, Fast, Fly, Invulnerable, AddGold };
 struct Text { Kind kind = Kind::Message; const wchar_t* text = L""; };
 
 inline std::string lower(std::string_view s) {
@@ -112,6 +112,8 @@ inline std::optional<Text> text_for(std::string_view command) {
         {"spells_0-2", {Kind::Message, L"已加入線性至第二環法術"}},
         {"spells_3-5", {Kind::Message, L"已加入第三至第五環法術"}},
         {"spells_6-8", {Kind::Message, L"已加入第六至第八環法術"}},
+        // Not a game command: the game keeps the binding with no handler; the runtime acts on it (U9_GOLD.md).
+        {"add_gold", {Kind::AddGold, L"金幣增加一千"}},
     };
     for (const auto& r : rows) if (r.command == command) return r.text;
     return std::nullopt;
@@ -120,9 +122,26 @@ inline std::optional<Text> text_for(std::string_view command) {
 inline std::wstring toggle_text(const Text& t, int state) {
     return std::wstring(t.text) + (state < 0 ? L"（切換）" : state ? L"（開）" : L"（關）");
 }
+// add_gold outcomes. Digits do not warm for notices (HANDOFF), so amounts are written in Chinese numerals.
+inline constexpr uint32_t GoldStep = 1000, GoldLimit = 9999;   // 9999: the most the game lets the Avatar carry
+inline constexpr const wchar_t* GoldAdded = L"金幣增加一千";
+inline constexpr const wchar_t* GoldCapped = L"金幣已補到上限九千九百九十九";
+inline constexpr const wchar_t* GoldFull = L"金幣已達上限九千九百九十九";
+inline constexpr const wchar_t* GoldNoPurse = L"身上要先有金幣才能增加";
+inline constexpr const wchar_t* GoldFailed = L"金幣增加失敗";
+// The new amount and the notice for `before` gold.
+struct GoldStepResult { uint32_t after; const wchar_t* text; };
+inline constexpr GoldStepResult gold_step(uint32_t before) noexcept {
+    if (before >= GoldLimit) return {before, GoldFull};
+    if (before + GoldStep > GoldLimit) return {GoldLimit, GoldCapped};
+    return {before + GoldStep, GoldAdded};
+}
+static_assert(gold_step(0).after == 1000 && gold_step(8999).after == 9999 && gold_step(9000).after == 9999 &&
+              gold_step(9999).after == 9999 && gold_step(12000).after == 12000);
 // Every character a notice can show, warmed into the glyph cache at start.
 inline std::wstring all_notice_characters() {
     std::wstring out = L"（開關切換）「」";
+    for (const auto* t : {GoldAdded, GoldCapped, GoldFull, GoldNoPurse, GoldFailed}) out += t;
     for (const auto* c : {"fill_spellbook","recharge_mana","toggle_avatar_fast","toggle_avatar_fly",
                           "toggle_avatar_invulnerable","pass_one_hour","unpass_one_hour","pass_one_minute",
                           "unpass_one_minute","sunrise_sunset","toggle_sun","toggle_wind","toggle_storms",

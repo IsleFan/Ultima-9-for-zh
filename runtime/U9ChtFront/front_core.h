@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <map>
+#include "screen.h"
 #include <string>
 #include <vector>
 
@@ -29,9 +30,12 @@ struct Settings {
     std::wstring saved_presentation, saved_display;
 };
 struct Resolution { uint32_t width = 0, height = 0; };
-// The sizes the Chinese runtime draws at (engine.cpp: 20 px glyphs at 800x600, 40 px at 1600x1200). Any other
-// size makes the runtime end the game safely (error 18, session at the front page 2026-11-12: 1024x768, 1280x960).
-inline constexpr Resolution Resolutions[] = {{800, 600}, {1600, 1200}};
+// The sizes offered on the front page (2026-11-18): 4:3 sizes the runtime draws Chinese at (common/screen.h,
+// glyphs height/30 px). 800x600 and 1600x1200 were verified in game first; 1024x768 and 1280x960 ran the game at the
+// front page on 2026-11-12, when the runtime still ended it safely at those sizes (error 18).
+inline constexpr Resolution Resolutions[] = {{800, 600}, {1024, 768}, {1280, 960}, {1600, 1200}};
+static_assert([] { for (const auto& r : Resolutions) if (!screen_em(r.width, r.height)) return false; return true; }(),
+              "every offered size must be one the runtime draws at");
 inline bool supported(Resolution r) {
     for (const auto& s : Resolutions) if (s.width == r.width && s.height == r.height) return true;
     return false;

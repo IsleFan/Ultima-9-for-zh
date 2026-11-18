@@ -60,7 +60,7 @@ constexpr const char* OutNames[OutCount] = {
 Out section_of(int category) {
     switch (category) {
     case 0: return OutMovement; case 1: return OutInteraction; case 2: return OutCombat; case 4: return OutGeneral;
-    case 5: return OutCamera; case 7: return OutEngine; case 8: case 10: return OutCheat; default: return OutOther;
+    case 5: return OutCamera; case 7: return OutEngine; case 8: case 10: case UnknownCategory: return OutCheat; default: return OutOther;
     }
 }
 int find_command(std::string_view name) {
@@ -127,6 +127,9 @@ const std::vector<Command>& commands() {
         {"recharge_mana", 10, 5, L"作弊：補滿法力"}, {"fill_spellbook", 10, 5, L"作弊：法術書填滿"},
         {"spells_0-2", 10, 5, L"作弊：取得 0～2 環法術 ⚠"}, {"spells_3-5", 10, 5, L"作弊：取得 3～5 環法術 ⚠"},
         {"spells_6-8", 10, 5, L"作弊：取得 6～8 環法術 ⚠"},
+        // Not a game command: the game files an unknown name as a command with no handler, category 0xFFFF
+        // (0x4D25E0 -> 0x4D28A0), so it sorts last and never runs. The runtime acts on it (U9_GOLD.md).
+        {"add_gold", UnknownCategory, 5, L"作弊：金幣增加一千（中文化）"},
     };
     return table;
 }

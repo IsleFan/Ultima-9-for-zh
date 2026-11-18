@@ -38,7 +38,28 @@ page (and not cut off, or on a page the player did not turn to) is UNKNOWN.
 
 ## Open questions
 
-1. Does the stats page show `金幣: N` in the Chinese build? If not, where does the text stop?
-2. The item name of type 908 is 黃金, while the stats page and the shop say 金幣. Should they be the same?
-3. For a cheat: write property 17 of the existing type 908 object (clamped to 9999), or create the object when the
-   Avatar has none. The setter for a property is not identified yet.
+1. ~~Does the stats page show `金幣: N` in the Chinese build?~~ Yes: the player confirmed 金幣 and 箭 under the
+   mana line (2026-11-18).
+2. ~~The item name of type 908 is 黃金.~~ Renamed 金幣 (user decision 2026-11-18, commit `c71300c`).
+3. ~~For a cheat: the setter for a property is not identified yet.~~ Found, see below.
+
+## Setting the amount (CONFIRMED by reading the code)
+
+`0x4C56F0` is the property setter: thiscall on a handle holder, arguments (property, value), `RET 8`. It is the
+counterpart of the getter `0x4C5640` and calls `0x4C9470`. The gold pick-up code `0x4AD550` uses it with
+property `0x11` on the type 908 object, after capping the total with `0x4AD430` (`9999 - gold`).
+
+## Developer cheat add_gold (user authorization 2026-11-18)
+
+- Bound like a game cheat: `add_gold` under `[CHEAT COMMANDS]` (the front page's key bindings page lists it as
+  「作弊：金幣增加一千（中文化）」). The game files the unknown name as a command with no handler and category
+  `0xFFFF` (`0x4D25E0` → `0x4D28A0`), so it never runs anything in the game.
+- On the key, the runtime does at the next frame flip (outside its lock) the steps of `0x4AD2F0` to find the type
+  908 object, reads property 17 and writes it back 1000 higher, at most 9999 (`cheat_notice.h` `gold_step`).
+- Notices (digits do not warm for notices, so Chinese numerals): 金幣增加一千, 金幣已補到上限九千九百九十九,
+  金幣已達上限九千九百九十九, 身上要先有金幣才能增加, 金幣增加失敗.
+- **The Avatar must already carry some gold.** Creating the type 908 object is not attempted.
+- Counters: `gold_requests`, `gold_added`, `gold_full`, `gold_no_purse`, `gold_faults`, `gold_before`,
+  `gold_after`.
+
+To check in game: the stats page and the shop show the new amount; save, reload and the amount stays.

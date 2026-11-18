@@ -111,7 +111,8 @@ int main() {
         auto s = default_settings(); s.width = 1600; s.height = 1200;
         save_settings(s, ini, front);
         check(load_settings(ini, front).width == 1600, "resolution choice saved");
-        check(supported({800, 600}) && supported({1600, 1200}) && !supported({1024, 768}) && !supported({0, 0}), "supported sizes");
+        check(supported({800, 600}) && supported({1024, 768}) && supported({1280, 960}) && supported({1600, 1200}) &&
+              !supported({1920, 1080}) && !supported({640, 480}) && !supported({0, 0}), "supported sizes");
         write(front, "[display]\r\nwidth = 1234\r\nheight = 5\r\n");
         check(load_settings(ini, front).width == 0, "unoffered size ignored");
     }
@@ -133,12 +134,14 @@ int main() {
               "applying again changes nothing and keeps what was remembered");
         const auto ini = root / L"w-u9cht.ini", front = root / L"w-front.ini";
         s.dialogue_letter = 2; s.dialogue_line = 5;
-        s.features |= FeatureClickSkip;
+        s.features |= FeatureClickSkip; s.features &= ~FeatureEscContents;
         save_settings(s, ini, front);
         auto t = load_settings(ini, front);
         check(t.windowed && t.saved_presentation == L"application" && t.saved_display == L"desktop" &&
               t.dialogue_letter == 2 && t.dialogue_line == 5, "window and dialogue settings survive a save");
         check((t.features & FeatureClickSkip) != 0 && (default_settings().features & FeatureClickSkip) != 0, "click skip saved; on by default");
+        check((t.features & FeatureEscContents) == 0 && (default_settings().features & FeatureEscContents) != 0,
+              "Esc contents switch saved off; on by default");
         t.windowed = false;
         check(apply_presentation(game, t, 60).ok && read(game / L"dxcfg.ini") == steam && t.saved_presentation.empty() && t.saved_display.empty(),
               "clearing the box restores the file byte for byte");

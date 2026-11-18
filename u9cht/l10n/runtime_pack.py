@@ -22,7 +22,9 @@ RUNTIME_CONTRACT = {
     "max_plan_utf16_units": 512,
     "max_book_plan_utf16_units": 8192,
     "max_glyph_scalars": 8192,
-    "glyph_cache_capacity": 16384,
+    # 2026-11-18: room for a third screen em (docs/research/U9_RESOLUTIONS.md). The runtime does not check this
+    # contract's hash; it mirrors runtime/U9ChtRuntime/glyph_cache.h (test_native_contract_mirrors_runtime_headers).
+    "glyph_cache_capacity": 24576,
     "raster_sizes_px": [20, 40],
     "logical_units_per_em": 16,
     # Runtime refuses a font unless every CJK glyph advances exactly this many units (LayoutCellUnits).

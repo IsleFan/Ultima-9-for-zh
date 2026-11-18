@@ -848,6 +848,82 @@ bool advance_line(uintptr_t line) noexcept {
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
 }
+// FeatureEscContents. Every journal_* command runs the handler 0x42DE80 (thiscall: ECX = the command's name, then a
+// 32-byte key event by value; RET 0x20). It acts when event+0x14 has bit 0x20 and not bit 0x10000. It looks the
+// name up in the table at 0x782D78 (journal_stats .. journal_load -> pages 1..6, 0x782DA0); a name the table does
+// not hold leaves page 0, the table of contents, which it opens through 0x42A570. It refuses by itself while a
+// book is open ([0x83D268]) or the game allows none (0x5AE8D0).
+constexpr uintptr_t JournalCommand = 0x42DE80, OpenBook = 0x83D268;
+constexpr uint64_t ContentsWaitMs = 250;
+struct KeyEvent { uint32_t v[8]; };
+bool open_contents() noexcept {
+    __try {
+        static const char name[] = "journal_contents";
+        KeyEvent event{};
+        event.v[5] = 0x20;
+        reinterpret_cast<void(__thiscall*)(const char*,KeyEvent)>(JournalCommand)(name,event);
+        return word(OpenBook) != 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
+// Esc goes to the world's key handler (0x49A9CA) unless something else takes it. There it closes the modal input
+// entry of type 0xE that 0x5EFFB0 finds in the list at [[0x84F810]+0xC0], leaves the mode
+// [[[0x850228]+0xC0]+0x78] == 1, and closes the type 0xE entries of its own list. Esc opens the contents only when
+// none of that applies. The check is wider than the game's: any type 0xE entry in the list counts (the game also
+// matches its owner). Entries resolve through 0x5EC560 (ECX = node+0xC), as 0x5F0060 does; the list is walked by
+// its links (+4 first, node +4 next), not through its cursor.
+uint8_t esc_blocker() noexcept {
+    __try {
+        if (word(OpenBook)) return 1;
+        const auto ui = word(0x84F810);
+        if (!ui) return 5;
+        uint32_t steps = 0;
+        for (auto node = word(ui+0xC0+4); node && steps < 256; node = word(node+4), ++steps) {
+            const auto entry = reinterpret_cast<uintptr_t(__thiscall*)(uintptr_t)>(0x5EC560)(word(node+0xC));
+            if (entry && word(entry+0xDC) == 0xE) return 2;
+        }
+        auto mode = word(0x850228); if (!mode) return 5;
+        mode = word(mode+0xC0); if (!mode) return 5;
+        if (word(mode+0x78) == 1) return 3;
+        return 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return 5; }
+}
+// Developer cheat add_gold (docs/research/U9_GOLD.md). The Avatar's gold is property 17 of the one object of type
+// 0x38C (908) in the Avatar's inventory. The steps are those of the reader 0x4AD2F0: 0x4F1D90 gives the inventory
+// of [0x98F31C]; handle holders take an object with 0x4C3910 (RET 4) and let go of it with 0x4C3B90 (RET 4);
+// 0x4C4E30 resolves the inventory holder; 0x4BF360(0x38C) finds the gold. The property is read with 0x4C5640
+// (RET 4) and written with 0x4C56F0 (property, value; RET 8), as the gold pick-up code 0x4AD550 does.
+enum class Gold { Done, NoPurse, Fault };
+Gold change_gold(int64_t& before, int64_t& after, const wchar_t*& text) noexcept {
+    __try {
+        using Take = uint32_t(__thiscall*)(uint32_t*,uintptr_t);
+        using Release = void(__thiscall*)(uint32_t*,uint32_t);
+        const auto take = reinterpret_cast<Take>(0x4C3910);
+        const auto release = reinterpret_cast<Release>(0x4C3B90);
+        const auto avatar = word(0x98F31C);
+        if (!avatar) return Gold::Fault;
+        const auto inventory = reinterpret_cast<uintptr_t(__thiscall*)(uintptr_t)>(0x4F1D90)(avatar);
+        uint32_t holder = 0;
+        holder = take(&holder,inventory);
+        reinterpret_cast<void(__thiscall*)(uint32_t*)>(0x4C4E30)(&holder);
+        const auto table = word(0x8515D0);
+        const auto container = holder ? word(table+holder*12+8) : 0;
+        const auto purse_object = container ? reinterpret_cast<uintptr_t(__thiscall*)(uintptr_t,uint32_t)>(0x4BF360)(container,0x38C) : 0;
+        uint32_t purse = 0;
+        if (purse_object) purse = take(&purse,purse_object);
+        Gold result = Gold::NoPurse;
+        if (purse && word(table+purse*12+8)) {
+            const auto get = reinterpret_cast<uint32_t(__thiscall*)(uint32_t*,uint32_t)>(0x4C5640);
+            const uint32_t now = get(&purse,0x11);
+            const auto step = cheat::gold_step(now);
+            if (step.after != now) reinterpret_cast<void(__thiscall*)(uint32_t*,uint32_t,uint32_t)>(0x4C56F0)(&purse,0x11,step.after);
+            before = now; after = get(&purse,0x11); text = step.text;
+            result = Gold::Done;
+        }
+        if (purse) release(&purse,purse);
+        if (holder) release(&holder,holder);
+        return result;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return Gold::Fault; }
+}
 bool clear_target_lock(uintptr_t manager) noexcept {
     __try { reinterpret_cast<void(__thiscall*)(uintptr_t,uint32_t)>(0x4F90C0)(manager,0); return true; }
     __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
@@ -1004,6 +1080,32 @@ uintptr_t __fastcall flip_hook(uintptr_t self, void*) {
             const bool done = advance_line(target);
             Exclusive lock(guard.state->mutex);
             if (done) ++guard.state->skips_done; else ++guard.state->skip_faults;
+        }
+    }
+    // FeatureEscContents and add_gold: outside `mutex`, since opening a book and changing an item allocate and free
+    // through this runtime's hooks.
+    if (guard.state) {
+        auto& e = *guard.state;
+        bool contents = false, gold = false;
+        {
+            Exclusive lock(e.mutex);
+            contents = e.contents_pending; gold = e.gold_pending; e.contents_pending = e.gold_pending = false;
+            // While a movie plays the game does not flip; an Esc that skipped it must not open the journal after.
+            if (contents && GetTickCount64() - e.contents_pending_tick > ContentsWaitMs) { contents = false; ++e.contents_stale; }
+        }
+        if (contents) {
+            const bool opened = open_contents();
+            Exclusive lock(e.mutex);
+            if (opened) ++e.contents_opened; else ++e.contents_faults;
+        }
+        if (gold) {
+            int64_t before = -1, after = -1; const wchar_t* text = cheat::GoldFailed;
+            const auto result = change_gold(before,after,text);
+            Exclusive lock(e.mutex);
+            e.gold_before = before; e.gold_after = after;
+            if (result == Gold::Done) { if (after > before) ++e.gold_added; else ++e.gold_full; e.show_notice(text); }
+            else if (result == Gold::NoPurse) { ++e.gold_no_purse; e.show_notice(cheat::GoldNoPurse); }
+            else { ++e.gold_faults; e.show_notice(cheat::GoldFailed); }
         }
     }
     if (uintptr_t manager = 0; guard.state && avatar_dead_locked(manager)) {
@@ -1242,7 +1344,7 @@ extern "C" uintptr_t __cdecl dispatch(uint32_t stage, CpuFrame* f) noexcept {
                         const float sy = *reinterpret_cast<const float*>(f->ebp+0x1C);
                         const float x = *reinterpret_cast<const float*>(q->address+0x18);
                         const float y = *reinterpret_cast<const float*>(q->address+0x20);
-                        const auto em = width == 800 && height == 600 ? 20U : width == 1600 && height == 1200 ? 40U : 0U;
+                        const auto em = screen_em(width,height);
                         const auto back = word(f->ecx+0x3FC3C4);
                         auto& list = e.draw_list;
                         if (!em || word(f->ecx+0x4C) != 32 || !std::isfinite(x) || !std::isfinite(y) ||
@@ -1746,11 +1848,15 @@ void key_press(UINT vk, UINT mods) {
     if (!engine) return;
     if (vk == OpenKeyBindingsVk && mods == (cheat::ModCtrl | cheat::ModShift)) { engine->open_key_bindings(); return; }
     if (engine->opens_map(vk,mods)) input_hooks::block_hover();
+    if (vk == VK_ESCAPE && mods == 0) engine->on_escape();
     engine->on_cheat_key(vk,mods);
 }
 constexpr uint64_t NoticeMs = 2500, ToggleWaitMs = 600;
 constexpr uint32_t StatusEm = 11;   // status numbers: em at 800x600, doubled at 1600x1200
 constexpr uint32_t FloatEm = 15;    // floating numbers: em at 800x600, doubled at 1600x1200
+// Either em on a screen `height` pixels tall (scaled from 600, rounded).
+constexpr uint32_t overlay_em(uint32_t em600, uint32_t height) noexcept { return (em600*height+300)/600; }
+static_assert(overlay_em(StatusEm,600) == 11 && overlay_em(StatusEm,1200) == 22 && overlay_em(FloatEm,1200) == 30);
 constexpr uint64_t FloatMs = 1300;  // a floating number rises for this long, then disappears
 constexpr int32_t ManaBarX = 401, HealthBarX = 1188, BarY = 1177;   // 1600x1200 units (session-30 screenshot)
 // Target frame, 1600x1200 units: centred, below the notice line (notices reach about y 130; session-42 screenshot).
@@ -1869,6 +1975,18 @@ bool Engine::request_skip() noexcept {
     skip_pending = true; ++skips_requested;
     return true;
 }
+void Engine::on_escape() noexcept {
+    // Read before taking `mutex`: the check calls into the game.
+    const uint8_t blocker = esc_contents ? esc_blocker() : 0;
+    Exclusive lock(mutex);
+    if (!esc_contents) return;
+    ++esc_presses;
+    uint8_t reason = blocker;
+    if (!reason && (talk_line || std::any_of(choice_menus.begin(),choice_menus.end(),[](uintptr_t m) { return m != 0; }))) reason = 4;
+    std::rotate(esc_reasons.begin(),esc_reasons.begin()+1,esc_reasons.end()); esc_reasons.back() = reason;
+    if (reason) { ++contents_refused; return; }
+    contents_pending = true; contents_pending_tick = GetTickCount64(); ++contents_requested;
+}
 bool Engine::opens_map(UINT vk, UINT mods) noexcept {
     Exclusive lock(mutex);
     for (const auto& b : map_bindings) if (b.vk == vk && b.mods == mods) { ++map_key_presses; return true; }
@@ -1882,6 +2000,7 @@ void Engine::on_cheat_key(UINT vk, UINT mods) noexcept {
         const auto t = cheat::text_for(b.command);
         if (!t) return;
         ++cheat_presses;
+        if (t->kind == cheat::Kind::AddGold) { gold_pending = true; ++gold_requests; return; }
         // The game acts on the key after this returns; the state before it decides when the toggle took effect.
         pending_cheat = {int(i),GetTickCount64(),t->kind == cheat::Kind::Message ? -1 : read_toggle(t->kind)};
         return;
@@ -1896,7 +2015,7 @@ void Engine::update_notice(uintptr_t backend) noexcept {
     if (pending_cheat.binding >= 0 && size_t(pending_cheat.binding) < cheat_bindings.size()) {
         const auto t = cheat::text_for(cheat_bindings[size_t(pending_cheat.binding)].command);
         if (!t) pending_cheat = {};
-        else if (t->kind == cheat::Kind::Message) { show_notice(t->text); pending_cheat = {}; }
+        else if (t->kind == cheat::Kind::Message || t->kind == cheat::Kind::AddGold) { if (t->kind == cheat::Kind::Message) show_notice(t->text); pending_cheat = {}; }
         else {
             const int state = read_toggle(t->kind);
             if ((state >= 0 && state != pending_cheat.before) || now-pending_cheat.tick > ToggleWaitMs) {
@@ -1907,7 +2026,7 @@ void Engine::update_notice(uintptr_t backend) noexcept {
     }
     if (notice.empty() || now > notice_until) return;
     const auto width = word(backend+0x44), height = word(backend+0x48);
-    const auto em = width == 800 && height == 600 ? 20U : width == 1600 && height == 1200 ? 40U : 0U;
+    const auto em = screen_em(width,height);
     if (!em) return;
     // Centred near the top, where narration subtitles appear.
     if (overlay_text(backend,notice,int32_t(width)/2,int32_t(height)*7/100+int32_t(em),em,{248,240,214},notice_glyph_misses))
@@ -1989,8 +2108,7 @@ bool read_status(StatusRead& out) noexcept {
 }
 void Engine::update_status(uintptr_t backend) noexcept {
     const auto width = word(backend+0x44), height = word(backend+0x48);
-    const uint32_t scale = width == 800 && height == 600 ? 1 : width == 1600 && height == 1200 ? 2 : 0;
-    if (!scale) return;
+    if (!screen_em(width,height)) return;
     StatusRead s;
     if (!read_status(s)) { ++status_unreadable; status_synced = false; return; }
     std::copy(std::begin(s.v),std::end(s.v),std::begin(status_last));
@@ -2006,21 +2124,21 @@ void Engine::update_status(uintptr_t backend) noexcept {
     }
     if (!s.health && !s.mana) { records_synced = false; return; }   // HUD hidden: rescan from scratch later
     try {
-        draw_combat(backend,scale,s.record);
+        draw_combat(backend,height,s.record);
         if (status_numbers) {
-            const uint32_t em = StatusEm*scale;
-            const int32_t baseline = int32_t(BarY*int32_t(scale)/2) + int32_t(em)*36/100;
+            const uint32_t em = overlay_em(StatusEm,height);
+            const int32_t baseline = screen_units(BarY,height) + int32_t(em)*36/100;
             std::array<wchar_t,16> buffer{};
             bool drawn = false;
             if (s.mana && s.v[3])
-                drawn |= overlay_text(backend,ratio_text(buffer,s.v[2],s.v[3]),ManaBarX*int32_t(scale)/2,baseline,em,{255,255,255},status_misses);
+                drawn |= overlay_text(backend,ratio_text(buffer,s.v[2],s.v[3]),screen_units(ManaBarX,height),baseline,em,{255,255,255},status_misses);
             if (s.health && s.v[1])
-                drawn |= overlay_text(backend,ratio_text(buffer,s.v[0],s.v[1]),HealthBarX*int32_t(scale)/2,baseline,em,{255,255,255},status_misses);
+                drawn |= overlay_text(backend,ratio_text(buffer,s.v[0],s.v[1]),screen_units(HealthBarX,height),baseline,em,{255,255,255},status_misses);
             if (drawn) ++status_frames;
         }
         if (floating_numbers) {
             const auto now = GetTickCount64();
-            const uint32_t em = FloatEm*scale;
+            const uint32_t em = overlay_em(FloatEm,height);
             bool drawn = false;
             for (auto& f : floaters) {
                 if (!f.length) continue;
@@ -2028,8 +2146,8 @@ void Engine::update_status(uintptr_t backend) noexcept {
                 // Starts just above the bar and rises 70 units (1600x1200) at a slowing pace.
                 const double t = double(now-f.start)/double(FloatMs);
                 const int32_t rise = int32_t(70.0*(1.0-(1.0-t)*(1.0-t)));
-                const int32_t baseline = (f.y-int32_t(double(f.rise)/70.0*rise))*int32_t(scale)/2;
-                drawn |= overlay_text(backend,std::wstring_view(f.text.data(),f.length),f.x*int32_t(scale)/2,baseline,em,f.rgb,floater_misses);
+                const int32_t baseline = screen_units(f.y-int32_t(double(f.rise)/70.0*rise),height);
+                drawn |= overlay_text(backend,std::wstring_view(f.text.data(),f.length),screen_units(f.x,height),baseline,em,f.rgb,floater_misses);
             }
             if (drawn) ++floater_frames;
         }
@@ -2067,18 +2185,22 @@ void Engine::probe_target() noexcept {
     }
     ++target_overflow;
 }
-void Engine::build_bar_glyphs() noexcept {
+std::vector<uint32_t> Engine::overlay_ems(uint32_t em600) const {
+    std::vector<uint32_t> out{overlay_em(em600,600),overlay_em(em600,1200)};
+    if (start_height && start_height != 600 && start_height != 1200) out.push_back(overlay_em(em600,start_height));
+    return out;
+}
+void Engine::build_bar_glyphs(uint32_t height) noexcept {
     try {
-        for (uint32_t scale = 1; scale <= 2; ++scale) {
-            const uint32_t w = TargetW*scale/2, h = TargetH*scale/2, b = std::max<uint32_t>(1,TargetBorder*scale/2);
-            const std::array<std::array<uint32_t,3>,3> spec{{{w+2*b,h+2*b,190},{w,h,255},{w,h,255}}};
-            for (size_t i = 0; i < 3; ++i) {
-                auto& g = bar_glyphs[scale-1][i];
-                g.width = spec[i][0]; g.height = spec[i][1];
-                g.alpha.assign(size_t(g.width)*g.height,uint8_t(spec[i][2]));
-            }
+        const uint32_t w = uint32_t(screen_units(TargetW,height)), h = uint32_t(screen_units(TargetH,height));
+        const uint32_t b = std::max<uint32_t>(1,uint32_t(screen_units(TargetBorder,height)));
+        const std::array<std::array<uint32_t,3>,3> spec{{{w+2*b,h+2*b,190},{w,h,255},{w,h,255}}};
+        for (size_t i = 0; i < 3; ++i) {
+            auto& g = bar_glyphs[i];
+            g.width = spec[i][0]; g.height = spec[i][1];
+            g.alpha.assign(size_t(g.width)*g.height,uint8_t(spec[i][2]));
         }
-        target_bar = true;
+        bar_height = height; target_bar = true;
     } catch (...) { target_bar = false; }
 }
 constexpr uint32_t MaxBars = 3, ResyncChanges = 12;
@@ -2165,7 +2287,7 @@ void Engine::scan_combatants(uint32_t avatar_record, uint32_t locked) noexcept {
         record_peak[i] = base == record_base && object[i] == record_object[i] ? std::max(record_peak[i],hp[i]) : hp[i];
     record_base = base; record_hp = hp; record_max = max; record_object = object; records_synced = true;
 }
-void Engine::draw_combat(uintptr_t backend, uint32_t scale, uint32_t avatar_record) noexcept {
+void Engine::draw_combat(uintptr_t backend, uint32_t height, uint32_t avatar_record) noexcept {
     TargetRead t;
     const uint32_t locked = read_target(t) && t.max && t.max != 0xFFFF ? t.type : 0xFFFFFFFF;
     scan_combatants(avatar_record,locked);
@@ -2197,14 +2319,14 @@ void Engine::draw_combat(uintptr_t backend, uint32_t scale, uint32_t avatar_reco
         rows[count++] = best->record;
     }
     for (auto& k : combatants) { k.row = -1; for (uint32_t r = 0; r < count; ++r) if (rows[r] == k.record) k.row = int32_t(r); }
-    if (!target_bar || !count || !overlay_draw) return;
+    // The rectangles exist for the start height only (allocation stays out of the per-frame path).
+    if (!target_bar || !count || !overlay_draw || height != bar_height) return;
     auto& list = draw_list;
     const auto back = word(backend+0x3FC3C4);
     if (!back || list.epoch != frame) return;
     if (list.count || list.records) { if (list.backend != backend || list.backbuffer != back) return; }
     else { list.backend = backend; list.backbuffer = back; list.width = word(backend+0x44); list.height = word(backend+0x48); }
-    const auto& g = bar_glyphs[scale-1];
-    const int32_t s = int32_t(scale);
+    const auto& g = bar_glyphs;
     const int32_t w = int32_t(g[1].width), h = int32_t(g[1].height), b = (int32_t(g[0].width)-w)/2;
     const Rect screen{0,0,int32_t(list.width),int32_t(list.height)};
     const auto rect = [&](const Glyph& glyph, int32_t x, int32_t y, int32_t cw, std::array<uint8_t,3> rgb) {
@@ -2216,16 +2338,16 @@ void Engine::draw_combat(uintptr_t backend, uint32_t scale, uint32_t avatar_reco
         const auto record = rows[r];
         const uint32_t hp = record_hp[record], max = std::max<uint32_t>(record_peak[record],hp);
         if (!record_max[record] || !max) continue;
-        const int32_t left = TargetX*s/2 - w/2, top = (TargetY+int32_t(r)*BarRowStep)*s/2 - h/2;
+        const int32_t left = screen_units(TargetX,height) - w/2, top = screen_units(TargetY+int32_t(r)*BarRowStep,height) - h/2;
         const int32_t fill = int32_t(int64_t(w)*hp/max);
         // The locked target is red; others hit recently are a duller red.
         const std::array<uint8_t,3> colour = record == locked ? std::array<uint8_t,3>{196,34,26} : std::array<uint8_t,3>{150,60,40};
         if (!rect(g[0],left-b,top-b,w+2*b,{0,0,0}) || !rect(g[1],left,top,w,{58,12,10}) ||
             (fill > 0 && !rect(g[2],left,top,fill,colour))) break;
         try {
-            const uint32_t em = StatusEm*scale;
+            const uint32_t em = overlay_em(StatusEm,height);
             std::array<wchar_t,16> buffer{};
-            overlay_text(backend,ratio_text(buffer,hp,max),TargetX*s/2,top+h/2+int32_t(em)*36/100,em,{255,255,255},status_misses);
+            overlay_text(backend,ratio_text(buffer,hp,max),screen_units(TargetX,height),top+h/2+int32_t(em)*36/100,em,{255,255,255},status_misses);
         } catch (...) {}
         drawn = true;
     }
@@ -2468,6 +2590,29 @@ const FontStyle& Engine::font_style(uintptr_t record) noexcept {
 }
 void Engine::install(const Config& config, Logger& logger) {
     log = &logger; render = config.mode == Mode::Render;
+    {   // The screen size the game will use (Options.ini; the front page writes it before starting). Its glyph em is
+        // prewarmed next to 20 and 40; an unreadable or unsupported size keeps the two verified ones only.
+        std::ifstream f(config_path(config.game_dir) / L"Options.ini", std::ios::binary);
+        std::string line;
+        const auto value = [&](const char* key) -> uint32_t {
+            const auto n = std::strlen(key);
+            if (line.compare(0,n,key) != 0) return 0;
+            uint32_t v = 0; size_t i = n;
+            while (i < line.size() && line[i] >= '0' && line[i] <= '9' && v < 100000) v = v*10 + uint32_t(line[i++]-'0');
+            return v;
+        };
+        uint32_t w = 0, h = 0;
+        while (std::getline(f,line)) {
+            if (const auto v = value("GameScreenWidth=")) w = v;
+            if (const auto v = value("GameScreenHeight=")) h = v;
+        }
+        if (const auto em = screen_em(w,h)) {
+            start_width = w; start_height = h;
+            if (em != 20 && em != 40) screen_ems.push_back(em);
+        }
+        log->event("screen_size","\"width\":"+std::to_string(w)+",\"height\":"+std::to_string(h)+
+                   ",\"em\":"+std::to_string(screen_em(w,h)));
+    }
     require(config.journal_letter_spacing <= MaxJournalLetterSpacing && config.journal_line_spacing <= MaxJournalLineSpacing,
             "journal spacing outside supported range");
     journal_letter = config.journal_letter_spacing; journal_line = config.journal_line_spacing;
@@ -2538,7 +2683,7 @@ void Engine::install(const Config& config, Logger& logger) {
                         for (uint32_t i = 0; i < pack.plans[size_t(plan)].length; ++i) chars += wchar_t(pack.plans[size_t(plan)].wide[i]);
                     // A developer notice must never stop the game: a character the font cannot warm is skipped
                     // (drawn as a miss) and logged, instead of failing initialization (session-30 error 9).
-                    for (const auto c : chars) if (c > 0x20) for (const uint32_t em : {20u,40u}) {
+                    for (const auto c : chars) if (c > 0x20) for (const uint32_t em : screen_ems) {
                         try { glyphs.warm(uint32_t(c),em,c < 0x80); }
                         catch (const std::exception&) { if (unwarmed.size() < 16) unwarmed.push_back(uint32_t(c)); }
                     }
@@ -2557,11 +2702,13 @@ void Engine::install(const Config& config, Logger& logger) {
             click_skip = render && (config.features & FeatureClickSkip) != 0;
             if (click_skip) o.click_skip = click_skip_request;
             log->event("click_skip","\"enabled\":"+std::string(click_skip?"true":"false"));
+            esc_contents = render && (config.features & FeatureEscContents) != 0;
+            log->event("esc_contents","\"enabled\":"+std::string(esc_contents?"true":"false"));
             input_hooks::configure(o);
             // Status numbers: digits and '/' at both screen sizes, proportional (not CJK cells).
             if (render && (config.features & FeatureStatusNumbers)) {
                 bool warmed = true;
-                for (const wchar_t c : std::wstring_view(L"0123456789/")) for (const uint32_t em : {StatusEm,StatusEm*2}) {
+                for (const wchar_t c : std::wstring_view(L"0123456789/")) for (const uint32_t em : overlay_ems(StatusEm)) {
                     try { glyphs.warm(uint32_t(c),em,true); } catch (const std::exception&) { warmed = false; }
                 }
                 status_numbers = warmed;
@@ -2569,7 +2716,7 @@ void Engine::install(const Config& config, Logger& logger) {
             }
             if (render && (config.features & FeatureFloatingNumbers)) {
                 bool warmed = true;
-                for (const wchar_t c : std::wstring_view(L"0123456789+-")) for (const uint32_t em : {FloatEm,FloatEm*2}) {
+                for (const wchar_t c : std::wstring_view(L"0123456789+-")) for (const uint32_t em : overlay_ems(FloatEm)) {
                     try { glyphs.warm(uint32_t(c),em,true); } catch (const std::exception&) { warmed = false; }
                 }
                 floating_numbers = warmed;
@@ -2577,10 +2724,10 @@ void Engine::install(const Config& config, Logger& logger) {
             }
             if (render && (config.features & FeatureTargetBar)) {
                 bool warmed = true;   // the bar's "hp/max" uses the status number glyphs
-                for (const wchar_t c : std::wstring_view(L"0123456789/")) for (const uint32_t em : {StatusEm,StatusEm*2}) {
+                for (const wchar_t c : std::wstring_view(L"0123456789/")) for (const uint32_t em : overlay_ems(StatusEm)) {
                     try { glyphs.warm(uint32_t(c),em,true); } catch (const std::exception&) { warmed = false; }
                 }
-                if (warmed) build_bar_glyphs();
+                if (warmed) build_bar_glyphs(start_height ? start_height : 1200);
                 log->event("target_bar","\"enabled\":"+std::string(target_bar?"true":"false"));
             }
             input_hooks_enabled = input_hooks::any_enabled();
@@ -2603,8 +2750,9 @@ void Engine::install(const Config& config, Logger& logger) {
                 }
             }
         }
-        require(pack.glyph_count*2 <= GlyphCacheCapacity,"prewarm capacity exceeded");
-        for (uint32_t i = 0; i < pack.glyph_count; ++i) for (auto em : {20U,40U}) glyphs.warm(pack.scalars[i],em);
+        const auto screens = uint32_t(screen_ems.size());
+        require(pack.glyph_count*screens <= GlyphCacheCapacity,"prewarm capacity exceeded");
+        for (uint32_t i = 0; i < pack.glyph_count; ++i) for (auto em : screen_ems) glyphs.warm(pack.scalars[i],em);
         for (uint32_t i = 0; i < pack.count; ++i) for (uint32_t j = 0; j < pack.plans[i].length; ++j) {
             const uint32_t s = pack.plans[i].wide[j];
             if (s < 128) continue;
@@ -2616,14 +2764,14 @@ void Engine::install(const Config& config, Logger& logger) {
             pack.plans[i].advances[j] = uint16_t(b->advance*16/40);
         }
         // P8-3: page textures need a third size. Disabled, never fatal, when capacity or metrics disagree.
-        texture_enabled = pack.glyph_count*3 <= GlyphCacheCapacity;
+        texture_enabled = pack.glyph_count*(screens+1) <= GlyphCacheCapacity;
         if (texture_enabled) for (uint32_t i = 0; i < pack.glyph_count; ++i) {
             glyphs.warm(pack.scalars[i],TextureEm);
             const auto* t = glyphs.get(pack.scalars[i],TextureEm); const auto* b = glyphs.get(pack.scalars[i],40);
             if (!t || !b || t->advance*16/int32_t(TextureEm) != b->advance*16/40) texture_enabled = false;
         }
         // P10-1: smaller ems for misctext UI text in small fonts; disabled (16 px everywhere) when capacity or metrics disagree.
-        small_ems = texture_enabled && pack.glyph_count*5 <= GlyphCacheCapacity;
+        small_ems = texture_enabled && pack.glyph_count*(screens+3) <= GlyphCacheCapacity;
         if (small_ems) for (uint32_t i = 0; i < pack.glyph_count && small_ems; ++i) for (auto em : {TextureSmallEm,TextureTinyEm}) {
             glyphs.warm(pack.scalars[i],em);
             const auto* t = glyphs.get(pack.scalars[i],em);
@@ -2788,6 +2936,14 @@ void Engine::snapshot(const char* event) noexcept {
             ",\"skips_requested\":"+std::to_string(skips_requested)+",\"skips_done\":"+std::to_string(skips_done)+
             ",\"skip_faults\":"+std::to_string(skip_faults)+",\"skips_too_early\":"+std::to_string(skips_too_early)+
             ",\"skips_menu\":"+std::to_string(skips_menu)+
+            ",\"esc_presses\":"+std::to_string(esc_presses)+",\"contents_requested\":"+std::to_string(contents_requested)+
+            ",\"contents_opened\":"+std::to_string(contents_opened)+",\"contents_refused\":"+std::to_string(contents_refused)+
+            ",\"contents_faults\":"+std::to_string(contents_faults)+",\"contents_stale\":"+std::to_string(contents_stale)+",\"esc_reasons\":["+[&] {
+                std::string r; for (const auto v : esc_reasons) r += (r.empty()?"":",")+std::to_string(v); return r; }()+"]"+
+            ",\"gold_requests\":"+std::to_string(gold_requests)+",\"gold_added\":"+std::to_string(gold_added)+
+            ",\"gold_full\":"+std::to_string(gold_full)+",\"gold_no_purse\":"+std::to_string(gold_no_purse)+
+            ",\"gold_faults\":"+std::to_string(gold_faults)+",\"gold_before\":"+std::to_string(gold_before)+
+            ",\"gold_after\":"+std::to_string(gold_after)+
             ",\"subtitle_creators\":["+[&] {
                 std::string s;
                 for (const auto& c : subtitle_creators) if (c.caller)

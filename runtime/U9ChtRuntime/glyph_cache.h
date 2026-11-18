@@ -6,7 +6,8 @@
 #include <span>
 
 namespace u9cht {
-inline constexpr size_t GlyphCacheCapacity = 16384;
+// 2026-11-18: 2,726 scalars x (3 screen ems + 3 texture ems) plus overlay glyphs; was 16384 for two screen ems.
+inline constexpr size_t GlyphCacheCapacity = 24576;
 // P8-3: page textures (journal/books) take glyph pixels 1:1; a 16 px em equals the 16-unit logical cell.
 inline constexpr uint32_t TextureEm = 16;
 // P10-1: misctext UI text in small native fonts (font blob +4 = height) uses a smaller CJK em. Journal, book and
@@ -33,14 +34,16 @@ struct Glyph {
     int32_t bearing_x = 0, bearing_y = 0, advance = 0;
     std::vector<uint8_t> alpha;
 };
-// Open-addressed scalar/em -> slot table. No allocation; load factor <= 25%.
+// Open-addressed scalar/em -> slot table. No allocation; load factor <= 19%.
+inline constexpr uint32_t GlyphIndexSlots = 131072;
+static_assert(GlyphCacheCapacity < 65535 && GlyphCacheCapacity*5 <= GlyphIndexSlots, "slot+1 must fit 16 bits");
 class GlyphIndex {
-    std::array<uint16_t,65536> slots_{}; // Stored value is slot+1; 0 means empty.
-    static uint32_t home(uint32_t scalar, uint32_t em) noexcept { return ((scalar*0x9E3779B1U)^(em*0x85EBCA77U))>>16; }
+    std::array<uint16_t,GlyphIndexSlots> slots_{}; // Stored value is slot+1; 0 means empty.
+    static uint32_t home(uint32_t scalar, uint32_t em) noexcept { return ((scalar*0x9E3779B1U)^(em*0x85EBCA77U))>>15; }
 public:
     template <class Keys>
     int find(uint32_t scalar, uint32_t em, const Keys& keys) const noexcept {
-        for (uint32_t i = home(scalar,em);; i = (i+1)&0xFFFF) {
+        for (uint32_t i = home(scalar,em);; i = (i+1)&(GlyphIndexSlots-1)) {
             const auto stored = slots_[i];
             if (!stored) return -1;
             const GlyphKey& k = keys[stored-1U];
@@ -49,7 +52,7 @@ public:
     }
     void insert(uint32_t scalar, uint32_t em, uint32_t slot) noexcept {
         auto i = home(scalar,em);
-        while (slots_[i]) i = (i+1)&0xFFFF;
+        while (slots_[i]) i = (i+1)&(GlyphIndexSlots-1);
         slots_[i] = uint16_t(slot+1);
     }
     void clear() noexcept { slots_.fill(0); }
