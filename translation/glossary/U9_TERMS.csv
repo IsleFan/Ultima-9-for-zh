@@ -1491,3 +1491,6 @@ Order of the Silver Serpent,銀蛇騎士團,organization,approved,recommended,0,
 Knights of Valoria,瓦羅尼亞騎士,organization,approved,recommended,0,,台灣中文手冊 Journal p.23,官方譯名：台灣中文手冊 Journal p.23；2026-11-11 新增; variant of Valorian,
 Druids,德魯伊教徒,organization,approved,recommended,0,,"台灣中文手冊 Journal p.23,25","官方譯名：台灣中文手冊 Journal p.23,25；2026-11-11 新增",
 Infinity,無限,virtue,approved,recommended,0,,台灣中文手冊 Journal p.57 字彙集,官方譯名：台灣中文手冊 Journal p.57 字彙集；2026-11-11 新增,
+Strength,力量,system,approved,recommended,0,text.flx:2044,使用者 2026-11-18：依狀態頁（misctext 30/35/40）統一,屬性名稱；形容詞用法（夠敏捷、聰明）不受限,never
+Dexterity,機敏,system,approved,recommended,0,text.flx:2045,使用者 2026-11-18：依狀態頁（misctext 30/35/40）統一,屬性名稱；形容詞用法（夠敏捷、聰明）不受限,never
+Intelligence,智慧,system,approved,recommended,0,text.flx:2046,使用者 2026-11-18：依狀態頁（misctext 30/35/40）統一,屬性名稱；形容詞用法（夠敏捷、聰明）不受限,never
