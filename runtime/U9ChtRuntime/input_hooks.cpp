@@ -27,7 +27,7 @@ std::vector<std::string> samples;
 
 // ---- feature counters ----
 std::atomic<long> wheel_pages{0}, wheel_zoom{0}, wheel_skipped_modifier{0}, hover_presses{0}, hover_releases{0},
-                  chars_suppressed{0}, board_overrides{0}, modifier_releases{0}, preempted_releases{0}, hover_blocks{0}, win_keys_dropped{0}, clicks_taken{0};
+                  chars_suppressed{0}, board_overrides{0}, modifier_releases{0}, preempted_releases{0}, hover_blocks{0}, win_keys_dropped{0}, clicks_taken{0}, click_holds{0};
 
 // ---- synthetic messages (game thread only) ----
 constexpr WORD Marker = 0xA901;      // repeat-count field of synthetic key messages
@@ -38,6 +38,12 @@ POINT last_cursor{-1,-1};
 DWORD last_move = 0, last_repeat = 0;
 bool hover_active = false;
 bool hover_blocked = false;   // block_hover(); cleared by the next real key or button press
+// A real click starts an action the game carries out over time (walk to a chair and sit, walk to a door). A synthetic
+// X during it interrupts it (the gypsy's chair at the start of a new game, 2026-11-18). So after a real button press
+// no hover starts until the cursor leaves the spot where the button was pressed.
+bool click_hold = false;
+POINT click_spot{};
+constexpr LONG ClickSpotRadius = 8;   // pixels the cursor may drift without ending the hold
 bool left_taken = false;      // a left press went to click_skip; its release and button state follow
 // Diagnostic (docs/research/U9_WORLD_MAP_HOVER.md): every key and button message handed to the game during the
 // 4 s after the map key, to find what closes the map. Read-only; drained with the counters.
@@ -142,6 +148,7 @@ void update_hover() {
     POINT p{}; GetCursorPos(&p);
     if (p.x != last_cursor.x || p.y != last_cursor.y) {
         last_cursor = p; last_move = now;
+        if (click_hold && (std::abs(p.x - click_spot.x) > ClickSpotRadius || std::abs(p.y - click_spot.y) > ClickSpotRadius)) click_hold = false;
         release_hover(true);
         return;
     }
@@ -161,6 +168,7 @@ void update_hover() {
     if (!focused) seen_modifiers = 0;
     if (!focused || !inside || busy || down('X') || !modifiers_clear()) return;
     if (hover_blocked) { ++hover_blocks; return; }
+    if (click_hold) return;
     if (now - last_move < options.hover_delay_ms) return;
     queue_key(game_window,'X',ScanX,false,false);
     hover_active = true; last_repeat = now; ++hover_presses;
@@ -212,6 +220,11 @@ void transform(MSG& m) {
     if (options.hover) {
         if (m.message == WM_MOUSEMOVE || (m.message >= WM_LBUTTONDOWN && m.message <= WM_MBUTTONDBLCLK)) game_window = m.hwnd;
         if (m.message == WM_CHAR && synthetic(m)) { m.message = WM_NULL; m.wParam = 0; m.lParam = 0; ++chars_suppressed; return; }
+        if (!synthetic(m) && (m.message == WM_LBUTTONDOWN || m.message == WM_LBUTTONDBLCLK || m.message == WM_RBUTTONDOWN ||
+                              m.message == WM_RBUTTONDBLCLK || m.message == WM_MBUTTONDOWN)) {
+            if (!click_hold) ++click_holds;
+            click_hold = true; GetCursorPos(&click_spot);
+        }
         // A real key or button ends the synthetic hold; a real X takes over without a synthetic release.
         // The release must reach the game BEFORE the real input, so the real message is put back at the front of
         // the queue and the synthetic X key-up is delivered in its place.
@@ -324,7 +337,7 @@ std::string drain_fields() {
     const auto count = [&](const char* key, std::atomic<long>& v) { if (const long n = v.exchange(0)) add("\"" + std::string(key) + "\":" + std::to_string(n)); };
     count("wheel_pages",wheel_pages); count("wheel_zoom",wheel_zoom); count("wheel_skipped_modifier",wheel_skipped_modifier);
     count("hover_presses",hover_presses); count("hover_releases",hover_releases);
-    count("chars_suppressed",chars_suppressed); count("modifier_releases",modifier_releases); count("hover_blocks",hover_blocks); count("win_keys_dropped",win_keys_dropped); count("clicks_taken",clicks_taken); count("preempted_releases",preempted_releases); count("board_overrides",board_overrides);
+    count("chars_suppressed",chars_suppressed); count("modifier_releases",modifier_releases); count("hover_blocks",hover_blocks); count("win_keys_dropped",win_keys_dropped); count("clicks_taken",clicks_taken); count("click_holds",click_holds); count("preempted_releases",preempted_releases); count("board_overrides",board_overrides);
     {   // [ms after the map key, message, vk, synthetic, repeat, hover blocked]
         std::lock_guard<std::mutex> lock(map_trace_lock);
         std::string t;

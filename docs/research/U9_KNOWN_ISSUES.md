@@ -33,3 +33,26 @@ Memory!` and then quit.
 
 **Next steps (not started):** find out the tool and key; try to reproduce it with and without the overlay, and in
 the plain original game. Only if the overlay is at fault: release and rebuild its texture when focus is lost.
+
+## 2. The Avatar cannot sit in the gypsy's chair at the start of a new game (2026-11-18, fixed)
+
+**Seen:** in a new game, a left click on the chair in front of the gypsy makes the Avatar walk towards it, but the
+walk stops and the Avatar never sits, so the conversation that continues the story cannot start. The player used
+the release build through GOG Galaxy on the GOG install.
+
+**Isolated by the player:**
+
+- The English game (`u9.exe` started directly) sits normally.
+- With 點擊任意處跳過對白 (FeatureClickSkip) off: still fails.
+- With 游標停留顯示名稱 (FeatureHoverNames) off: **sits normally** (CONFIRMED).
+
+**Cause (STRONG EVIDENCE):** the hover feature presses a synthetic X once the cursor has rested on something for
+the hover delay (200 ms here). After the click the cursor usually rests on the chair while the Avatar walks, so the
+X arrives during the walk and the game drops the walk-and-sit action.
+
+**Fix:** `input_hooks.cpp`. After a real mouse button press, no hover starts until the cursor has moved more than
+8 pixels from where the button was pressed (`click_hold`, counter `click_holds`). Moving the cursor brings the names
+back. Not covered: a player who moves the cursor away and lets it rest again while the Avatar is still walking.
+
+**Verified (2026-11-18, player, front page):** hover names on, a click on the chair with the mouse left still: the
+Avatar sits; moving the cursor afterwards shows names again.

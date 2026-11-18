@@ -29,3 +29,13 @@ Contents of a release:
 | `THIRD_PARTY_NOTICES.md` | repository |
 
 The front page writes `u9cht.ini`, `front.ini`, `logs/`, `backup/` and `data/static/` beside itself at run time.
+
+## Cloud saves
+
+Saves stay where the game keeps them (`<game>\savegame`; the launcher starts `u9.exe` with the game folder as its
+working folder). Platform clients sync only around a launch they start themselves.
+
+- **GOG Galaxy** (the GOG release has cloud saves): with the game's custom executable set to `U9Cht.exe`, Galaxy
+  treats the front page as the game and syncs when it closes. Tested by the project owner on 2026-11-18: works.
+- **Steam**: whether the Steam release has Steam Cloud is not known; a launch option
+  `"<folder>\U9Cht.exe" %command%` would work the same way (the front page ignores the extra argument). Not tested.

@@ -294,6 +294,8 @@
   用遊戲的屬性設定 `0x4C56F0` 改背包金幣物品（種類 908）的屬性 17，上限 9999；身上沒有金幣時只提示。session 65 使用者確認 OK
   （加 10 次、已滿 2 次、失敗 0）。見 `docs/research/U9_GOLD.md`。背包的金幣物品名同時改為「金幣」（原「黃金」）。
 - 狀態頁（Ctrl+Z）本來就顯示金幣與箭的數量，使用者確認可見。
+- **游標停留顯示名稱打斷「走過去坐下」**（新遊戲吉普賽人的椅子，劇情卡住）：模擬的 X 鍵取消了動作。修正：真實點擊後，游標離開點擊處 8 像素前不送 X（`click_hold`）。使用者確認修好。見 `docs/research/U9_KNOWN_ISSUES.md` 第 2 節。
+- GOG Galaxy 雲端存檔：把自訂執行檔設成 `U9Cht.exe` 後會同步，使用者測試成功；Steam 未測。見 `docs/release/RELEASE_PROCESS.md`。
 - 截圖時出現「Unable to create Primary Surface in Video Memory!」後遊戲結束：已記錄，原因未查，見 `docs/research/U9_KNOWN_ISSUES.md`。
 
 ## 4. 用中文手冊校對文本（2026-11-11 完成）
