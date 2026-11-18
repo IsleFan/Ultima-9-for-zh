@@ -727,7 +727,7 @@ Goblin Captain,,item,todo,recommended,1,TYPENAME.FLX:34,P8-A candidate scan,,
 Goblin Commander,,item,todo,recommended,1,TYPENAME.FLX:17,P8-A candidate scan,,
 Goblin Grunt,,item,todo,recommended,1,TYPENAME.FLX:192,P8-A candidate scan,,
 Goblin Scrawl,,item,todo,recommended,1,TYPENAME.FLX:5383,P8-A candidate scan,,
-Gold,黃金,item,approved,recommended,1,TYPENAME.FLX:908,P8-A candidate scan,,never
+Gold,金幣,item,approved,recommended,1,TYPENAME.FLX:908,P8-A candidate scan,2026-11-18 背包物品名改金幣，與狀態頁、商店一致；對白裡指金屬或「黃金時代」仍可用黃金,never
 Gold Bracelet,,item,todo,recommended,8,BOOKS-EN.FLX:196,P8-A candidate scan,,
 Gold key,金鑰匙,item,approved,recommended,1,TYPENAME.FLX:573,P8-A candidate scan,P9: replaced auto-derived target that kept English,never
 Gold Necklace,,item,todo,recommended,8,BOOKS-EN.FLX:196,P8-A candidate scan,,
