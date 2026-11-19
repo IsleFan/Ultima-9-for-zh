@@ -56,3 +56,32 @@ back. Not covered: a player who moves the cursor away and lets it rest again whi
 
 **Verified (2026-11-18, player, front page):** hover names on, a click on the chair with the mouse left still: the
 Avatar sits; moving the cursor afterwards shows names again.
+
+## 3. Hover names type X into a text prompt (2026-11-19, fixed)
+
+**Seen:** with 游標停留顯示名稱 on, at a shrine's mantra prompt (「現在說出同情的祈禱詞(Mantra)。」) the input field
+filled with X whenever the cursor rested, more after each mouse move.
+
+**Cause (CONFIRMED by the code and the fix):** the hover presses and repeats a synthetic X key-down. The mantra is
+read by `CheckInputProcessor` (vtable `0x754B70`, slot `0x61A1D0`): it builds an input line (constructor `0x41CA30`,
+vtable `0x742560`) holding an edit field (constructor `0x5C83B0`, vtable `0x7533E8`). The field's key slot `0x5C8B10`
+takes key-down events (flag `0x20`) while the global focus `[0x1325A68]` is the field and types the key, so each
+synthetic X became a letter. The focus is set by `0x5C8E40` and cleared by `0x5C8EDC` and by the field's destructor
+`0x5C8500`.
+
+**Fix:** `engine.cpp` `hover_allowed()`: no hover starts, and an active one is released, while `[0x1325A68]` is not
+zero (counter `hover_text_blocks`). Read only; no new hook. The hover also pauses while a conversation line or a
+choice menu lives (`hover_talk_blocks`; the talk line and menu hooks now install with either FeatureClickSkip or
+FeatureHoverNames).
+
+**Wrong leads (kept so they are not tried again):**
+- The prompt is not a conversation line while the field is open: the line from `0x617A02` is created only after the
+  answer (the result text).
+- The text box of vtable `0x742C30` (constructor `0x420590`, book page builder `0x426A60`) is a different box, most
+  likely the save name; no book is open at the mantra prompt.
+- The line array `0x838F20` (count `[0x838F98]`) stayed empty during the prompt.
+
+**Verified (2026-11-19, player, front page):** hover names on, mantra prompt with the mouse moved and at rest: no X
+typed; `hover_text_blocks` 2374, runtime `errors` 0 (`front-release/logs/20261119-235004*`, local only).
+
+Not checked: the save name box with hover names on.

@@ -160,7 +160,9 @@ void update_hover() {
     RECT r{}; GetClientRect(game_window,&r);
     const bool inside = PtInRect(&r,c) != FALSE;
     const bool busy = down(VK_LBUTTON) || down(VK_RBUTTON) || down(VK_MBUTTON);
+    const bool allowed = !options.hover_allowed || options.hover_allowed();
     if (hover_active) {
+        if (!allowed) { release_hover(true); return; }
         if (physical_modifier() || seen_modifiers) { release_hover(true); ++modifier_releases; return; }
         if (!focused || !inside || busy) { release_hover(true); if (!focused) seen_modifiers = 0; return; }
         if (now - last_repeat >= RepeatMs && !keys_queued()) { queue_key(game_window,'X',ScanX,false,false,true); last_repeat = now; }
@@ -169,7 +171,7 @@ void update_hover() {
     if (!focused) seen_modifiers = 0;
     if (!focused || !inside || busy || down('X') || !modifiers_clear()) return;
     if (hover_blocked) { ++hover_blocks; return; }
-    if (click_hold) return;
+    if (click_hold || !allowed) return;
     if (now - last_move < options.hover_delay_ms) return;
     queue_key(game_window,'X',ScanX,false,false);
     hover_active = true; last_repeat = now; ++hover_presses;

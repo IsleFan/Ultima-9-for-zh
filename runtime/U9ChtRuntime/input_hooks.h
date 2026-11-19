@@ -39,6 +39,9 @@ struct Options {
     // each real PgUp / PgDn press without modifiers. `notches` > 0 = down. True = the runtime scrolled a shop list
     // with it; nothing reaches the game.
     bool (*wheel_scroll)(int notches) = nullptr;
+    // Hover names: asked on the game thread before a hover starts and while one is held. False = no synthetic X now
+    // (a conversation that may be waiting for typed text is on screen).
+    bool (*hover_allowed)() = nullptr;
 };
 void configure(const Options& options);
 // The hover feature presses X for the player. Some game screens close on ANY key press (the world map window,

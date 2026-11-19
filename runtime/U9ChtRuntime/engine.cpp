@@ -955,6 +955,16 @@ int scroll_shop(int notches, bool& stepped) noexcept {
         return 0;
     } __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
 }
+// Text fields (2026-11-19, docs/research/U9_KNOWN_ISSUES.md §3). A typed answer to a conversation (a shrine's
+// mantra: CheckInputProcessor, vtable 0x754B70) is an edit field of vtable 0x7533E8 (constructor 0x5C83B0) inside
+// an input line (0x41CA30). Its key slot 0x5C8B10 takes key-down events (flag 0x20) only while the global focus
+// [0x1325A68] is the field, and types printable keys, so the hover's synthetic X would be typed. The focus is set by
+// 0x5C8E40, cleared by 0x5C8EDC and by the field's destructor 0x5C8500 when it still holds the field.
+constexpr uintptr_t TextFocus = 0x1325A68;
+bool text_field_focused() noexcept {
+    __try { return word(TextFocus) != 0; }
+    __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
 bool clear_target_lock(uintptr_t manager) noexcept {
     __try { reinterpret_cast<void(__thiscall*)(uintptr_t,uint32_t)>(0x4F90C0)(manager,0); return true; }
     __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
@@ -1886,6 +1896,16 @@ int read_toggle(cheat::Kind kind) noexcept {
 // Every real key press (input_hooks on_key): the key bindings hotkey, then the cheat notices (no-op without bindings).
 // The key still reaches the game, which binds nothing to Ctrl+Shift+K.
 bool click_skip_request() { return engine && engine->request_skip(); }
+// FeatureHoverNames: a text box (a shrine's mantra) takes the hover's synthetic X as a typed letter (2026-11-19), so
+// no hover starts while one takes keys, nor while a spoken line or a choice menu lives.
+// Game thread, like the hooks that set these fields.
+bool hover_allowed() {
+    if (!engine) return true;
+    if (text_field_focused()) { ++engine->hover_text_blocks; return false; }
+    if (engine->talk_line) { ++engine->hover_talk_blocks; return false; }
+    for (const auto m : engine->choice_menus) if (m) { ++engine->hover_talk_blocks; return false; }
+    return true;
+}
 bool wheel_scroll_request(int notches) {
     bool stepped = false;
     const int r = scroll_shop(notches,stepped);
@@ -2750,6 +2770,7 @@ void Engine::install(const Config& config, Logger& logger) {
             }
             click_skip = render && (config.features & FeatureClickSkip) != 0;
             if (click_skip) o.click_skip = click_skip_request;
+            if (render && o.hover) o.hover_allowed = hover_allowed;
             log->event("click_skip","\"enabled\":"+std::string(click_skip?"true":"false"));
             esc_contents = render && (config.features & FeatureEscContents) != 0;
             log->event("esc_contents","\"enabled\":"+std::string(esc_contents?"true":"false"));
@@ -2871,8 +2892,9 @@ void Engine::install(const Config& config, Logger& logger) {
     }
     flow_gateway = prepare("text_flow_init",0x5C7620,flow_hook,{0x8B,0x44,0x24,0x08,0x53},{4,1});
     // mov eax,0x1884 (then the stack probe call, left in place). Only when the player asked for dialogue line spacing.
-    // FeatureClickSkip: each of the four starts with push -1; push <its unwind handler>.
-    if (render && (config.features & FeatureClickSkip)) {
+    // FeatureClickSkip, and FeatureHoverNames (no hover while a conversation line or menu lives, 2026-11-19):
+    // each of the four starts with push -1; push <its unwind handler>.
+    if (render && (config.features & (FeatureClickSkip | FeatureHoverNames))) {
         line_ctor_gateway = prepare("talk_line_ctor",0x41C070,line_ctor_hook,{0x6A,0xFF,0x68,0xB6,0x8A,0x72,0},{2,5});
         line_dtor_gateway = prepare("talk_line_dtor",0x41C190,line_dtor_hook,{0x6A,0xFF,0x68,0xDE,0x8A,0x72,0},{2,5});
         menu_ctor_gateway = prepare("choice_menu_ctor",0x41C3D0,menu_ctor_hook,{0x6A,0xFF,0x68,0x03,0x8B,0x72,0},{2,5});
@@ -2984,7 +3006,8 @@ void Engine::snapshot(const char* event) noexcept {
             ",\"gpu_restore_failures\":"+std::to_string(gpu.restore_failures)+
             ",\"skips_requested\":"+std::to_string(skips_requested)+",\"skips_done\":"+std::to_string(skips_done)+
             ",\"skip_faults\":"+std::to_string(skip_faults)+",\"skips_too_early\":"+std::to_string(skips_too_early)+
-            ",\"skips_menu\":"+std::to_string(skips_menu)+
+            ",\"skips_menu\":"+std::to_string(skips_menu)+",\"hover_talk_blocks\":"+std::to_string(hover_talk_blocks.load())+
+            ",\"hover_text_blocks\":"+std::to_string(hover_text_blocks.load())+
             ",\"esc_presses\":"+std::to_string(esc_presses)+",\"contents_requested\":"+std::to_string(contents_requested)+
             ",\"contents_opened\":"+std::to_string(contents_opened)+",\"contents_refused\":"+std::to_string(contents_refused)+
             ",\"contents_faults\":"+std::to_string(contents_faults)+",\"contents_stale\":"+std::to_string(contents_stale)+",\"esc_reasons\":["+[&] {

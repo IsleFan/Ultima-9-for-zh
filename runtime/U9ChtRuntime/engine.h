@@ -277,6 +277,8 @@ struct Engine {
     struct SubtitleCreator { uintptr_t caller = 0; uint64_t count = 0; };
     std::array<SubtitleCreator,8> subtitle_creators{};
     bool request_skip() noexcept;   // game thread, from input_hooks
+    std::atomic<uint64_t> hover_talk_blocks{0};   // hover checks refused while a conversation line or menu lived
+    std::atomic<uint64_t> hover_text_blocks{0};   // hover checks refused while a text field had the focus
     // FeatureEscContents (user request 2026-11-18; docs/research/U9_JOURNAL_CONTENTS.md): Esc with nothing open
     // opens the journal at its table of contents. Decided when the key arrives, carried out at the next flip.
     bool esc_contents = false, contents_pending = false;
