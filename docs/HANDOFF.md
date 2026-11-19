@@ -1,4 +1,4 @@
-# U9-CHT Handoff（2026-11-17）
+# U9-CHT Handoff（2026-11-19）
 
 給下一個工作階段（人或 AI Agent）的交接。
 開工前仍須依 `AGENTS.md` 讀取 `AGENTS.md` 與 `ULTIMA_IX_CHT_MASTER_PLAN.md`。
@@ -14,6 +14,15 @@
 - 幀率低的主因找到並修正：中文改經遊戲的 Direct3D 裝置繪製，不再每幀鎖定畫面緩衝區。
 - 評估了 U9GL（OpenGL 渲染器專案）：只當參考，目前不能和我們同時使用。
 
+**2026-11-17～19 這一波**，細節見第 3g、3h 節：
+- 首頁與遊戲操作：副標「羽化昇天」、視窗化、對話字距行距、點擊跳過對白、Esc 開日誌目錄、加金幣密技、
+  解析度 1024×768／1280×960、商店清單用滾輪或 PageUp／PageDown 捲動。
+- 修好的錯誤：世界地圖放開 Ctrl 就關、游標停留顯示名稱打斷「走過去坐下」（新遊戲卡關）、
+  介面文字捲動幾次後變小點點。
+- 譯名：屬性統一為力量／機敏／智慧；背包的金幣物品名改「金幣」；自動譯文檢查工具。
+- **第一版內部測試包**：差異檔＋首頁套用，包裡沒有任何遊戲檔案（第 3h 節）。
+- **下一個對話要討論 Mac 版**，先讀第 7 節。
+
 ---
 
 ## 0. 新對話開工清單
@@ -28,10 +37,10 @@
 3. Python 測試：`python -m unittest discover -s tests`。
 4. 進遊戲測試用 Steam 私人副本，使用者說「準備好了」之後才執行：
    ```sh
-   python scripts/run_p8_0_session.py start --session .local/p10-misc/session-NN --label "..."      --game-dir .local/steam-game --build .local/p10-misc/out-m26 --runtime .local/p10-misc/build/Release      --config .local/p9-2/u9cht.ini --preserve-saves --seed-saves .local/p10-misc/session-29/final-savegame      --load proxy --keymap .local/p10-misc/keymap/U9CHT-TEST.kmp
+   python scripts/run_p8_0_session.py start --session .local/p10-misc/session-NN --label "..."      --game-dir .local/steam-game --build .local/p10-misc/out-m29 --runtime .local/p10-misc/build/Release      --config .local/p9-2/u9cht.ini --preserve-saves --seed-saves .local/p10-misc/session-29/final-savegame      --load proxy --keymap .local/p10-misc/keymap/U9CHT-TEST.kmp
    python scripts/run_p8_0_session.py finish --session .local/p10-misc/session-NN
    ```
-   - 下一個 session 編號從 **65** 開始。
+   - 下一個 session 編號從 **66** 開始。
    - 較新的測試存檔：`.local/p10-misc/saves/2026-11-17-front`（使用者 2026-11-17 從首頁玩到的進度，最新是 `u9game13.sav`；雜湊在 `saves/2026-11-17-front.sha256`）。要從這裡開始，把 `--seed-saves` 換成這個資料夾。
    - `--load proxy`：用代理 `dsound.dll` 載入（和首頁相同）。不加就是舊的注入方式（啟動器的預設），留作對照。
    - 不加 `--keymap` 就用 `Options.ini` 目前指定的按鍵檔（見第 1 節「私人副本」），沒有作弊鍵。
@@ -43,26 +52,32 @@
 6. Runtime 版本號：
    - 改 runtime 名稱時，三處要一起改：`runtime/common/version_manifest.h`、`u9cht/l10n/runtime_pack.py`、`runtime/CMakeLists.txt`。
    - 改了以後要重建中文化資料，因為 pack 內嵌 runtime 名稱。
-   - 目前仍是 `0.2.45`。這兩波加的功能都沒有升版號。
+   - 目前仍是 `0.2.45`。這幾波加的功能都沒有升版號；正式發佈前要決定是否升版。
+7. 打包內部測試包：見 `docs/release/RELEASE_PROCESS.md`（先 commit，再重建中文化資料，再執行 `scripts/package_release.py`）。
 
 ## 1. 目前狀態一覽
 
-- 分支：`p7-localization-pipeline`，已推送到 `origin`（2026-11-16，`a44ee4b`）。
+- 分支：`p7-localization-pipeline`，已推送到 `origin`（2026-11-19，交接文件這一筆之前是 `4094873`）。
   - 本機備份分支 `backup/p7-before-gargish-rewrite` **不可推送**。這是 2026-11-11 改寫歷史前的備份。
 - 工作樹：只有不可加入的未追蹤檔：`.vscode/`、`83e7052b…png`、`tools/u9xsb6bt2a*`、`tools/uixtools.zip`。
   - `tools/u9xsb6bt2a/` 是第三方工具 Extended Setup（著作權屬原作者），不在 `.gitignore` 裡，**不可加入**。
 - 私人遊戲副本，沒有進行中的 session：
   - Steam：`.local/steam-game`。最近的測試都用它。資源檔是原版，沒有殘留的 `dsound.dll`。
-    - **注意：`Options.ini` 目前是 `Current_Keymap=U9CHT.kmp`**，遊戲資料夾裡有使用者 11-15 15:45 從首頁存的 `U9CHT.kmp`。這是使用者的首頁測試狀態，不要擅自改回。
+    - **注意：`Options.ini` 目前是 `Current_Keymap=U9CHT.kmp`**，遊戲資料夾裡有使用者從首頁存的 `U9CHT.kmp`。這是使用者的首頁測試狀態，不要擅自改回。
+    - 使用者在首頁選了 1280×960 與視窗化，`Options.ini` 與 `dxcfg.ini` 是這個狀態。
     - 因此 `session-56/backup/Options.ini` 不再是可用的比對基準。要比對時以 session 工具 start 時自己備份的 `backup/` 為準。
   - GOG：`.local/runtime-game`。建置中文化資料時用它的原版檔。
-- 測試：
-  - C++：15/15（2026-11-17）。
-  - Python：166 OK（3 skipped）。
+- 測試（2026-11-19）：
+  - C++：16/16（新增 `U9ChtFlxPatchTests`）。
+  - Python：175 OK（3 skipped）。
 - Runtime：`U9ChtRuntime/0.2.45-p11`，建置在 `.local/p10-misc/build/Release`。
-- 中文化資料最新建置：`.local/p10-misc/out-m26`。
+- 中文化資料最新建置：`.local/p10-misc/out-m29`（乾淨工作樹建置；首頁資料夾 `front-release/data` 目前是 `out-m28`，譯文相同）。
 - 測試存檔：`.local/p10-misc/session-29/final-savegame`（Steam 副本）。session 30～61 都從這裡開始，沒有寫回。
-- 首頁測試資料夾：`.local/p10-misc/front-release`，四個程式都是最新版（2026-11-16）。
+- 首頁測試資料夾：`.local/p10-misc/front-release`。`U9ChtRuntime.dll` 是最新版（2026-11-19）；`U9Cht.exe`、啟動器、代理 DLL 是 11-18 版，
+  沒有「從差異檔產生資料」的功能（這個資料夾有現成的 `data/static`，不需要）。
+- 內部測試包：`.local/release/U9CHT-0.1.0-internal.zip`（4.3 MB，commit `4094873`）與 `.report.json`。
+  解壓測試用的資料夾 `.local/release-test/U9CHT-0.1.0-internal` 是**較舊**的一版，多放了指向私人副本的 `front.ini`。
+- 使用者也把測試包解壓到自己的資料夾，經 GOG Galaxy 指向 **GOG 正式安裝** 玩過（使用者自己的選擇；首頁離開遊戲時會還原檔案）。
 - Microsoft Defender：`.local/p10-misc` 的排除**已拿掉**（使用者 2026-11-16）。代理載入沒被攔截；舊的注入方式會被攔截。
 
 ### 翻譯進度（全部是機器初稿 `draft`，尚未人工校稿）
@@ -299,6 +314,25 @@
 - **商店清單用滾輪或 PageUp／PageDown 捲動**：呼叫遊戲自己的箭頭處理 `0x422470`（vtable `0x742E80`），商店開著時這些輸入不再變成翻頁鍵（翻頁會重建頁面、名稱變小點點）。第一版誤改了購買數量（`0x742E60` 的 `+0x30`），已撤回。見 `docs/research/U9_SHOP_SCROLL.md`。
 - **介面文字捲動幾次後變小點點**（中文化原有錯誤，連點箭頭也會）：`journal_buffers` 64 格原本輪流覆蓋，會蓋掉畫面上仍在用的登記；改成蓋掉最久沒用的（`journal_slot`）。使用者確認商店捲動全部正常。
 - 截圖時出現「Unable to create Primary Surface in Video Memory!」後遊戲結束：已記錄，原因未查，見 `docs/research/U9_KNOWN_ISSUES.md`。
+- 解析度：中文可在任何 4:3、高 480～1536 的畫面繪製（字高 = 高／30，`runtime/common/screen.h`）；首頁提供
+  800×600、1024×768、1280×960、1600×1200。使用者用 1280×960 玩過商店等畫面，正常。見 `docs/research/U9_RESOLUTIONS.md`。
+
+### 3h. 譯名與第一版內部測試包（2026-11-18～19）
+
+- 自動譯文檢查：`scripts/qa_review.py`（同一原文不同譯法、專有名詞沒照權威檔、過長的句子）。報告含英文原文，只寫到 `.local/qa/`。
+  2026-11-18 的結果沒有嚴重問題；70 筆對白超過兩行，可做自動重新斷行（未做）。
+- 屬性統一用狀態頁的詞：Strength 力量、Dexterity 機敏、Intelligence 智慧（改 27 筆，形容詞用法不動）。注意「神力」是 Heroic，不是 Strength。
+- 背包金幣物品（TYPENAME 908）由「黃金」改為「金幣」；對白裡指金屬或「黃金時代」仍用黃金。
+- **發佈方式（使用者決定）**：差異檔＋首頁套用；先做內部測試包；只在本機打包，上傳另外決定。
+  - 建置出的 FLX 含英文原文（例如 text.flx 有 288 筆沒改的英文），不能散布。
+  - 包裡每個 FLX 只有一個 U9CP 差異檔：從玩家原檔複製的片段＋我們寫的位元組＋「放寬」（原檔 ASCII 轉 UTF-16，用於書裡引用的石像鬼語）。
+    格式見 `docs/release/PATCH_FORMAT.md`；產生 `u9cht/l10n/patch.py`，套用 `runtime/common/flx_patch.h`。
+  - 首頁第一次開始遊戲時（`front::prepare_static`），從玩家的遊戲檔（或安裝中時的 `backup/`）產生 `data/static/`，前後都比對雜湊。
+  - `scripts/package_release.py`：重新套用每個差異檔確認結果相同；包裡有 FLX、本機路徑、差異檔加入的位元組裡有 16 字以上英文時拒絕打包。
+  - 包的內容：四個程式、`data/`（manifest、allowlist、movies.tsv、patches）、jf open 粉圓字型與授權、`說明.txt`、第三方授權聲明。
+  - 說明檔 `release/說明.txt`：安裝、每次遊玩、首頁設定、常用按鍵、已知問題、移除、存檔位置、GOG Galaxy 雲端存檔、回報、授權。
+- 存檔位置：和原版相同（`<遊戲>\savegame`，啟動器以遊戲資料夾為工作資料夾啟動 `u9.exe`）。
+- 雲端存檔：GOG 版有（透過 Galaxy）；Galaxy 的自訂執行檔設成 `U9Cht.exe` 後會同步，使用者測試成功。Steam 版是否有 Steam Cloud 未確認（本機 Steam 從沒啟動過這個遊戲）。
 
 ## 4. 用中文手冊校對文本（2026-11-11 完成）
 
@@ -363,13 +397,13 @@
 
 ## 5. 尚未進遊戲測試的項目（需要使用者說「準備好了」）
 
-用第 0 節的指令（Steam 副本、`out-m26`）。
+用第 0 節的指令（Steam 副本、`out-m29`）。
 
-- 翻譯畫面還沒確認：
-  - 商店買／賣清單；
+- 翻譯畫面還沒確認（商店買清單已確認；賣的清單還沒看）：
   - 存讀檔頁；
   - 法術書：儀式清單的長標籤，例如「重聚肉體與靈魂儀式」，看會不會超出；
   - 狀態頁：新用語，例如機敏、神力、長程武器、生命力。
+- 新的首頁（含「從差異檔產生資料」）由使用者在自己的資料夾、經 GOG Galaxy 用過，可以進遊戲；還沒有專門檢查首次產生的訊息。
 - **新的繪製路徑在全螢幕（經首頁啟動）和 800×600 下是否正常**：字形、游標、遊戲畫面、切換視窗後回來（貼圖遺失後的復原沒實測過）。
 - 首頁版面：強化功能現在有 10 個勾選框（列距 30），視窗高 914，截圖檢查過、使用者也用過，但還沒在高 DPI 螢幕上看過。
 - 這一波的功能，還沒測到的部分：
@@ -393,8 +427,8 @@
   `scripts/package_release.py`，格式與流程見 `docs/release/PATCH_FORMAT.md`、`docs/release/RELEASE_PROCESS.md`。
   包裡沒有 FLX；首頁第一次開始遊戲時從玩家的原檔產生 `data/static/`。說明檔 `release/說明.txt`。
 - 說明檔 `說明.txt`（已寫，`release/說明.txt`）：已含「開新遊戲前請先重新啟動遊戲」（原版 bug）與防毒說明。
-  - 也要寫：「鎖定敵人時死亡，讀檔前先解除鎖定（T），否則遊戲會閃退」（原版 bug）。A 鍵很可能沒作用，見第 5 節。runtime 已有繞過方法，這段提醒可視情況省略。
-  - 也要寫：防毒軟體可能攔截，以及處理方法。
+  - 可以考慮再寫：「鎖定敵人時死亡，讀檔前先解除鎖定（T）」（原版 bug）。runtime 已有繞過方法，這段提醒可視情況省略。
+- 發佈前還要決定：測試包給誰、怎麼傳；是否升 runtime 版號；是否上傳 GitHub Releases（對外公開，需另外確認）。
 
 - 效能（2026-11-12 使用者提出）：主因已修正，見第 3f 節。以下是當時的記錄，其中「診斷記錄可能有負擔」已排除。剩下的幀率起伏（30～120 fps 隨場景）要先量原版才知道是不是遊戲本身。
   - GitHub 上沒找到 U9 專用的效能專案；社群建議都是 `Options.ini` 調整（`StreamDuration=3000`、`DeadPoolSize=3200`、裁切距離），未驗證。
@@ -429,3 +463,19 @@
 - 用 ✕ 關窗時的 0xC000041D 與原版比對。
 - 商店清單 QA：還有 14 個物品和 7 個註解的加註警告（見 P10 文件）。
 - 本機翻譯工作檔：`.local/translation-work/`（p10-misc、p10-shops、p9-books）。
+
+## 7. 下一個對話：Mac 版
+
+使用者要在新的對話討論 Mac 版。目前知道的事實（未做任何實驗）：
+
+- U9 本身只有 Windows 版（GOG／Steam 都是），從未出過 Mac 版。
+- 中文化全部是 Windows 程式：首頁 `U9Cht.exe`（Win32 GDI）、啟動器、代理 `dsound.dll`、x86 inline hook、
+  經遊戲的 DirectDraw／Direct3D7 繪製中文、IAT 攔截輸入（`PeekMessageA` 等）。
+- 遊戲畫面靠 GOG／Steam 附的 `ddraw.dll` 包裝（dgVoodoo 類，首頁會檢查它的雜湊 `WrapperHash`）。
+- 第 6 節「平台支援」列過的可能路徑（都還是假設，HYPOTHESIS）：
+  - Parallels＋Windows 11 ARM（x86 模擬）：機會最高。
+  - CrossOver／Wine：代理 DLL 載入、hook、ddraw 包裝、影片（DirectShow）、音效要逐項驗證。
+  - 原生 Mac 版：要重寫引擎，超出專案範圍。
+- GOG 在 Mac 上提供的 U9 若是 Windows 版加包裝（例如 Wine 包），要查清楚它用什麼方式執行，以及我們的代理 `dsound.dll` 能不能被載入。
+- 驗證建議：若有 Mac 測試者，先在 Parallels 跑完整檢查（首頁、啟動、對話、日誌、影片字幕、存讀檔），通過才標成「已驗證」。
+- 依 AGENTS.md：任何新的 hook 或可執行檔修改都要先經使用者授權。
