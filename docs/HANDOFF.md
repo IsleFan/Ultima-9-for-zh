@@ -37,7 +37,7 @@
 3. Python 測試：`python -m unittest discover -s tests`。
 4. 進遊戲測試用 Steam 私人副本，使用者說「準備好了」之後才執行：
    ```sh
-   python scripts/run_p8_0_session.py start --session .local/p10-misc/session-NN --label "..."      --game-dir .local/steam-game --build .local/p10-misc/out-m29 --runtime .local/p10-misc/build/Release      --config .local/p9-2/u9cht.ini --preserve-saves --seed-saves .local/p10-misc/session-29/final-savegame      --load proxy --keymap .local/p10-misc/keymap/U9CHT-TEST.kmp
+   python scripts/run_p8_0_session.py start --session .local/p10-misc/session-NN --label "..."      --game-dir .local/steam-game --build .local/p10-misc/out-m30 --runtime .local/p10-misc/build/Release      --config .local/p9-2/u9cht.ini --preserve-saves --seed-saves .local/p10-misc/session-29/final-savegame      --load proxy --keymap .local/p10-misc/keymap/U9CHT-TEST.kmp
    python scripts/run_p8_0_session.py finish --session .local/p10-misc/session-NN
    ```
    - 下一個 session 編號從 **66** 開始。
@@ -57,7 +57,7 @@
 
 ## 1. 目前狀態一覽
 
-- 分支：`p7-localization-pipeline`，已推送到 `origin`（2026-11-19，交接文件這一筆之前是 `4094873`）。
+- 分支：`p7-localization-pipeline`，已推送到 `origin`（2026-11-20，交接文件這一筆之前是 `ef0cb1e`）。
   - 本機備份分支 `backup/p7-before-gargish-rewrite` **不可推送**。這是 2026-11-11 改寫歷史前的備份。
 - 工作樹：只有不可加入的未追蹤檔：`.vscode/`、`83e7052b…png`、`tools/u9xsb6bt2a*`、`tools/uixtools.zip`。
   - `tools/u9xsb6bt2a/` 是第三方工具 Extended Setup（著作權屬原作者），不在 `.gitignore` 裡，**不可加入**。
@@ -71,11 +71,11 @@
   - C++：16/16（新增 `U9ChtFlxPatchTests`）。
   - Python：175 OK（3 skipped）。
 - Runtime：`U9ChtRuntime/0.2.45-p11`，建置在 `.local/p10-misc/build/Release`。
-- 中文化資料最新建置：`.local/p10-misc/out-m29`（乾淨工作樹建置；首頁資料夾 `front-release/data` 目前是 `out-m28`，譯文相同）。
+- 中文化資料最新建置：`.local/p10-misc/out-m30`（commit `ef0cb1e`，乾淨工作樹；藥劑改名）。首頁資料夾 `front-release/data` 就是它；舊的在 `front-release/data.old-m28`。
 - 測試存檔：`.local/p10-misc/session-29/final-savegame`（Steam 副本）。session 30～61 都從這裡開始，沒有寫回。
-- 首頁測試資料夾：`.local/p10-misc/front-release`。`U9ChtRuntime.dll` 是最新版（2026-11-19）；`U9Cht.exe`、啟動器、代理 DLL 是 11-18 版，
+- 首頁測試資料夾：`.local/p10-misc/front-release`。`U9ChtRuntime.dll` 是最新版（2026-11-19，含輸入框暫停停留顯示名稱）；`U9Cht.exe`、啟動器、代理 DLL 是 11-18 版，
   沒有「從差異檔產生資料」的功能（這個資料夾有現成的 `data/static`，不需要）。
-- 內部測試包：`.local/release/U9CHT-0.1.0-internal.zip`（4.3 MB，commit `4094873`）與 `.report.json`。
+- 內部測試包：`.local/release/U9CHT-0.1.0-internal.zip`（2026-11-20 重打：交接文件這一筆、`out-m30`）與 `.report.json`。新包還沒有解壓實測。
   解壓測試用的資料夾 `.local/release-test/U9CHT-0.1.0-internal` 是**較舊**的一版，多放了指向私人副本的 `front.ini`。
 - 使用者也把測試包解壓到自己的資料夾，經 GOG Galaxy 指向 **GOG 正式安裝** 玩過（使用者自己的選擇；首頁離開遊戲時會還原檔案）。
 - Microsoft Defender：`.local/p10-misc` 的排除**已拿掉**（使用者 2026-11-16）。代理載入沒被攔截；舊的注入方式會被攔截。
@@ -334,6 +334,16 @@
 - 存檔位置：和原版相同（`<遊戲>\savegame`，啟動器以遊戲資料夾為工作資料夾啟動 `u9.exe`）。
 - 雲端存檔：GOG 版有（透過 Galaxy）；Galaxy 的自訂執行檔設成 `U9Cht.exe` 後會同步，使用者測試成功。Steam 版是否有 Steam Cloud 未確認（本機 Steam 從沒啟動過這個遊戲）。
 
+### 3i. 祈禱詞輸入框與藥劑名稱（2026-11-19～20）
+
+- **游標停留顯示名稱會把 X 打進輸入框**（神殿祈禱詞）：已修，使用者實測通過（`9da9cef`）。
+  - 輸入框的編輯欄位只在全域輸入焦點 `[0x1325A68]` 指向它時收鍵；停留功能現在在焦點存在時暫停（`hover_text_blocks`），
+    對話對白或選項選單存在時也暫停（`hover_talk_blocks`）。只讀取，沒有新攔截點。
+  - 細節與三條走錯的路見 `docs/research/U9_KNOWN_ISSUES.md` 第 3 節。存檔命名的輸入框（另一種，vtable `0x742C30`）還沒驗證。
+- **藥劑物品名改成「效果＋顏色括號」**（使用者決定，`ef0cb1e`）：TYPENAME 833～840，例如「隱形藥劑（黑）」「治療藥劑（黃）」。
+  - 效果依英文「實用藥劑指南」（BOOKS 389）；對白與書仍用顏色名（詞彙表的「X色藥劑」不變）。仍用手冊的「藥劑」，不用「藥水」。
+  - 書 389 的藍色「Mana Breath」原誤譯「呼吸術」，改「法力之息」。使用者在遊戲中確認名稱與書都正常。
+
 ## 4. 用中文手冊校對文本（2026-11-11 完成）
 
 ### 4.0 結果
@@ -397,7 +407,7 @@
 
 ## 5. 尚未進遊戲測試的項目（需要使用者說「準備好了」）
 
-用第 0 節的指令（Steam 副本、`out-m29`）。
+用第 0 節的指令（Steam 副本、`out-m30`）。
 
 - 翻譯畫面還沒確認（商店買清單已確認；賣的清單還沒看）：
   - 存讀檔頁；
