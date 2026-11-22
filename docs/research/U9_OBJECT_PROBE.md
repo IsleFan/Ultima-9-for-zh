@@ -57,8 +57,9 @@ Bit `0x2000` of `+0x14`:
 
 - set on everything the player could take in the room: the potions (`…3032`, potions also carry `0x1000`), the books
   that were taken, coins, boots, gauntlets, a staff, the spell book;
-- clear on fixed things: bookshelves, torches, chests, buttons, levers, a painting, a crystal ball, goblets and the
-  decorative books on the shelves (`…0032`);
+- clear on fixed things: bookshelves, chests, buttons, levers, a painting, a crystal ball, goblets and the
+  decorative books on the shelves (`…0032`). (Corrected 2026-11-22: wall torches, `…6032`, do have the bit; one
+  ceiling torch `…4032` does not.)
 - clear also on scrolls and a map lying inside a chest or bag (probably because they are contained).
 
 Still to check in other places: doors and other usable fixed objects (no flag found yet for "can be used"), NPC
