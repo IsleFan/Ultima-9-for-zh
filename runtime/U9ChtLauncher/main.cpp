@@ -49,7 +49,7 @@ std::map<std::wstring, std::wstring> read_settings(const std::filesystem::path& 
     static const std::map<std::wstring, std::vector<std::wstring>> known = {
         {L"font", {L"file"}}, {L"journal", {L"letter_spacing", L"line_spacing"}},
         {L"dialogue", {L"letter_spacing", L"line_spacing"}},
-        {L"features", {L"hover_names", L"hover_delay_ms", L"wheel_pages", L"wheel_zoom", L"movie_subtitles", L"input_probe", L"status_numbers", L"floating_numbers", L"target_bar", L"smart_jump", L"click_skip", L"esc_contents"}}};
+        {L"features", {L"hover_names", L"hover_delay_ms", L"wheel_pages", L"wheel_zoom", L"movie_subtitles", L"input_probe", L"status_numbers", L"floating_numbers", L"target_bar", L"smart_jump", L"click_skip", L"esc_contents", L"take_marks"}}};
     need(std::filesystem::is_regular_file(file), "settings file not found");
     std::map<std::wstring, std::wstring> values;
     for (const auto& section : ini_list(nullptr, file)) {
@@ -207,6 +207,7 @@ int wmain(int argc, wchar_t** argv) {
             toggle(L"features.smart_jump", FeatureSmartJump);
             toggle(L"features.click_skip", FeatureClickSkip);
             toggle(L"features.esc_contents", FeatureEscContents);
+            toggle(L"features.take_marks", FeatureTakeMarks);
             if (settings.count(L"features.hover_delay_ms")) {
                 const auto& text = settings.at(L"features.hover_delay_ms");
                 need(!text.empty() && text.size() <= 4 && std::all_of(text.begin(), text.end(), iswdigit),

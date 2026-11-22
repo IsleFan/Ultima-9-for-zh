@@ -32,6 +32,14 @@ int main() {
     }
     check(parse_bindings("[Cheat Commands]\nshift+ctrl+1=recharge_mana").size() == 1, "LF and no spaces");
     check(parse_bindings("").empty() && parse_bindings("[CHEAT COMMANDS]\n").empty(), "empty");
+    {   // show_takeable keys: bound, unbound (F), unbound with F taken by another command
+        const auto bound = take_keys("[CHEAT COMMANDS]\r\nshift+g = show_takeable\r\n");
+        check(bound.size() == 1 && bound[0].vk == 'G' && bound[0].mods == ModShift, "show_takeable bound");
+        const auto fallback = take_keys("[INTERACTION COMMANDS]\r\nj = open_journal\r\n");
+        check(fallback.size() == 1 && fallback[0].vk == 'F' && fallback[0].mods == 0, "show_takeable falls back to F");
+        check(take_keys("[MOVEMENT COMMANDS]\r\nf = forward\r\n").empty(), "no fallback when F is bound");
+        check(take_keys("").size() == 1, "empty keymap: F");
+    }
     {   // one command's bindings in any section (the map key, for the hover block)
         const char* text = "[INTERACTION COMMANDS]\r\nctrl+m = open_world_map\r\nj = open_journal\r\n"
                            "[CHEAT COMMANDS]\r\nshift+ctrl+1 = fill_spellbook\r\n[OTHER]\r\nF9=Open_World_Map ; second key\r\ntab = open_world_map\r\n";

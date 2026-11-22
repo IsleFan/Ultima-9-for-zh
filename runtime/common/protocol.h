@@ -21,11 +21,13 @@ inline constexpr uint32_t FeatureHoverNames = 1, FeatureWheelPages = 2, FeatureW
                           FeatureFloatingNumbers = 64, FeatureTargetBar = 128,
                           FeatureSmartJump = 256,   // the jump key climbs when the game finds something to climb
                           FeatureClickSkip = 512,   // in a conversation, a click anywhere skips the spoken line
-                          FeatureEscContents = 1024; // Esc with nothing open opens the journal's table of contents
-inline constexpr uint32_t AllFeatures = 2047;
+                          FeatureEscContents = 1024, // Esc with nothing open opens the journal's table of contents
+                          FeatureTakeMarks = 2048;   // a held key marks the takeable objects in view
+inline constexpr uint32_t AllFeatures = 4095;
 inline constexpr uint32_t DefaultFeatures = FeatureHoverNames | FeatureWheelPages | FeatureWheelZoom | FeatureMovieSubtitles |
                                             FeatureStatusNumbers | FeatureFloatingNumbers |
-                                            FeatureTargetBar | FeatureClickSkip | FeatureEscContents;
+                                            FeatureTargetBar | FeatureClickSkip | FeatureEscContents |
+                                            FeatureTakeMarks;
 inline constexpr uint32_t MinHoverDelayMs = 100, MaxHoverDelayMs = 2000, DefaultHoverDelayMs = 250;
 // In-game hotkey Ctrl+Shift+K (2026-11-15): the runtime posts OpenKeyBindingsMessage (RegisterWindowMessageW) to the
 // front page's window, with the game's window in wParam; the front page opens its key bindings page. The game itself

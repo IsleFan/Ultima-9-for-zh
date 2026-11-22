@@ -34,7 +34,7 @@ int main() {
             check(names.insert(c.name).second, "command names are unique");
             check(std::string(c.name).size() < 32 && c.page >= 0 && c.page < Pages && c.label && *c.label, "command entry sane");
         }
-        check(commands().size() == 98, "98 bindable commands (97 of the game, add_gold of the runtime)");
+        check(commands().size() == 99, "99 bindable commands (97 of the game, add_gold and show_takeable of the runtime)");
         check(index_of("abort_targeting") < 0 && index_of("toggle_movement_speed") >= 0, "only commands the game registers");
         int rows[Pages]{};
         for (const auto& c : commands()) ++rows[c.page];

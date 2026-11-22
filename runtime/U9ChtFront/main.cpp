@@ -29,10 +29,10 @@ constexpr wchar_t IssuesUrl[] = L"https://github.com/pmanyeh/Ultima-9-for-zh/iss
 constexpr COLORREF Background = RGB(27, 21, 16), Gold = RGB(226, 180, 90), Text = RGB(232, 220, 200),
                    Muted = RGB(154, 143, 128), Line = RGB(107, 90, 58), Good = RGB(140, 200, 120),
                    Bad = RGB(230, 120, 100), Button = RGB(42, 33, 25), ButtonHot = RGB(66, 52, 36);
-constexpr int Width = 900, Height = 914;
+constexpr int Width = 900, Height = 944;
 
 enum Id {
-    None, BrowseGame, SearchGame, Hover, DelayMinus, DelayPlus, Wheel, Zoom, Movies, Status, Floating, TargetBar, SmartJump, ClickSkip, EscContents,
+    None, BrowseGame, SearchGame, Hover, DelayMinus, DelayPlus, Wheel, Zoom, Movies, Status, Floating, TargetBar, SmartJump, ClickSkip, EscContents, TakeMarks,
     FontPick, FontDefault, LetterMinus, LetterPlus, LineMinus, LinePlus, TalkLetterMinus, TalkLetterPlus, TalkLineMinus, TalkLinePlus, Windowed, ResPrev, ResNext, Start, Help, Report, Quit, Choice0, Choice1, Choice2,
     Keys, KeyTab, KeyAdd, KeyRemove, KeySave, KeyDefaults, KeyRevert, KeyBack
 };
@@ -263,7 +263,7 @@ void paint(HDC dc) {
     const auto on = [](uint32_t bit) { return (app.s.features & bit) != 0; };
     p.check(44, 314, L"游標停留顯示名稱", L"不必按住 X，停在物品上就顯示名稱", on(FeatureHoverNames), Hover, idle);
     p.stepper(626, 314, L"延遲", std::to_wstring(app.s.hover_delay_ms) + L" ms", DelayMinus, DelayPlus, idle && on(FeatureHoverNames));
-    // Ten rows, 30 apart (the first stays at 314 for its stepper).
+    // Eleven rows, 30 apart (the first stays at 314 for its stepper).
     p.check(44, 344, L"滾輪翻頁", L"日誌、法術書、書本", on(FeatureWheelPages), Wheel, idle);
     p.check(44, 374, L"Ctrl＋滾輪縮放鏡頭", L"往上拉近，往下拉遠", on(FeatureWheelZoom), Zoom, idle);
     p.check(44, 404, L"影片中文字幕", L"開場與劇情影片", on(FeatureMovieSubtitles), Movies, idle);
@@ -273,47 +273,48 @@ void paint(HDC dc) {
     p.check(44, 524, L"跳躍鍵自動攀爬", L"前面有可以爬的地方就攀爬，沒有才跳躍", on(FeatureSmartJump), SmartJump, idle);
     p.check(44, 554, L"點擊任意處跳過對白", L"對話時點畫面任何地方就跳到下一句", on(FeatureClickSkip), ClickSkip, idle);
     p.check(44, 584, L"Esc 開啟日誌目錄", L"沒有開著的書或視窗時，按 Esc 直接翻到日誌目錄", on(FeatureEscContents), EscContents, idle);
+    p.check(44, 614, L"按住按鍵標出可拿物品", L"附近可以拿的東西上方顯示 ◆；預設按住 F，可在按鍵設定改", on(FeatureTakeMarks), TakeMarks, idle);
 
-    p.heading_line(620, L"畫面與字型");
+    p.heading_line(650, L"畫面與字型");
     const fs::path font(app.s.font);
-    p.text(44, 654, 70, 32, L"字型", p.body, Text);
-    p.text(114, 654, 500, 32, app.s.font.empty() ? L"（找不到字型）" : font.filename().wstring(), p.body, app.s.font.empty() ? Bad : Gold);
-    p.button(628, 656, 112, 28, L"選擇字型…", FontPick, idle);
-    p.button(748, 656, 112, 28, L"預設字型", FontDefault, idle);
-    p.stepper(44, 690, L"日誌字距", std::to_wstring(app.s.letter_spacing), LetterMinus, LetterPlus, idle);
-    p.stepper(340, 690, L"日誌行距", std::to_wstring(app.s.line_spacing), LineMinus, LinePlus, idle);
+    p.text(44, 684, 70, 32, L"字型", p.body, Text);
+    p.text(114, 684, 500, 32, app.s.font.empty() ? L"（找不到字型）" : font.filename().wstring(), p.body, app.s.font.empty() ? Bad : Gold);
+    p.button(628, 686, 112, 28, L"選擇字型…", FontPick, idle);
+    p.button(748, 686, 112, 28, L"預設字型", FontDefault, idle);
+    p.stepper(44, 720, L"日誌字距", std::to_wstring(app.s.letter_spacing), LetterMinus, LetterPlus, idle);
+    p.stepper(340, 720, L"日誌行距", std::to_wstring(app.s.line_spacing), LineMinus, LinePlus, idle);
     // Dialogue: spoken text, subtitles and the choices offered while talking.
-    p.stepper(44, 726, L"對話字距", std::to_wstring(app.s.dialogue_letter), TalkLetterMinus, TalkLetterPlus, idle);
-    p.stepper(340, 726, L"對話行距", std::to_wstring(app.s.dialogue_line), TalkLineMinus, TalkLinePlus, idle);
-    p.text(636, 726, 224, 32, L"對白、字幕與對話選項", p.note, Muted);
+    p.stepper(44, 756, L"對話字距", std::to_wstring(app.s.dialogue_letter), TalkLetterMinus, TalkLetterPlus, idle);
+    p.stepper(340, 756, L"對話行距", std::to_wstring(app.s.dialogue_line), TalkLineMinus, TalkLinePlus, idle);
+    p.text(636, 756, 224, 32, L"對白、字幕與對話選項", p.note, Muted);
     {
         const auto now = game_resolution(app.s.game_dir);
         const auto size = [](uint32_t w, uint32_t h) { return std::to_wstring(w) + L"×" + std::to_wstring(h); };
         const std::wstring chosen = app.s.width ? size(app.s.width, app.s.height) : L"不變更";
-        p.text(44, 762, 90, 32, L"解析度", p.body, idle ? Text : Muted);
-        p.button(136, 764, 28, 28, L"◀", ResPrev, idle);
-        p.text(166, 762, 120, 32, chosen, p.body, idle ? Gold : Muted, DT_CENTER);
-        p.button(288, 764, 28, 28, L"▶", ResNext, idle);
+        p.text(44, 792, 90, 32, L"解析度", p.body, idle ? Text : Muted);
+        p.button(136, 794, 28, 28, L"◀", ResPrev, idle);
+        p.text(166, 792, 120, 32, chosen, p.body, idle ? Gold : Muted, DT_CENTER);
+        p.button(288, 794, 28, 28, L"▶", ResNext, idle);
         // The box and its label only: the note to the right belongs to the resolution.
-        p.check(340, 762, L"視窗化", L"", app.s.windowed, Windowed, idle);
+        p.check(340, 792, L"視窗化", L"", app.s.windowed, Windowed, idle);
         const bool usable = app.s.width || supported(now);
         std::wstring note = now.width ? L"目前：" + size(now.width, now.height) : L"讀不到遊戲的解析度設定";
         if (app.s.width) note += L"。開始遊戲時改成 " + chosen;
         else if (usable) note += L"。開始遊戲時不修改";
         else note += L"。只支援 4:3 的 800×600 到 1600×1200，請改選";
-        p.text(470, 762, 390, 32, note, p.note, usable ? Muted : Bad);
+        p.text(470, 792, 390, 32, note, p.note, usable ? Muted : Bad);
     }
 
-    p.text(40, 804, 820, 26, app.running ? L"遊戲進行中……離開遊戲後會回到這裡並還原檔案。" : app.message, p.note,
+    p.text(40, 834, 820, 26, app.running ? L"遊戲進行中……離開遊戲後會回到這裡並還原檔案。" : app.message, p.note,
            app.running ? Gold : app.message_bad ? Bad : Muted, DT_CENTER);
     const bool can_start = idle && game_ok && app.manifest.ok && !app.s.font.empty() &&
                            (app.s.width || supported(game_resolution(app.s.game_dir)));
     int x = 40;
-    p.button(x, 842, 148, 46, L"開始遊戲", Start, can_start, true); x += 168;
-    p.button(x, 842, 148, 46, L"按鍵設定", Keys, game_ok); x += 168;   // also while the game runs (live reload)
-    p.button(x, 842, 148, 46, L"說明", Help, true); x += 168;
-    p.button(x, 842, 148, 46, L"回報問題", Report, true); x += 168;
-    p.button(x, 842, 148, 46, L"結束", Quit, idle);
+    p.button(x, 872, 148, 46, L"開始遊戲", Start, can_start, true); x += 168;
+    p.button(x, 872, 148, 46, L"按鍵設定", Keys, game_ok); x += 168;   // also while the game runs (live reload)
+    p.button(x, 872, 148, 46, L"說明", Help, true); x += 168;
+    p.button(x, 872, 148, 46, L"回報問題", Report, true); x += 168;
+    p.button(x, 872, 148, 46, L"結束", Quit, idle);
 }
 
 // ---- actions ----
@@ -543,6 +544,7 @@ void act(Id id, int arg = 0) {
     case SmartJump: toggle(FeatureSmartJump); break;
     case ClickSkip: toggle(FeatureClickSkip); break;
     case EscContents: toggle(FeatureEscContents); break;
+    case TakeMarks: toggle(FeatureTakeMarks); break;
     case DelayMinus: s.hover_delay_ms = std::max(MinHoverDelayMs, s.hover_delay_ms - 50); break;
     case DelayPlus: s.hover_delay_ms = std::min(MaxHoverDelayMs, s.hover_delay_ms + 50); break;
     case LetterMinus: if (s.letter_spacing) --s.letter_spacing; break;

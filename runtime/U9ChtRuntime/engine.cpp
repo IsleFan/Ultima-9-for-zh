@@ -1192,7 +1192,8 @@ void Engine::poll_keymap() noexcept {
         size_t cheats = 0;
         {
             auto maps = cheat::command_bindings(text,"open_world_map");
-            Exclusive lock(mutex); map_bindings = std::move(maps);
+            auto takes = cheat::take_keys(text);
+            Exclusive lock(mutex); map_bindings = std::move(maps); take_bindings = std::move(takes);
         }
         if (cheat_notices_on) {
             auto updated = cheat::parse_bindings(text);
@@ -2412,9 +2413,21 @@ uint32_t collect_marks(uint32_t width, uint32_t height, MarkPoint* out, uint32_t
     } __except (EXCEPTION_EXECUTE_HANDLER) { fault = true; }
     return n;
 }
+// The key is held, the game window has the focus and no book or text field is open.
+bool take_key_held(const std::vector<cheat::Binding>& keys) noexcept {
+    DWORD pid = 0; GetWindowThreadProcessId(GetForegroundWindow(),&pid);
+    if (pid != GetCurrentProcessId()) return false;
+    const auto down = [](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; };
+    const uint32_t mods = (down(VK_CONTROL) ? cheat::ModCtrl : 0) | (down(VK_SHIFT) ? cheat::ModShift : 0) | (down(VK_MENU) ? cheat::ModAlt : 0);
+    bool held = false;
+    for (const auto& k : keys) if (k.mods == mods && down(int(k.vk))) { held = true; break; }
+    if (!held) return false;
+    __try { return !word(OpenBook) && !word(TextFocus); } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
 void Engine::update_marks(uintptr_t backend) noexcept {
     const auto width = word(backend+0x44), height = word(backend+0x48);
     if (!screen_em(width,height)) return;
+    if (!take_marks_always) { if (!take_key_held(take_bindings)) return; ++mark_holds; }
     MarkPoint points[64]; bool fault = false;
     const auto n = collect_marks(uint32_t(width),uint32_t(height),points,64,fault);
     if (fault) ++mark_faults;
@@ -2933,7 +2946,9 @@ void Engine::install(const Config& config, Logger& logger) {
                     std::erase_if(cheat_bindings,[](const cheat::Binding& b) { return !cheat::text_for(b.command); });
                     map_bindings = cheat::command_bindings(keymap_text,"open_world_map");
                     log->event("map_bindings","\"count\":"+std::to_string(map_bindings.size()));
-                }
+                    take_bindings = cheat::take_keys(keymap_text);
+                } else take_bindings = cheat::take_keys(read_all(game / L"Default.kmp"));
+                log->event("take_keys","\"count\":"+std::to_string(take_bindings.size()));
                 if (!cheat_bindings.empty()) {
                     std::wstring chars = cheat::all_notice_characters() + L"聖者施展法術#0123456789";
                     for (uint32_t entry = 0x66; entry <= 0x71+45; ++entry) if (const int plan = plan_for_entry(MiscEntryBase+entry); plan >= 0)
@@ -2963,8 +2978,9 @@ void Engine::install(const Config& config, Logger& logger) {
             esc_contents = render && (config.features & FeatureEscContents) != 0;
             log->event("esc_contents","\"enabled\":"+std::string(esc_contents?"true":"false"));
             input_hooks::configure(o);
-            // Takeable-object marks (proof of concept, developer marker take_marks.on): one mark glyph.
-            if (render && exists(L"take_marks.on")) {
+            // Takeable-object marks (FeatureTakeMarks, held key; developer marker take_marks.on: always shown).
+            take_marks_always = exists(L"take_marks.on");
+            if (render && ((config.features & FeatureTakeMarks) || take_marks_always)) {
                 for (const wchar_t c : {L'◆', L'*'}) {
                     bool warmed = true;
                     for (const uint32_t em : overlay_ems(MarkEm)) {
@@ -2972,7 +2988,7 @@ void Engine::install(const Config& config, Logger& logger) {
                     }
                     if (warmed) { take_mark_char = c; take_marks = true; break; }
                 }
-                log->event("take_marks","\"enabled\":"+std::string(take_marks?"true":"false")+",\"char\":"+std::to_string(uint32_t(take_mark_char)));
+                log->event("take_marks","\"enabled\":"+std::string(take_marks?"true":"false")+",\"always\":"+std::string(take_marks_always?"true":"false")+",\"char\":"+std::to_string(uint32_t(take_mark_char)));
             }
             // Status numbers: digits and '/' at both screen sizes, proportional (not CJK cells).
             if (render && (config.features & FeatureStatusNumbers)) {
@@ -3207,7 +3223,7 @@ void Engine::snapshot(const char* event) noexcept {
             ",\"skip_faults\":"+std::to_string(skip_faults)+",\"skips_too_early\":"+std::to_string(skips_too_early)+
             ",\"skips_menu\":"+std::to_string(skips_menu)+",\"hover_talk_blocks\":"+std::to_string(hover_talk_blocks.load())+
             ",\"hover_text_blocks\":"+std::to_string(hover_text_blocks.load())+
-            ",\"mark_frames\":"+std::to_string(mark_frames)+",\"marks_drawn\":"+std::to_string(marks_drawn)+",\"mark_misses\":"+std::to_string(mark_misses)+",\"mark_faults\":"+std::to_string(mark_faults)+
+            ",\"mark_holds\":"+std::to_string(mark_holds)+",\"mark_frames\":"+std::to_string(mark_frames)+",\"marks_drawn\":"+std::to_string(marks_drawn)+",\"mark_misses\":"+std::to_string(mark_misses)+",\"mark_faults\":"+std::to_string(mark_faults)+
             ",\"esc_presses\":"+std::to_string(esc_presses)+",\"contents_requested\":"+std::to_string(contents_requested)+
             ",\"contents_opened\":"+std::to_string(contents_opened)+",\"contents_refused\":"+std::to_string(contents_refused)+
             ",\"contents_faults\":"+std::to_string(contents_faults)+",\"contents_stale\":"+std::to_string(contents_stale)+",\"esc_reasons\":["+[&] {

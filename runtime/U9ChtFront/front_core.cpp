@@ -107,7 +107,7 @@ Settings load_settings(const fs::path& launcher_ini, const fs::path& front_ini) 
         {L"movie_subtitles", FeatureMovieSubtitles}, {L"input_probe", FeatureInputProbe},
         {L"status_numbers", FeatureStatusNumbers}, {L"floating_numbers", FeatureFloatingNumbers},
         {L"target_bar", FeatureTargetBar}, {L"smart_jump", FeatureSmartJump}, {L"click_skip", FeatureClickSkip},
-        {L"esc_contents", FeatureEscContents}};
+        {L"esc_contents", FeatureEscContents}, {L"take_marks", FeatureTakeMarks}};
     for (const auto& [key, bit] : bits)
         if (read_number(launcher_ini, L"features", key, v) && v <= 1) s.features = v ? (s.features | bit) : (s.features & ~bit);
     if (read_number(launcher_ini, L"features", L"hover_delay_ms", v))
@@ -130,7 +130,8 @@ void save_settings(const Settings& s, const fs::path& launcher_ini, const fs::pa
       << L"\r\ntarget_bar = " << flag(FeatureTargetBar)
       << L"\r\nsmart_jump = " << flag(FeatureSmartJump)
       << L"\r\nclick_skip = " << flag(FeatureClickSkip)
-      << L"\r\nesc_contents = " << flag(FeatureEscContents) << L"\r\n";
+      << L"\r\nesc_contents = " << flag(FeatureEscContents)
+      << L"\r\ntake_marks = " << flag(FeatureTakeMarks) << L"\r\n";
     write_utf16(launcher_ini, l.str());
     std::wostringstream f;
     f << L"; Written by U9Cht.exe (the front page).\r\n[game]\r\ndir = " << s.game_dir << L"\r\n";

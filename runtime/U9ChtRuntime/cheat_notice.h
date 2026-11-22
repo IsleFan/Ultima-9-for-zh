@@ -83,6 +83,18 @@ inline std::vector<Binding> command_bindings(std::string_view kmp, std::string_v
     std::erase_if(all,[&](const Binding& b) { return b.command != command; });
     return all;
 }
+// The keys of show_takeable (2026-11-22, docs/research/U9_OBJECT_PROBE.md). Not a game command: the game files it with
+// no handler, like add_gold; the runtime marks takeable objects while one of its keys is held. When the keymap binds
+// neither show_takeable nor a plain F to anything, F is used.
+inline std::vector<Binding> take_keys(std::string_view kmp) {
+    auto keys = command_bindings(kmp,"show_takeable");
+    if (keys.empty()) {
+        bool f_used = false;
+        for (const auto& b : parse_bindings(kmp,true)) if (b.vk == 'F' && !b.mods) f_used = true;
+        if (!f_used) keys.push_back({uint32_t('F'),0,"show_takeable"});
+    }
+    return keys;
+}
 // Current_Keymap=<file> in Options.ini, or "" when absent.
 inline std::string current_keymap(std::string_view options) {
     while (!options.empty()) {

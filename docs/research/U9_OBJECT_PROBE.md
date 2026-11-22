@@ -125,3 +125,18 @@ potions (839, 840), staff, short sword, spell book, a loose torch (`0x2032`), a 
 Open: whether chest 1887, the force field and type 1222 can really be taken; occlusion by walls inside the range (a
 depth test against the game's depth buffer would need the game's z mapping for its pre-transformed vertices).
 
+## Feature (user decisions 2026-11-22)
+
+- Feature bit `FeatureTakeMarks` (2048), `take_marks` in `u9cht.ini` `[features]`, **on by default**. Front page:
+  按住按鍵標出可拿物品.
+- Marks show only while a key of `show_takeable` is held, the game window has the focus, and no book (`[0x83D268]`)
+  or text field (`[0x1325A68]`) is open. `show_takeable` is not a game command (filed with no handler, like
+  `add_gold`); the key bindings page lists it on 互動與日誌. When the keymap binds neither it nor a plain F, F is used
+  (`cheat::take_keys`, tested in `cheat_notice_tests.cpp`). Live keymap reload updates the keys.
+- Look: the gold ◆ of the proof of concept. The developer marker `take_marks.on` still shows the marks always.
+- Counters: `mark_holds`, `mark_frames`, `marks_drawn`, `mark_misses`, `mark_faults`; `take_marks_set` logs the
+  marked types (local log).
+- Verified by the player (2026-11-22): the switch on the front page, hold F shows and release hides, nothing while
+  the backpack or journal is open, a rebound key works after saving, switch off shows nothing.
+- Occlusion by walls inside the range is the known limit (player guide, 已知的問題).
+

@@ -130,6 +130,8 @@ const std::vector<Command>& commands() {
         // Not a game command: the game files an unknown name as a command with no handler, category 0xFFFF
         // (0x4D25E0 -> 0x4D28A0), so it sorts last and never runs. The runtime acts on it (U9_GOLD.md).
         {"add_gold", UnknownCategory, 5, L"作弊：金幣增加一千（中文化）"},
+        // Not a game command either: the runtime marks takeable objects while its key is held (F when unbound).
+        {"show_takeable", UnknownCategory, 1, L"按住標出可拿物品（中文化）"},
     };
     return table;
 }

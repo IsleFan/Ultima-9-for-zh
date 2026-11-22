@@ -297,7 +297,9 @@ struct Engine {
     std::wstring notice;
     uint64_t notice_until = 0, cheat_presses = 0, cheat_notices = 0, notice_frames = 0, notice_glyph_misses = 0;
     // Takeable-object marks, proof of concept (developer marker take_marks.on; docs/research/U9_OBJECT_PROBE.md).
-    bool take_marks = false;
+    bool take_marks = false, take_marks_always = false;   // FeatureTakeMarks; marker take_marks.on: always shown
+    std::vector<cheat::Binding> take_bindings;   // keys of show_takeable (F when the keymap binds neither it nor F)
+    uint64_t mark_holds = 0;
     wchar_t take_mark_char = L'*';
     uint64_t mark_frames = 0, marks_drawn = 0, mark_misses = 0, mark_faults = 0, mark_log_hash = 0, mark_log_next = 0;
     void update_marks(uintptr_t backend) noexcept;
