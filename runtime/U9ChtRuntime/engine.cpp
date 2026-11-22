@@ -1039,6 +1039,111 @@ bool read_movement(MovementProbe& p) noexcept {
     } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
 }
 }
+// Research probe for highlighting takeable objects (2026-11-20, docs/research/U9_OBJECT_PROBE.md). Developer marker
+// object_probe.on only; read-only. Every 10 s, six times: the Avatar's instance ([[[0x131F668]]+0xE8]) and every
+// used entry of the object handle table ([0x8515D0], 12-byte entries, capacity [0x8515CC], +4 region (-1 free),
+// +8 object; object +0xA = type id).
+struct ProbeRow { uint32_t handle, region; uintptr_t object; uint32_t raw[32]; };
+uint32_t read_object_table(ProbeRow* rows, uint32_t max, uint32_t& capacity) noexcept {
+    uint32_t n = 0; capacity = 0;
+    __try {
+        capacity = uint32_t(word(0x8515CC));
+        const auto table = word(0x8515D0);
+        if (!table || capacity > 0x100000) return 0;
+        for (uint32_t h = 0; h < capacity && n < max; ++h) {
+            const auto region = uint32_t(word(table+h*12+4));
+            const auto object = word(table+h*12+8);
+            if (region == 0xFFFFFFFFu || !object) continue;
+            auto& r = rows[n]; r.handle = h; r.region = region; r.object = object;
+            __try { for (uint32_t i = 0; i < 32; ++i) r.raw[i] = uint32_t(word(object+i*4)); }
+            __except (EXCEPTION_EXECUTE_HANDLER) { continue; }
+            ++n;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    return n;
+}
+bool read_avatar_instance(uintptr_t& instance, uint32_t* raw, uint32_t words) noexcept {
+    __try {
+        const auto controller = word(0x131F668); if (!controller) return false;
+        const auto actor = word(controller); if (!actor) return false;
+        instance = word(actor+0xE8); if (!instance) return false;
+        for (uint32_t i = 0; i < words; ++i) raw[i] = uint32_t(word(instance+i*4));
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
+// The region pool holding handle 1 (the Avatar's object, type 0): R = [0x91AAD8 + region*4], base = [[R+0xD0]+0x34]
+// (object pointers are base + offset, 0x4F1DBC / 0x4C37BE). Copies `bytes` from the base; also R and [R+0xD0].
+struct PoolProbe { uintptr_t region_ptr, pool, base, avatar; uint32_t region; uint32_t head_r[64], head_p[64]; };
+uint32_t read_avatar_pool(PoolProbe& p, uint8_t* out, uint32_t bytes) noexcept {
+    __try {
+        const auto table = word(0x8515D0); if (!table) return 0;
+        p.region = uint32_t(word(table+12+4)); p.avatar = word(table+12+8);
+        if (p.region == 0xFFFFFFFFu || p.region > 4096 || !p.avatar) return 0;
+        p.region_ptr = word(0x91AAD8+p.region*4); if (!p.region_ptr) return 0;
+        p.pool = word(p.region_ptr+0xD0); if (!p.pool) return 0;
+        p.base = word(p.pool+0x34); if (!p.base) return 0;
+        for (uint32_t i = 0; i < 64; ++i) { p.head_r[i] = uint32_t(word(p.region_ptr+i*4)); p.head_p[i] = uint32_t(word(p.pool+i*4)); }
+        uint32_t n = 0;
+        for (; n < bytes; n += 32) {
+            __try { memcpy(out+n,reinterpret_cast<const void*>(p.base+n),32); }
+            __except (EXCEPTION_EXECUTE_HANDLER) { break; }
+        }
+        return n;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
+}
+void Engine::probe_objects() noexcept {
+    if (!object_probe || object_probe_dumps >= 6) return;
+    const auto now = GetTickCount64();
+    if (now < object_probe_next) return;
+    object_probe_next = now + 1000;
+    const auto hex = [](uint32_t v) { char b[12]; std::snprintf(b,sizeof b,"%08X",v); return std::string(b); };
+    {   // only once the Avatar is in the world; then every 15 s
+        uintptr_t instance = 0; std::vector<uint32_t> raw(0x200);   // 0x800 bytes
+        if (!read_avatar_instance(instance,raw.data(),uint32_t(raw.size()))) return;
+        object_probe_next = now + 15000;
+        const auto dump = object_probe_dumps + 1;
+        std::string s;
+        for (size_t i = 0; i < raw.size(); ++i) s += (i ? "," : "") + std::string("\"") + hex(raw[i]) + "\"";
+        log->event("object_probe_avatar","\"dump\":"+std::to_string(dump)+",\"instance\":"+std::to_string(instance)+",\"raw\":["+s+"]");
+    }
+    const auto dump = ++object_probe_dumps;
+    std::vector<ProbeRow> rows(6000);
+    uint32_t capacity = 0;
+    const auto n = read_object_table(rows.data(),uint32_t(rows.size()),capacity);
+    log->event("object_probe_table","\"dump\":"+std::to_string(dump)+",\"capacity\":"+std::to_string(capacity)+",\"used\":"+std::to_string(n));
+    for (uint32_t start = 0; start < n; start += 40) {
+        std::string s;
+        for (uint32_t i = start; i < std::min(n,start+40); ++i) {
+            const auto& r = rows[i];
+            s += (i > start ? "," : "") + std::string("[") + std::to_string(r.handle) + "," + std::to_string(r.region) + "," +
+                 std::to_string(r.object) + ",\"";
+            for (uint32_t k = 0; k < 32; ++k) s += hex(r.raw[k]);
+            s += "\"]";
+        }
+        log->event("object_probe_rows","\"dump\":"+std::to_string(dump)+",\"rows\":["+s+"]");
+    }
+    {
+        PoolProbe p{}; std::vector<uint8_t> pool(0x40000);   // 8192 records of 32 bytes
+        const auto bytes = read_avatar_pool(p,pool.data(),uint32_t(pool.size()));
+        std::string hr, hp;
+        for (uint32_t i = 0; i < 64; ++i) { hr += hex(p.head_r[i]); hp += hex(p.head_p[i]); }
+        log->event("object_probe_pool","\"dump\":"+std::to_string(dump)+",\"region\":"+std::to_string(p.region)+
+            ",\"region_ptr\":"+std::to_string(p.region_ptr)+",\"pool\":"+std::to_string(p.pool)+",\"base\":"+std::to_string(p.base)+
+            ",\"avatar\":"+std::to_string(p.avatar)+",\"bytes\":"+std::to_string(bytes)+",\"region_head\":\""+hr+"\",\"pool_head\":\""+hp+"\"");
+        for (uint32_t start = 0; start < bytes; start += 32*64) {   // 64 records per event; all-zero records skipped
+            std::string s; bool any = false;
+            for (uint32_t off = start; off < std::min(bytes,start+32*64); off += 32) {
+                bool zero = true;
+                for (uint32_t k = 0; k < 32; ++k) if (pool[off+k]) { zero = false; break; }
+                if (zero) continue;
+                s += (any ? "," : "") + std::string("[") + std::to_string(off) + ",\"";
+                for (uint32_t k = 0; k < 32; k += 4) { uint32_t v; memcpy(&v,&pool[off+k],4); s += hex(v); }
+                s += "\"]"; any = true;
+            }
+            if (any) log->event("object_probe_pool_rows","\"dump\":"+std::to_string(dump)+",\"rows\":["+s+"]");
+        }
+    }
+}
 void Engine::probe_movement() noexcept {
     if (movement_probed) return;
     MovementProbe p{};
@@ -1110,7 +1215,7 @@ uintptr_t __fastcall flip_hook(uintptr_t self, void*) {
     Guard guard;
     // Live keymap reload, outside `mutex` for the same reason as the death unlock below: freeing the old keys
     // re-enters this runtime through the free hook.
-    if (guard.state) { guard.state->poll_keymap(); guard.state->probe_movement(); }
+    if (guard.state) { guard.state->poll_keymap(); guard.state->probe_movement(); guard.state->probe_objects(); }
     // Outside `mutex`: the clear routine frees the target marker, which re-enters this runtime through the free and
     // destroy hooks; holding the lock here deadlocked the game on death (session-55).
     // FeatureClickSkip: outside `mutex` too, since closing the line destroys it through the destructor hook.
@@ -2725,6 +2830,8 @@ void Engine::install(const Config& config, Logger& logger) {
             // (docs/research/U9_PERFORMANCE.md; on by default since 2026-11-17, sessions 63-64). The developer
             // marker gpu_overlay.off forces the Lock path, which also remains the automatic fallback.
             gpu_overlay = !exists(L"gpu_overlay.off");
+            object_probe = exists(L"object_probe.on");   // research probe, read-only (probe_objects)
+            if (object_probe) log->event("object_probe","\"enabled\":true");
             log->event("gpu_overlay","\"enabled\":"+std::string(gpu_overlay?"true":"false"));
             o.wheel = (config.features & FeatureWheelPages) && !exists(L"wheel_pages.off");
             if (render) o.wheel_scroll = wheel_scroll_request;   // the wheel only while wheel paging is on

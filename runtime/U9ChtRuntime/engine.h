@@ -330,6 +330,11 @@ struct Engine {
     bool smart_jump = false;
     std::atomic<uint64_t> smart_climbs{0}, smart_jumps{0}, smart_faults{0};
     void probe_movement() noexcept;
+    // Research probe (developer marker object_probe.on; docs/research/U9_OBJECT_PROBE.md). Game thread only.
+    bool object_probe = false;
+    uint32_t object_probe_dumps = 0;
+    uint64_t object_probe_next = 0;
+    void probe_objects() noexcept;
     bool overlay_draw = true;   // developer marker overlay_draw.off: overlays compute but draw nothing
     bool status_numbers = false;
     uint64_t status_frames = 0, status_misses = 0, status_unreadable = 0;
