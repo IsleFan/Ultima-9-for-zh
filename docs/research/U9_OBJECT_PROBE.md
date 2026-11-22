@@ -64,8 +64,38 @@ Bit `0x2000` of `+0x14`:
 Still to check in other places: doors and other usable fixed objects (no flag found yet for "can be used"), NPC
 corpses, and items on the floor outdoors.
 
+## The camera's draw list (CONFIRMED by the code, 0x4A01B0 = the game's own log_camera_items dump)
+
+- Scene `C = [[0x850228]+0xBC]`; first node `[C+0x11C]`, next node `+4` (iterator `0x5637A0` / `0x5637F0`).
+- Node `+0x14` = the object record (null for nodes without one, e.g. level geometry); node `+0x170` flags: the game's
+  dump marks a node with any of `0x200C` as **not drawn**.
+- Node `+0x2C`..`+0x58`: the instance's 3×4 world matrix, rows of four floats; its translation (the world position)
+  is `+0x38`, `+0x48`, `+0x58`. The inverse follows at `+0x5C`. A world bounding box seems to be near `+0xBC`.
+- `0x4BE730` (object position) returned (0, 0, 0) for these objects when called from the probe; not used.
+
+Session `front-release/logs/20261122-215837*`: 269–332 nodes with an object in one room.
+
+## The camera (CONFIRMED by the numbers, same session)
+
+- Direct3D: world and view are identity and the projection only maps screen pixels (2/1600, 2/1200). The game
+  transforms vertices itself, so the camera is in the scene object `C`.
+- `C+0x44`..`+0x70`: world-to-camera 3×4 matrix, rows of four floats: right `(+0x44, +0x48, +0x4C | +0x50)`,
+  forward/depth `(+0x54, +0x58, +0x5C | +0x60)`, up `(+0x64, +0x68, +0x6C | +0x70)`. The rotation alone is also at
+  `+0x14`..`+0x40`.
+- Camera position `+0x80`, `+0x90`, `+0xA0` (also `+0xC4`..`+0xCC`); the matrix maps it to (0, 0, 0).
+- `+0x8` = `+0xC` = 1385.64 = 800 / tan 30°: the focal length in pixels for the 1600-pixel-wide screen; `+0x15C` = 60
+  (horizontal field of view in degrees); `+0xA4`, `+0xA8` = 800, 600 (meaning unknown).
+- Projection used: `v = M·P + t`; screen x = W/2 + f·v.right / v.depth, y = H/2 − f·v.up / v.depth.
+- Check: of the 69 nodes the game drew in that frame, 66 project inside the 1600×1200 screen; of the 233 it did not
+  draw, 230 project outside.
+
+## Takeable bit, more cases
+
+With `0x2000` of the object's `+0x14` set among drawn nodes: books, the yellow potion, a staff, a short sword, a full
+plate armour, and **wall torches** (flags `…6032`; U9 lets the player take torches). Also a "force field" (type 3820)
+and an unnamed type 1222: to check in play.
+
 ## Not known yet
 
-- How to list only the chunks around the Avatar when several regions are loaded.
-- The camera (position, orientation, field of view) needed to place a marker on screen. The game may submit
-  pre-transformed vertices, so Direct3D's transform state may not hold it.
+- Whether the force field and type 1222 are really takeable.
+- Where to draw the marker (the instance position is the object's base; the bounding box may give its top).

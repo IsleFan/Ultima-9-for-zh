@@ -334,7 +334,7 @@ struct Engine {
     bool object_probe = false;
     uint32_t object_probe_dumps = 0;
     uint64_t object_probe_next = 0;
-    void probe_objects() noexcept;
+    void probe_objects(uintptr_t backend) noexcept;
     bool overlay_draw = true;   // developer marker overlay_draw.off: overlays compute but draw nothing
     bool status_numbers = false;
     uint64_t status_frames = 0, status_misses = 0, status_unreadable = 0;
