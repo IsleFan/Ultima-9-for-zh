@@ -296,6 +296,11 @@ struct Engine {
     struct PendingCheat { int binding = -1; uint64_t tick = 0; int before = -1; } pending_cheat;
     std::wstring notice;
     uint64_t notice_until = 0, cheat_presses = 0, cheat_notices = 0, notice_frames = 0, notice_glyph_misses = 0;
+    // Takeable-object marks, proof of concept (developer marker take_marks.on; docs/research/U9_OBJECT_PROBE.md).
+    bool take_marks = false;
+    wchar_t take_mark_char = L'*';
+    uint64_t mark_frames = 0, marks_drawn = 0, mark_misses = 0, mark_faults = 0, mark_log_hash = 0, mark_log_next = 0;
+    void update_marks(uintptr_t backend) noexcept;
     std::vector<uint32_t> unwarmed;   // notice characters the font could not warm (logged at start)
     void on_cheat_key(UINT vk, UINT mods) noexcept;    // game thread, from input_hooks
     void on_spell_cast(uint32_t caster, uint32_t avatar, uint32_t spell) noexcept;   // caster/avatar: objects       // game thread, the Avatar's casts (cast_hook)

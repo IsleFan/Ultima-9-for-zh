@@ -100,3 +100,28 @@ and an unnamed type 1222: to check in play.
 
 - Whether the force field and type 1222 are really takeable.
 - Where to draw the marker (the instance position is the object's base; the bounding box may give its top).
+
+## Proof of concept: marks over takeable objects (2026-11-22, user approval)
+
+`engine.cpp` `collect_marks` / `update_marks`, only with the developer marker `take_marks.on`. Each frame it walks the
+draw list, keeps nodes the game draws whose object passes the filter, projects the box top (`+0x58` + `+0xF8` + 8)
+with the camera above and draws a "◆" through the existing overlay (`overlay_text`). Read only, no new hook.
+
+First test (player): the marks sat on the right objects and followed the camera, but also on the Avatar itself, on
+wall torches and on objects outside the room (behind walls, on the floor below).
+
+Filters after the test:
+
+- skip type < 0x200 (the Avatar's object has `0x2032`, like an item);
+- `(+0x14 & 0x6003) == 0x2002`: drops wall torches (`0x6032`, so `0x4000` = fixed, HYPOTHESIS), decorations (`0x2033`)
+  and moss (`0x3030`);
+- only within 1200 units horizontally and 220 in height of the Avatar's node (type 0). The game draws objects behind
+  walls and on other floors and lets the depth buffer hide them; the drawn flag does not tell.
+
+Second test (player, session `20261122-222847`, local): "looks good". Marked types: books (826, 827, 1292, 1293),
+potions (839, 840), staff, short sword, spell book, a loose torch (`0x2032`), a lamp, a chest (1887), the force field
+(3820) and the unnamed type 1222 (`0x3032`). `marks_drawn` 39750, `mark_misses` 0, `mark_faults` 0.
+
+Open: whether chest 1887, the force field and type 1222 can really be taken; occlusion by walls inside the range (a
+depth test against the game's depth buffer would need the game's z mapping for its pre-transformed vertices).
+

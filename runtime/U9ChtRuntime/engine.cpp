@@ -1259,7 +1259,8 @@ uintptr_t __fastcall flip_hook(uintptr_t self, void*) {
         DWORD zero = 0; e.render_thread.compare_exchange_strong(zero,GetCurrentThreadId());
         if (e.render_thread.load() != GetCurrentThreadId()) e.fail(15);
         ++e.flips;
-        if (e.render) { if (e.status_numbers || e.floating_numbers || e.target_bar) e.update_status(self); if (!e.cheat_bindings.empty()) e.update_notice(self); e.compose(self); }
+        if (e.render) { if (e.take_marks) e.update_marks(self);
+            if (e.status_numbers || e.floating_numbers || e.target_bar) e.update_status(self); if (!e.cheat_bindings.empty()) e.update_notice(self); e.compose(self); }
         for (const auto& q : e.queues) if (q.address && q.last_frame == e.frame)
             if (const auto* r = e.raster(q.raster)) for (uint32_t i = 0; i < r->runs.size(); ++i)
                 if (r->runs.first_plan(i)) ++e.stats[r->runs.at(i).plan].presentations;
@@ -2353,6 +2354,91 @@ void Engine::probe_target() noexcept {
     }
     ++target_overflow;
 }
+// Takeable-object marks, proof of concept (2026-11-22, user approval; docs/research/U9_OBJECT_PROBE.md). Each frame,
+// the camera's draw list (scene [[0x850228]+0xBC], nodes from +0x11C through +4) gives the nodes the game draws (none
+// of 0x200C in +0x170) whose object (+0x14) has the takeable bit 0x2000 in +0x14. A node's world position is its
+// matrix translation (+0x38, +0x48, +0x58) and its local box top +0xF8; the scene's world-to-camera rows
+// (+0x44.., +0x54.., +0x64..) and focal length (+0x8, for a 1600-wide screen) project it. Read only.
+constexpr uint32_t MarkEm = 12;   // em at 800x600
+// Filters from the first play test (2026-11-22): the Avatar (type 0) and NPCs (type < 0x200) carry 0x2000 too; wall
+// torches add 0x4000 (fixed); decorations have low byte 0x33, moss 0x30. Takeable items seen: (+0x14 & 0x6003) ==
+// 0x2002 (books, potions, coins, weapons, armour pieces, a lamp). Objects behind walls or on another floor are drawn
+// as well (the depth buffer hides them), so marks are limited to MarkRange around the Avatar and MarkHeight above or
+// below it until occlusion is solved.
+constexpr float MarkRange = 1200.0f, MarkHeight = 220.0f;
+struct MarkPoint { int32_t x, y; uint16_t type; uint32_t flags; int32_t dz, distance; };
+uint32_t collect_marks(uint32_t width, uint32_t height, MarkPoint* out, uint32_t max, bool& fault) noexcept {
+    uint32_t n = 0; fault = false;
+    __try {
+        const auto world = word(0x850228); if (!world) return 0;
+        const auto scene = word(world+0xBC); if (!scene) return 0;
+        const auto f = [&](uintptr_t a) { return *reinterpret_cast<const float*>(a); };
+        float m[12];
+        for (int i = 0; i < 12; ++i) m[i] = f(scene+0x44+uintptr_t(i)*4);
+        // The focal length is stored for the game's own screen; scale it to ours by width.
+        const float focal = f(scene+0x8) * float(width) / 1600.0f;
+        if (!(focal > 1.0f) || !(focal < 100000.0f)) return 0;
+        // The Avatar's node (object type 0) gives the reference point.
+        bool have_avatar = false; float ax = 0, ay = 0, az = 0;
+        uint32_t steps = 0;
+        for (auto node = word(scene+0x11C); node && steps < 4096; node = word(node+4), ++steps) {
+            const auto object = word(node+0x14);
+            if (object && *reinterpret_cast<const uint16_t*>(object+0xA) == 0) {
+                ax = f(node+0x38); ay = f(node+0x48); az = f(node+0x58); have_avatar = true; break;
+            }
+        }
+        if (!have_avatar) return 0;
+        steps = 0;
+        for (auto node = word(scene+0x11C); node && n < max && steps < 4096; node = word(node+4), ++steps) {
+            if (word(node+0x170) & 0x200C) continue;
+            const auto object = word(node+0x14);
+            if (!object) continue;
+            const auto type = *reinterpret_cast<const uint16_t*>(object+0xA);
+            const auto flags = uint32_t(word(object+0x14));
+            if (type < 0x200 || (flags & 0x6003) != 0x2002) continue;
+            const float px = f(node+0x38), py = f(node+0x48), base = f(node+0x58), top = f(node+0xF8);
+            const float dx = px-ax, dy = py-ay, dz = base-az;
+            const float distance = std::sqrt(dx*dx+dy*dy);
+            if (!(distance <= MarkRange) || !(std::fabs(dz) <= MarkHeight)) continue;
+            const float pz = base + (top > 0.0f && top < 1000.0f ? top : 0.0f) + 8.0f;
+            const float right = m[0]*px + m[1]*py + m[2]*pz + m[3];
+            const float depth = m[4]*px + m[5]*py + m[6]*pz + m[7];
+            const float up    = m[8]*px + m[9]*py + m[10]*pz + m[11];
+            if (!(depth > 16.0f)) continue;
+            const float sx = float(width)/2 + focal*right/depth, sy = float(height)/2 - focal*up/depth;
+            if (!(sx >= 0 && sx < float(width) && sy >= 0 && sy < float(height))) continue;
+            out[n++] = {int32_t(sx), int32_t(sy), type, flags, int32_t(dz), int32_t(distance)};
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { fault = true; }
+    return n;
+}
+void Engine::update_marks(uintptr_t backend) noexcept {
+    const auto width = word(backend+0x44), height = word(backend+0x48);
+    if (!screen_em(width,height)) return;
+    MarkPoint points[64]; bool fault = false;
+    const auto n = collect_marks(uint32_t(width),uint32_t(height),points,64,fault);
+    if (fault) ++mark_faults;
+    const uint32_t em = overlay_em(MarkEm,uint32_t(height));
+    const wchar_t text[1] = {take_mark_char};
+    bool any = false;
+    for (uint32_t i = 0; i < n; ++i)
+        if (overlay_text(backend,std::wstring_view(text,1),points[i].x,points[i].y,em,{255,224,96},mark_misses)) { ++marks_drawn; any = true; }
+    if (any) ++mark_frames;
+    // Diagnostic (local log): the marked set, whenever its types change, at most once a second.
+    const auto now = GetTickCount64();
+    uint64_t hash = n;
+    for (uint32_t i = 0; i < n; ++i) hash = hash*1000003u ^ points[i].type;
+    if (hash != mark_log_hash && now >= mark_log_next) {
+        mark_log_hash = hash; mark_log_next = now + 1000;
+        try {
+            std::string list;
+            for (uint32_t i = 0; i < n && i < 32; ++i)
+                list += (i ? "," : "") + std::string("[") + std::to_string(points[i].type) + "," + std::to_string(points[i].flags & 0xFFFF) +
+                        "," + std::to_string(points[i].dz) + "," + std::to_string(points[i].distance) + "]";
+            log->event("take_marks_set","\"count\":"+std::to_string(n)+",\"marks\":["+list+"]");
+        } catch (...) {}
+    }
+}
 std::vector<uint32_t> Engine::overlay_ems(uint32_t em600) const {
     std::vector<uint32_t> out{overlay_em(em600,600),overlay_em(em600,1200)};
     if (start_height && start_height != 600 && start_height != 1200) out.push_back(overlay_em(em600,start_height));
@@ -2877,6 +2963,17 @@ void Engine::install(const Config& config, Logger& logger) {
             esc_contents = render && (config.features & FeatureEscContents) != 0;
             log->event("esc_contents","\"enabled\":"+std::string(esc_contents?"true":"false"));
             input_hooks::configure(o);
+            // Takeable-object marks (proof of concept, developer marker take_marks.on): one mark glyph.
+            if (render && exists(L"take_marks.on")) {
+                for (const wchar_t c : {L'◆', L'*'}) {
+                    bool warmed = true;
+                    for (const uint32_t em : overlay_ems(MarkEm)) {
+                        try { glyphs.warm(uint32_t(c),em,true); } catch (const std::exception&) { warmed = false; }
+                    }
+                    if (warmed) { take_mark_char = c; take_marks = true; break; }
+                }
+                log->event("take_marks","\"enabled\":"+std::string(take_marks?"true":"false")+",\"char\":"+std::to_string(uint32_t(take_mark_char)));
+            }
             // Status numbers: digits and '/' at both screen sizes, proportional (not CJK cells).
             if (render && (config.features & FeatureStatusNumbers)) {
                 bool warmed = true;
@@ -3110,6 +3207,7 @@ void Engine::snapshot(const char* event) noexcept {
             ",\"skip_faults\":"+std::to_string(skip_faults)+",\"skips_too_early\":"+std::to_string(skips_too_early)+
             ",\"skips_menu\":"+std::to_string(skips_menu)+",\"hover_talk_blocks\":"+std::to_string(hover_talk_blocks.load())+
             ",\"hover_text_blocks\":"+std::to_string(hover_text_blocks.load())+
+            ",\"mark_frames\":"+std::to_string(mark_frames)+",\"marks_drawn\":"+std::to_string(marks_drawn)+",\"mark_misses\":"+std::to_string(mark_misses)+",\"mark_faults\":"+std::to_string(mark_faults)+
             ",\"esc_presses\":"+std::to_string(esc_presses)+",\"contents_requested\":"+std::to_string(contents_requested)+
             ",\"contents_opened\":"+std::to_string(contents_opened)+",\"contents_refused\":"+std::to_string(contents_refused)+
             ",\"contents_faults\":"+std::to_string(contents_faults)+",\"contents_stale\":"+std::to_string(contents_stale)+",\"esc_reasons\":["+[&] {
