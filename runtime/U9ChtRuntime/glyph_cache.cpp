@@ -1,5 +1,7 @@
 #include "glyph_cache.h"
 #include <algorithm>
+#include <cstdio>
+#include <stdexcept>
 
 namespace u9cht {
 namespace {
@@ -50,6 +52,34 @@ std::wstring font_family_from_sfnt(std::span<const uint8_t> d) {
     }
     throw std::runtime_error("font has no name table");
 }
+FontAdvances font_advances_from_sfnt(std::span<const uint8_t> d) {
+    size_t head = 0, hhea = 0, hmtx = 0, hmtx_length = 0;
+    const auto tables = be16(d,4);
+    for (uint32_t t = 0; t < tables; ++t) {
+        const size_t rec = 12+size_t(t)*16;
+        const auto tag = be32(d,rec); const size_t base = be32(d,rec+8), length = be32(d,rec+12);
+        require(base+length <= d.size(), "font table outside the file");
+        if (tag == 0x68656164) { require(length >= 54, "invalid head table"); head = base; }        // 'head'
+        else if (tag == 0x68686561) { require(length >= 36, "invalid hhea table"); hhea = base; }   // 'hhea'
+        else if (tag == 0x686D7478) { hmtx = base; hmtx_length = length; }                       // 'hmtx'
+    }
+    FontAdvances out;
+    if (!head || !hhea || !hmtx) return out;   // no metrics: nothing to snap to
+    const auto units = be16(d,head+18), count = be16(d,hhea+34);
+    require(units >= 16 && units <= 16384, "invalid unitsPerEm");
+    require(count && size_t(count)*4 <= hmtx_length, "invalid hmtx table");
+    out.units_per_em = units;
+    out.advances.resize(count);
+    for (uint32_t i = 0; i < count; ++i) out.advances[i] = uint16_t(be16(d,hmtx+size_t(i)*4));
+    return out;
+}
+int32_t snap_cell_advance(int32_t measured, uint32_t design_units, uint32_t units_per_em, uint32_t em) noexcept {
+    if (!units_per_em || !design_units) return measured;
+    const uint64_t scaled = uint64_t(design_units)*em;
+    if (scaled % units_per_em) return measured;
+    const auto expected = int32_t(scaled/units_per_em);
+    return (measured == expected-1 || measured == expected+1) ? expected : measured;
+}
 void GlyphCache::open(const std::filesystem::path& font) {
     require(!registered_, "font already open");
     const auto bytes = std::filesystem::file_size(font);
@@ -59,6 +89,7 @@ void GlyphCache::open(const std::filesystem::path& font) {
       DWORD got = 0; require(file.get() != INVALID_HANDLE_VALUE && ReadFile(file.get(),data.data(),DWORD(bytes),&got,nullptr) &&
           got == bytes, "font file read failed"); }
     family_ = font_family_from_sfnt(data);
+    advances_ = font_advances_from_sfnt(data);
     hash_ = sha256_bytes(data.data(),data.size());
     path_ = font;
     require(AddFontResourceExW(path_.c_str(),FR_PRIVATE,nullptr) > 0, "private font registration failed");
@@ -113,8 +144,17 @@ void GlyphCache::warm(uint32_t scalar, uint32_t em, bool proportional) {
         require(coverage <= 64, "invalid gray8 coverage");
         g.alpha[size_t(y)*g.width+x] = static_cast<uint8_t>((coverage*255+32)/64);
     }
-    require(g.advance > 0 && (proportional || g.advance*16%int(em) == 0) && g.advance*16/int(em) <= 255,
-        "non-integral engine logical metric");
+    if (!proportional) {   // a cell glyph keeps the font's own advance when the rasterizer is one pixel off (Wine)
+        const auto snapped = snap_cell_advance(g.advance,advances_.design(index),advances_.units_per_em,em);
+        if (snapped != g.advance) { g.advance = snapped; ++advance_snaps; }
+    }
+    if (!(g.advance > 0 && (proportional || g.advance*16%int(em) == 0) && g.advance*16/int(em) <= 255)) {
+        // Names the glyph (2026-11-23: under Wine a glyph failed this and the bare message could not say which).
+        char detail[96];
+        std::snprintf(detail, sizeof detail, "non-integral engine logical metric: U+%04X em %u advance %d",
+                      unsigned(scalar), unsigned(em), int(g.advance));
+        throw std::runtime_error(detail);
+    }
     alpha_bytes_ += g.alpha.size();
     index_.insert(scalar,em,size_);
     entries_[size_++] = std::move(g);
@@ -127,6 +167,7 @@ bool GlyphCache::close() noexcept {
     }
     for (auto& g : entries_) { std::vector<uint8_t> empty; g.alpha.swap(empty); }
     size_ = 0; alpha_bytes_ = 0; index_.clear(); verified_em_.fill(false); hash_.clear(); family_.clear();
+    advances_ = {}; advance_snaps = 0;
     return removed;
 }
 }

@@ -3063,7 +3063,7 @@ void Engine::install(const Config& config, Logger& logger) {
             if (!t || t->advance <= 0 || uint32_t(t->advance) > em) small_ems = false;
         }
         log->event("texture_glyphs","\"enabled\":"+std::string(texture_enabled?"true":"false")+",\"em\":"+std::to_string(TextureEm)+
-            ",\"small_ems\":"+std::string(small_ems?"true":"false"));
+            ",\"small_ems\":"+std::string(small_ems?"true":"false")+",\"advance_snaps\":"+std::to_string(glyphs.advance_snaps));
         // P10-2: the clock needs a one-character plan for every scalar it can produce.
         clock_enabled = texture_enabled;
         for (size_t k = 0; k < clock_plans.size(); ++k) {

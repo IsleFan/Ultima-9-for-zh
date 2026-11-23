@@ -60,9 +60,24 @@ public:
 // P9-1: the CJK font is chosen by the player. Identity is the file's SHA-256 (checked again against
 // the face GDI actually selects), and the family comes from the file's own OpenType name table.
 std::wstring font_family_from_sfnt(std::span<const uint8_t> data);
+// 2026-11-23 (Wine): the rasterizer's hinted advance can miss the font's own advance by one pixel (Wine 10 measured
+// U+2015 at 25 px for em 26 and 33 px for em 32; Windows GDI measures 26 and 32). The design advances (hmtx, by glyph
+// index) let a cell glyph keep the width the font defines.
+struct FontAdvances {
+    uint32_t units_per_em = 0;
+    std::vector<uint16_t> advances;   // per glyph index; indices past the list use the last entry (hmtx rule)
+    uint32_t design(uint32_t index) const noexcept {
+        return advances.empty() ? 0 : advances[index < advances.size() ? index : advances.size()-1];
+    }
+};
+FontAdvances font_advances_from_sfnt(std::span<const uint8_t> data);
+// The font's advance at em when it is a whole pixel count and the measured one is within one pixel of it;
+// otherwise the measured advance unchanged (a larger difference is a real mismatch and stays visible to the checks).
+int32_t snap_cell_advance(int32_t measured, uint32_t design_units, uint32_t units_per_em, uint32_t em) noexcept;
 class GlyphCache {
     std::filesystem::path path_;
     std::wstring hash_, family_;
+    FontAdvances advances_;
     bool registered_ = false;
     std::array<Glyph,GlyphCacheCapacity> entries_;
     struct KeyView {
@@ -75,6 +90,7 @@ class GlyphCache {
     uint32_t size_ = 0;
 public:
     uint64_t hits = 0, misses = 0;
+    uint32_t advance_snaps = 0;   // cell glyphs whose measured advance was one pixel off the font's own
     ~GlyphCache() { close(); }
     void open(const std::filesystem::path& font);
     const Glyph* get(uint32_t scalar, uint32_t em) noexcept;

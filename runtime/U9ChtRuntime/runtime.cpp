@@ -5,6 +5,8 @@
 #include <cstdio>
 #include <filesystem>
 #include <memory>
+#include <stdexcept>
+#include <string>
 
 namespace {
 u9cht::Logger log_file;
@@ -112,12 +114,18 @@ extern "C" DWORD WINAPI U9ChtInitialize(void* argument) noexcept {
                        ",\"debugger_attached\":false,\"debugger_required\":false");
         return 1;
     } catch (...) {
+        // The failed check's message (2026-11-23: under Wine the error number alone did not say which check failed).
+        std::string reason = "unknown";
+        try { throw; } catch (const std::exception& e) { reason = e.what(); } catch (...) {}
+        std::string reason_json;
+        for (const char c : reason) reason_json += (c == '"' || c == '\\') ? '\'' : (static_cast<unsigned char>(c) < 0x20 ? ' ' : c);
         config->state = u9cht::State::Fail;
         if (u9cht::engine) {
             if (!u9cht::engine->shutdown(true)) config->error = u9cht::Error::Rollback;
             else { delete u9cht::engine; u9cht::engine = nullptr; config->hooks_installed = 0; }
         }
-        log_file.event("runtime_fail", "\"error\":" + std::to_string(static_cast<uint32_t>(config->error)));
+        log_file.event("runtime_fail", "\"error\":" + std::to_string(static_cast<uint32_t>(config->error)) +
+                       ",\"reason\":\"" + reason_json + "\"");
         initialized = false; log_file.close(); return 0;
     }
 }

@@ -85,6 +85,34 @@ int main() {
             check(table->find(0x4E00+i/2,i%2 ? 40 : 20,*keys) == int(i));
         check(table->find(0x4E00+GlyphCacheCapacity,20,*keys) == -1 && table->find(0x4E00,80,*keys) == -1);
         table->clear(); check(table->find(0x4E00,20,*keys) == -1);
+        // Wine (2026-11-23): one-pixel rasterizer misses snap back to the font's own cell advance; nothing else moves.
+        check(snap_cell_advance(25,1024,1024,26) == 26 && snap_cell_advance(33,1024,1024,32) == 32);
+        check(snap_cell_advance(26,1024,1024,26) == 26 && snap_cell_advance(24,1024,1024,26) == 24);
+        check(snap_cell_advance(11,512,1024,26) == 11 && snap_cell_advance(12,512,1024,26) == 13);
+        check(snap_cell_advance(16,746,1024,26) == 16);     // 746*26/1024 is not whole: left as measured
+        check(snap_cell_advance(25,0,1024,26) == 25 && snap_cell_advance(25,1024,0,26) == 25);
+        {   // Synthetic sfnt: head (unitsPerEm 1000), hhea (2 long metrics), hmtx (1000, 500).
+            std::vector<uint8_t> f(12+3*16, 0);
+            auto put16 = [&](size_t at, uint32_t v) { f[at] = uint8_t(v>>8); f[at+1] = uint8_t(v); };
+            auto put32 = [&](size_t at, uint32_t v) { put16(at,v>>16); put16(at+2,v&0xFFFF); };
+            put32(0,0x00010000); put16(4,3);
+            const uint32_t tags[3] = {0x68656164,0x68686561,0x686D7478}, sizes[3] = {54,36,8};
+            for (int t = 0; t < 3; ++t) {
+                const size_t rec = 12+size_t(t)*16, base = f.size();
+                put32(rec,tags[t]); put32(rec+8,uint32_t(base)); put32(rec+12,sizes[t]);
+                f.resize(base+sizes[t],0);
+            }
+            const size_t head = 12+48, hhea = head+54, hmtx = hhea+36;
+            put16(head+18,1000); put16(hhea+34,2); put16(hmtx,1000); put16(hmtx+4,500);
+            const auto metrics = font_advances_from_sfnt(f);
+            check(metrics.units_per_em == 1000 && metrics.advances.size() == 2);
+            check(metrics.design(0) == 1000 && metrics.design(1) == 500 && metrics.design(7) == 500);   // past the list: last entry
+            put16(hhea+34,3);   // more long metrics than hmtx holds
+            bool rejected = false;
+            try { (void)font_advances_from_sfnt(f); } catch (const std::exception&) { rejected = true; }
+            check(rejected);
+            check(FontAdvances{}.design(3) == 0);
+        }
         // Occlusion bounds follow pending commands and reset with the frame.
         FrameList pending; pending.width = pending.height = 64;
         check(!pending.overlaps({0,0,64,64}));
