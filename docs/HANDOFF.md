@@ -513,7 +513,11 @@
   - 切換視窗幾次後收不到滑鼠：原版也會，是 Wine／WSLg 的問題，Mac 上待確認。
   - 本機環境：Wine 環境在 WSL 的 `~/.u9cht-wine`；遊戲副本 `.local/wine-game`（從 Steam 副本複製，解析度改過）；測試首頁 `.local/wine-front`（解壓測試包，再換上新的 `U9Cht.exe`、`U9ChtRuntime.dll`）；Wine 記錄 `.local/wine-logs/`。
   - 啟動方式：`WINEPREFIX=~/.u9cht-wine WINEDLLOVERRIDES="mscoree,mshtml=;ddraw=n;dsound=n,b" wine explorer /desktop=u9front,1280x1024 U9Cht.exe`（在 `wine-front` 資料夾執行）。
-  - 下一步：準備給 Mac 夥伴的測試包和說明（M3）。
+  - 給 Mac 夥伴的東西已準備好（2026-11-23）：
+    - 測試包 `.local/release/U9CHT-0.1.1-internal.zip`：`out-m30` 加上修正後的程式，四個程式的雜湊與 w05 測過的相同；
+    - 說明 `docs/release/MAC_TEST_GUIDE.md`。
+    - CrossOver 的選單名稱沒有在 Mac 上核對過。
+  - 下一步：等夥伴回報（M3）。可能要處理切換視窗後收不到滑鼠的問題，以及標題列和訊息框的方框字。
 
 目前知道的事實（未做任何實驗）：
 
