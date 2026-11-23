@@ -498,7 +498,24 @@
 
 ## 7. Mac 版（暫停，2026-11-20）
 
-使用者原本要在新的對話討論 Mac 版，後來決定先調整幾個功能，Mac 版之後再談。目前知道的事實（未做任何實驗）：
+使用者原本要在新的對話討論 Mac 版，後來決定先調整幾個功能，Mac 版之後再談。
+
+2026-11-23 恢復討論：
+- 使用者**沒有 Mac**，會請其他夥伴實機測試。所以 Mac 上的驗證每一輪都要來回溝通，要盡量在這台電腦先排除問題。
+- 建議的步驟：M0 決定範圍 → M1 在這台電腦用 WSL2＋Wine 預先測 → M2 修相容問題 → M3 夥伴用 CrossOver／Parallels 試用版實測 → M4 寫 Mac 安裝說明。
+- CodeWeavers 舊回報（CrossOver 12）：GOG 版可以玩，但過場影片不能播。我們自己的影片播放器不經 DirectShow，可能順便解決（HYPOTHESIS）。
+- 主要風險：Wine 預設用內建的 dsound，不會載入我們的代理 `dsound.dll`，要設定 DLL 覆寫，或在 Wine 下改用注入方式。
+- **M1 結果（2026-11-23，細節見 `docs/research/U9_WINE_MAC.md`）**：WSL2 Ubuntu 26.04＋Wine 10.0，wow64 模式。
+  - 原版要用 GOG 包裝（`ddraw=n`）。中文化還要 `dsound=n,b`。
+  - 修了兩處後，內部測試包可以在 Wine 下完整運作，對話、介面、影片字幕都是中文：
+    - 首頁改用附帶的字型；
+    - runtime 字寬誤差 1 像素時校正。
+  - 切換視窗幾次後收不到滑鼠：原版也會，是 Wine／WSLg 的問題，Mac 上待確認。
+  - 本機環境：Wine 環境在 WSL 的 `~/.u9cht-wine`；遊戲副本 `.local/wine-game`（從 Steam 副本複製，解析度改過）；測試首頁 `.local/wine-front`（解壓測試包，再換上新的 `U9Cht.exe`、`U9ChtRuntime.dll`）；Wine 記錄 `.local/wine-logs/`。
+  - 啟動方式：`WINEPREFIX=~/.u9cht-wine WINEDLLOVERRIDES="mscoree,mshtml=;ddraw=n;dsound=n,b" wine explorer /desktop=u9front,1280x1024 U9Cht.exe`（在 `wine-front` 資料夾執行）。
+  - 下一步：準備給 Mac 夥伴的測試包和說明（M3）。
+
+目前知道的事實（未做任何實驗）：
 
 - U9 本身只有 Windows 版（GOG／Steam 都是），從未出過 Mac 版。
 - 中文化全部是 Windows 程式：首頁 `U9Cht.exe`（Win32 GDI）、啟動器、代理 `dsound.dll`、x86 inline hook、
