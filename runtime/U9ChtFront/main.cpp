@@ -9,6 +9,7 @@
 //   u9cht.ini, front.ini, backup\, logs\   --base DIR
 // Test: --screenshot FILE.bmp draws the page once and exits; --page keys:N draws tab N of the key bindings page.
 #include "front_core.h"
+#include "glyph_cache.h"   // font_family_from_sfnt: the page's fallback face
 #include "keymap.h"
 #include "platform.h"
 #include "protocol.h"
@@ -18,6 +19,8 @@
 #include <shlobj.h>
 #include <algorithm>
 #include <ctime>
+#include <fstream>
+#include <iterator>
 #include <thread>
 
 using namespace u9cht;
@@ -120,9 +123,34 @@ std::wstring game_status_text(bool& ok) {
 }
 
 // ---- drawing ----
+// The page's face. Windows has Microsoft JhengHei UI; Wine and CrossOver (Mac) do not, and every Chinese
+// character came out as a box (2026-11-23). Then the release's own font is registered for this process only.
+std::wstring ui_face = L"Microsoft JhengHei UI";
+bool face_installed(const std::wstring& face) {
+    LOGFONTW lf{}; lf.lfCharSet = DEFAULT_CHARSET;
+    wcsncpy_s(lf.lfFaceName, face.c_str(), _TRUNCATE);
+    bool found = false;
+    HDC dc = GetDC(nullptr);
+    EnumFontFamiliesExW(dc, &lf, [](const LOGFONTW*, const TEXTMETRICW*, DWORD, LPARAM p) -> int {
+        *reinterpret_cast<bool*>(p) = true; return 0; }, reinterpret_cast<LPARAM>(&found), 0);
+    ReleaseDC(nullptr, dc);
+    return found;
+}
+// force_bundled: --ui-font bundled, to see the fallback on Windows.
+void choose_ui_face(bool force_bundled) {
+    if (!force_bundled && face_installed(ui_face)) return;
+    const auto font = default_font();
+    if (font.empty()) return;
+    try {
+        std::ifstream in(font, std::ios::binary);
+        const std::vector<uint8_t> data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        const auto family = font_family_from_sfnt(data);
+        if (AddFontResourceExW(font.c_str(), FR_PRIVATE, nullptr) > 0) ui_face = family;
+    } catch (...) {}   // keep the system face: boxes are better than no page
+}
 HFONT make_font(int px, int weight = FW_NORMAL) {
     return CreateFontW(-S(px), 0, 0, 0, weight, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-                       CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Microsoft JhengHei UI");
+                       CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, ui_face.c_str());
 }
 struct Painter {
     HDC dc;
@@ -683,6 +711,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     app.data = exe_dir / L"data";
     fs::path screenshot;
     std::wstring page;
+    bool bundled_face = false;
     int argc = 0;
     wchar_t** argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     for (int i = 1; argv && i + 1 < argc; i += 2) {
@@ -692,6 +721,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
         else if (key == L"--runtime") app.runtime = argv[i + 1];
         else if (key == L"--screenshot") screenshot = argv[i + 1];
         else if (key == L"--page") page = argv[i + 1];   // with --screenshot: "keys" or "keys:N" (tab N)
+        else if (key == L"--ui-font") bundled_face = std::wstring(argv[i + 1]) == L"bundled";
         else if (key == L"--load" && (std::wstring(argv[i + 1]) == L"inject" || std::wstring(argv[i + 1]) == L"proxy")) app.load = argv[i + 1];
     }
     if (argv) LocalFree(argv);
@@ -700,6 +730,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     app.fonts = exe_dir / L"fonts";
     if (!fs::is_directory(app.fonts, ec)) app.fonts = app.base / L"fonts";
     fs::create_directories(app.base, ec);
+    choose_ui_face(bundled_face);
 
     app.s = load_settings(app.launcher_ini(), app.front_ini());
     if (app.s.font.empty() || !fs::is_regular_file(app.s.font, ec)) app.s.font = default_font().wstring();

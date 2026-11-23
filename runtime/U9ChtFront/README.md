@@ -152,6 +152,7 @@ Everything sits beside `U9Cht.exe` unless overridden on the command line:
   - install, recover, a foreign change, version mismatch and damaged data.
 - `U9ChtKeymapTests` (ctest) covers the key bindings core on synthetic text: key names, the game's line rules, write and read back, shared keys, saving beside a synthetic `Options.ini`. With `U9_GAME_DIR` set it also checks the game's own `Default.kmp` (LOCAL-ONLY, skipped otherwise).
 - `U9Cht.exe --screenshot FILE.bmp` draws the page once and exits. Add `--page keys:N` for tab N of the key bindings page.
+- The page draws with Microsoft JhengHei UI. Where it is missing (Wine, CrossOver on Mac), it registers the first font in `fonts\` for itself only (`FR_PRIVATE`) and uses that. `--ui-font bundled` forces the fallback on Windows, for checking it with `--screenshot`.
 
 ## Not yet done
 
