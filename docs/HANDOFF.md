@@ -1,4 +1,4 @@
-# U9-CHT Handoff（2026-11-19）
+# U9-CHT Handoff（2026-11-24）
 
 給下一個工作階段（人或 AI Agent）的交接。
 開工前仍須依 `AGENTS.md` 讀取 `AGENTS.md` 與 `ULTIMA_IX_CHT_MASTER_PLAN.md`。
@@ -24,7 +24,16 @@
 **2026-11-20～22**，細節見第 3j 節：
 - 新功能「按住按鍵標出可拿物品」：按住 F，附近可拿的東西上方顯示金色 ◆（預設開啟，首頁可關，按鍵可改）。
 - 研究：找到遊戲的物件記錄、鏡頭與鏡頭繪製清單（`docs/research/U9_OBJECT_PROBE.md`）。
-- **下一個對話：使用者要繼續調整功能（內容未定，開場時詢問）**；Mac 版的討論暫停，之後再從第 7 節開始。
+
+**2026-11-23 Mac 版預先測試**，細節見第 7 節與 `docs/research/U9_WINE_MAC.md`：
+- 使用者沒有 Mac，由夥伴實機測試。先在這台電腦用 WSL2＋Wine 預先測（M1）。
+- 原版要用 GOG 包裝（DLL 覆寫 `ddraw=n`）；中文化還要 `dsound=n,b`。
+- 修了兩個只在 Wine 出現的問題，之後中文化在 Wine 下完整運作：
+  - 首頁中文顯示成方框 → 改用附帶的字型；
+  - runtime 初始化失敗（錯誤 9）→ 字寬誤差 1 像素時校正。
+- 已知 Wine 問題（原版也會）：切換視窗幾次後，遊戲收不到滑鼠。
+- 給夥伴的測試包 `U9CHT-0.1.1-internal.zip` 與說明 `docs/release/MAC_TEST_GUIDE.md` 已準備好。
+- **下一個對話：先問使用者夥伴有沒有回報。** 有的話看結果與 `logs`；沒有的話問要做什麼（例如回頭調整功能）。
 
 ---
 
@@ -60,7 +69,8 @@
 
 ## 1. 目前狀態一覽
 
-- 分支：`p7-localization-pipeline`，已推送到 `origin`（2026-11-22，交接文件這一筆之前是 `acdd984`）。
+- 分支：`p7-localization-pipeline`，已推送到 `origin`（2026-11-23，`8347557`；這份交接文件的更新在它之後另一筆）。
+  - 2026-11-23 的 commit：`9c6ec3f`（runtime 字寬校正、失敗原因記錄）、`48b9f19`（首頁附帶字型）、`7e029e0`、`8329d2a`、`8347557`（文件）。
   - 本機備份分支 `backup/p7-before-gargish-rewrite` **不可推送**。這是 2026-11-11 改寫歷史前的備份。
 - 工作樹：只有不可加入的未追蹤檔：`.vscode/`、`83e7052b…png`、`tools/u9xsb6bt2a*`、`tools/uixtools.zip`。
   - `tools/u9xsb6bt2a/` 是第三方工具 Extended Setup（著作權屬原作者），不在 `.gitignore` 裡，**不可加入**。
@@ -70,16 +80,24 @@
     - 使用者在首頁選了 1280×960 與視窗化，`Options.ini` 與 `dxcfg.ini` 是這個狀態。
     - 因此 `session-56/backup/Options.ini` 不再是可用的比對基準。要比對時以 session 工具 start 時自己備份的 `backup/` 為準。
   - GOG：`.local/runtime-game`。建置中文化資料時用它的原版檔。
-- 測試（2026-11-22）：
-  - C++：16/16（`cheat_notice_tests` 加了 `show_takeable` 按鍵；`keymap_tests` 改為 99 個指令）。
+  - Wine 用的副本：`.local/wine-game`（2026-11-23 從 Steam 副本複製）。
+    - 解析度改過：`Options.ini` 與 `dxcfg.ini` 目前是 1280×960、視窗化；
+    - 資源檔已還原為原版，沒有殘留的 `dsound.dll`。
+- 測試（2026-11-23）：
+  - C++：16/16（`pixel_tests` 加了字寬校正與 hmtx 讀取）。
   - Python：175 OK（3 skipped）。
-- Runtime：`U9ChtRuntime/0.2.45-p11`，建置在 `.local/p10-misc/build/Release`。
+- Runtime：`U9ChtRuntime/0.2.45-p11`（版號沒變），建置在 `.local/p10-misc/build/Release`，是 2026-11-23 最新版（含 Wine 修正）。
 - 中文化資料最新建置：`.local/p10-misc/out-m30`（commit `ef0cb1e`，乾淨工作樹；藥劑改名）。首頁資料夾 `front-release/data` 就是它；舊的在 `front-release/data.old-m28`。
 - 測試存檔：`.local/p10-misc/session-29/final-savegame`（Steam 副本）。session 30～61 都從這裡開始，沒有寫回。
-- 首頁測試資料夾：`.local/p10-misc/front-release`。四個程式都是 2026-11-22 最新版（含標出可拿物品）。
+- 首頁測試資料夾：`.local/p10-misc/front-release`。四個程式是 2026-11-22 版（含標出可拿物品），**還沒換成 2026-11-23 的 Wine 修正版**。
+  Windows 上兩個修正都不會改變行為（正黑體存在；字寬本來就一致），要換時照第 0 節第 5 點複製。
   這個資料夾有現成的 `data/static`（雜湊相符時首頁不會重新產生）。`data/runtime` 裡**沒有**開發用標記檔
   （`object_probe.on`、`take_marks.on` 都已拿掉）。
-- 內部測試包：`.local/release/U9CHT-0.1.0-internal.zip`（2026-11-22 重打：交接文件這一筆、`out-m30`，含標出可拿物品）與 `.report.json`。新包還沒有解壓實測。
+- 內部測試包：
+  - **最新：`.local/release/U9CHT-0.1.1-internal.zip`**（2026-11-23，`out-m30`＋Wine 修正）。給 Mac 夥伴用的就是這一份。
+    - 四個程式的雜湊與 Wine 測試 w05 用的相同；
+    - zip 本身沒有另外解壓從頭測。
+  - 舊版：`.local/release/U9CHT-0.1.0-internal.zip`（2026-11-22），沒有 Wine 修正。
   解壓測試用的資料夾 `.local/release-test/U9CHT-0.1.0-internal` 是**較舊**的一版，多放了指向私人副本的 `front.ini`。
 - 使用者也把測試包解壓到自己的資料夾，經 GOG Galaxy 指向 **GOG 正式安裝** 玩過（使用者自己的選擇；首頁離開遊戲時會還原檔案）。
 - Microsoft Defender：`.local/p10-misc` 的排除**已拿掉**（使用者 2026-11-16）。代理載入沒被攔截；舊的注入方式會被攔截。
@@ -496,9 +514,9 @@
 - 商店清單 QA：還有 14 個物品和 7 個註解的加註警告（見 P10 文件）。
 - 本機翻譯工作檔：`.local/translation-work/`（p10-misc、p10-shops、p9-books）。
 
-## 7. Mac 版（暫停，2026-11-20）
+## 7. Mac 版（M1 完成，等夥伴實測，2026-11-23）
 
-使用者原本要在新的對話討論 Mac 版，後來決定先調整幾個功能，Mac 版之後再談。
+2026-11-20 曾暫停，2026-11-23 恢復。
 
 2026-11-23 恢復討論：
 - 使用者**沒有 Mac**，會請其他夥伴實機測試。所以 Mac 上的驗證每一輪都要來回溝通，要盡量在這台電腦先排除問題。
@@ -512,7 +530,20 @@
     - runtime 字寬誤差 1 像素時校正。
   - 切換視窗幾次後收不到滑鼠：原版也會，是 Wine／WSLg 的問題，Mac 上待確認。
   - 本機環境：Wine 環境在 WSL 的 `~/.u9cht-wine`；遊戲副本 `.local/wine-game`（從 Steam 副本複製，解析度改過）；測試首頁 `.local/wine-front`（解壓測試包，再換上新的 `U9Cht.exe`、`U9ChtRuntime.dll`）；Wine 記錄 `.local/wine-logs/`。
-  - 啟動方式：`WINEPREFIX=~/.u9cht-wine WINEDLLOVERRIDES="mscoree,mshtml=;ddraw=n;dsound=n,b" wine explorer /desktop=u9front,1280x1024 U9Cht.exe`（在 `wine-front` 資料夾執行）。
+  - Wine 測試的做法。上次的啟動腳本放在對話的暫存資料夾，重開後就沒了，照下面重寫：
+    - 從 Windows 呼叫：`wsl -d Ubuntu -e bash <腳本>`，用 PowerShell 呼叫。
+      - Git Bash 會改寫 `/mnt/...` 路徑；
+      - `wsl -- bash -c '...'` 裡的 `$變數` 會被外層的 shell 先展開。
+      - 所以把指令寫成腳本檔，放在暫存資料夾。
+    - 腳本內容：先 `export WINEPREFIX=$HOME/.u9cht-wine`，再設 DLL 覆寫：
+      - 中文化：`WINEDLLOVERRIDES="mscoree,mshtml=;ddraw=n;dsound=n,b"`；
+      - 原版：`dsound=b`。
+    - 記錄等級：`WINEDEBUG=err+all,fixme-all,+loaddll`，輸出導到 `.local/wine-logs/<標籤>.log`。
+    - 中文化：在 `/mnt/d/git/Ultima 9 for ZH/.local/wine-front` 執行 `wine explorer /desktop=u9front,1280x1024 U9Cht.exe`，結束後執行 `wineserver -w`。
+    - 原版：在 `.local/wine-game` 執行 `wine explorer /desktop=u9,1280x1024 u9.exe`。
+    - 用背景執行，等它結束。啟動前一樣要等使用者說「準備好了」。
+    - 已跑過 w01～w06，下一輪從 **w07** 開始；記錄在 `.local/wine-logs/`，首頁記錄在 `.local/wine-front/logs/`。
+    - WSL 的 sudo 要密碼。要裝套件時，請使用者自己在終端機執行。
   - 給 Mac 夥伴的東西已準備好（2026-11-23）：
     - 測試包 `.local/release/U9CHT-0.1.1-internal.zip`：`out-m30` 加上修正後的程式，四個程式的雜湊與 w05 測過的相同；
     - 說明 `docs/release/MAC_TEST_GUIDE.md`。
