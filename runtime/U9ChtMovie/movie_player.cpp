@@ -100,7 +100,10 @@ bool MoviePlayer::create_window(HWND parent, int x, int y, int w, int h, const w
     DWORD style = WS_OVERLAPPEDWINDOW|WS_VISIBLE, ex = 0;
     if (child_) { style = WS_CHILD|WS_VISIBLE|WS_DISABLED|WS_CLIPSIBLINGS; ex = WS_EX_NOPARENTNOTIFY; }
     // Never activated, so the keyboard stays with the game; mouse input is passed on to the owner in proc().
-    if (popup_) { style = WS_POPUP|WS_VISIBLE; ex = WS_EX_NOACTIVATE|WS_EX_TOOLWINDOW; }
+    // Created hidden and shown with SW_SHOWNOACTIVATE: created with WS_VISIBLE, Wine made the popup the
+    // foreground window despite WS_EX_NOACTIVATE, and the fullscreen game minimized itself on losing focus
+    // (CONFIRMED 2026-11-25: owner iconic, popup foreground, both moved off screen).
+    if (popup_) { style = WS_POPUP; ex = WS_EX_NOACTIVATE|WS_EX_TOOLWINDOW; }
     RECT r{x,y,x+w,y+h};
     if (!parent) AdjustWindowRect(&r,style,FALSE);
     offset_ = POINT{x,y};
@@ -112,6 +115,7 @@ bool MoviePlayer::create_window(HWND parent, int x, int y, int w, int h, const w
     if (!hwnd_) return false;
     SetWindowLongPtrW(hwnd_,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(this));
     SetWindowLongPtrW(hwnd_,GWLP_WNDPROC,reinterpret_cast<LONG_PTR>(&MoviePlayer::proc));
+    if (popup_) ShowWindow(hwnd_,SW_SHOWNOACTIVATE);
     return true;
 }
 void MoviePlayer::set_position(int x, int y, int w, int h) {
