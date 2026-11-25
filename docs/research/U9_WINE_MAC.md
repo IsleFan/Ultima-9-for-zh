@@ -127,4 +127,5 @@ w04 也證實了下列幾項：
 - 驗證（Sikarugir Wine 10.0 rev 8，全新遊戲狀態，經首頁啟動）：
   - 開場影片 `Column.dat` 畫面正常；暫時加一句測試字幕到測試副本的 `movies.tsv`，字幕與影片同時顯示（CONFIRMED）。
   - 播放中按 Esc：`stop` 的堆疊掃描是 `0x585171`（鍵盤路徑），`U9ChtMovie` 隨即銷毀，遊戲接到開場場景，未最小化（CONFIRMED）。
-  - 未驗證：滑鼠點擊跳過影片；有正式字幕的影片（intro、raven、samhayne、ambush）全片播放；Intel Mac；CrossOver 商業版。
+  - 播放中點一下滑鼠：0.5 秒時 `stop`，堆疊掃描是 `0x58518E`（`0x585189` 輸入事件路徑的返回位址），所以彈出視窗轉給遊戲的點擊有效（CONFIRMED）。
+  - 未驗證：有正式字幕的影片（intro、raven、samhayne、ambush）全片播放；Intel Mac；CrossOver 商業版；`CopyFile2` 修正在 CrossOver 24 原始碼版上的實際啟動（只確認 `U9Cht.exe` 已不匯入 `CopyFile2`）。
