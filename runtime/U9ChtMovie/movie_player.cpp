@@ -1,5 +1,7 @@
 #include "movie_player.h"
 #include <cstdio>
+#include <cstring>
+#include <windowsx.h>
 #include "pl_mpeg.h"
 #include <algorithm>
 #include <cmath>
@@ -40,6 +42,25 @@ void outlined_text(HDC dc, const std::u16string& text, RECT box, UINT format, in
 }
 }
 
+// Wine's macOS driver does not show GDI drawing in a child of a window that has an OpenGL surface, and the GOG
+// ddraw wrapper draws the game window through d3d9 -> wined3d -> OpenGL. A child player there plays sound over a
+// black screen. CONFIRMED 2026-11-25 on macOS 27 (Apple Silicon): Sikarugir Wine 10.0 and the CrossOver 24.0.7
+// source build hide the child; a non-activating popup owned by the same window shows. Official Wine 11.21 and the
+// X11 driver (WSL2 pre-test) show the child, so only the macOS host switches to the popup.
+bool wine_on_macos() noexcept {
+    static const bool value = [] {
+        using HostVersion = void (__cdecl*)(const char**, const char**);
+        const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+        const auto host = ntdll ? reinterpret_cast<HostVersion>(reinterpret_cast<void*>(GetProcAddress(ntdll,"wine_get_host_version"))) : nullptr;
+        if (!host) return false;
+        const char* sysname = nullptr;
+        const char* release = nullptr;
+        host(&sysname,&release);
+        return sysname && std::strcmp(sysname,"Darwin") == 0;
+    }();
+    return value;
+}
+
 MoviePlayer::~MoviePlayer() {
     stop();
     destroy_window();
@@ -73,12 +94,20 @@ void MoviePlayer::set_reference(std::vector<SubtitleCue> cues) { std::lock_guard
 
 bool MoviePlayer::create_window(HWND parent, int x, int y, int w, int h, const wchar_t* title) {
     register_class();
-    child_ = parent != nullptr;
-    const DWORD style = child_ ? (WS_CHILD|WS_VISIBLE|WS_DISABLED|WS_CLIPSIBLINGS) : (WS_OVERLAPPEDWINDOW|WS_VISIBLE);
+    owner_ = parent;
+    popup_ = parent != nullptr && wine_on_macos();
+    child_ = parent != nullptr && !popup_;
+    DWORD style = WS_OVERLAPPEDWINDOW|WS_VISIBLE, ex = 0;
+    if (child_) { style = WS_CHILD|WS_VISIBLE|WS_DISABLED|WS_CLIPSIBLINGS; ex = WS_EX_NOPARENTNOTIFY; }
+    // Never activated, so the keyboard stays with the game; mouse input is passed on to the owner in proc().
+    if (popup_) { style = WS_POPUP|WS_VISIBLE; ex = WS_EX_NOACTIVATE|WS_EX_TOOLWINDOW; }
     RECT r{x,y,x+w,y+h};
-    if (!child_) AdjustWindowRect(&r,style,FALSE);
-    hwnd_ = CreateWindowExW(child_ ? WS_EX_NOPARENTNOTIFY : 0,ClassName,title,style,
-        child_ ? x : CW_USEDEFAULT, child_ ? y : CW_USEDEFAULT, r.right-r.left, r.bottom-r.top,
+    if (!parent) AdjustWindowRect(&r,style,FALSE);
+    offset_ = POINT{x,y};
+    POINT at{x,y};
+    if (popup_) ClientToScreen(parent,&at);
+    hwnd_ = CreateWindowExW(ex,ClassName,title,style,
+        parent ? at.x : CW_USEDEFAULT, parent ? at.y : CW_USEDEFAULT, r.right-r.left, r.bottom-r.top,
         parent,nullptr,GetModuleHandleW(nullptr),nullptr);
     if (!hwnd_) return false;
     SetWindowLongPtrW(hwnd_,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(this));
@@ -86,7 +115,18 @@ bool MoviePlayer::create_window(HWND parent, int x, int y, int w, int h, const w
     return true;
 }
 void MoviePlayer::set_position(int x, int y, int w, int h) {
-    if (hwnd_) SetWindowPos(hwnd_,HWND_TOP,x,y,w,h,SWP_NOACTIVATE);
+    if (!hwnd_) return;
+    POINT at{x,y};
+    if (popup_) { offset_ = at; ClientToScreen(owner_,&at); }
+    SetWindowPos(hwnd_,HWND_TOP,at.x,at.y,w,h,SWP_NOACTIVATE);
+}
+void MoviePlayer::follow_owner() {
+    if (!popup_ || !hwnd_ || !owner_) return;
+    POINT at = offset_;
+    ClientToScreen(owner_,&at);
+    RECT now{}; GetWindowRect(hwnd_,&now);
+    if (now.left != at.x || now.top != at.y)
+        SetWindowPos(hwnd_,nullptr,at.x,at.y,0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
 }
 void MoviePlayer::set_visible(bool visible) { if (hwnd_) ShowWindow(hwnd_,visible ? SW_SHOWNA : SW_HIDE); }
 void MoviePlayer::destroy_window() {
@@ -95,12 +135,27 @@ void MoviePlayer::destroy_window() {
 
 LRESULT CALLBACK MoviePlayer::proc(HWND h, UINT m, WPARAM w, LPARAM l) {
     auto* self = reinterpret_cast<MoviePlayer*>(GetWindowLongPtrW(h,GWLP_USERDATA));
+    // Popup: the game keeps the mouse as it does with the HTTRANSPARENT child (clicks may skip a movie).
+    // Wheel messages already carry screen coordinates; the others are mapped into the owner's client area.
+    if (self && self->popup_ && self->owner_ && m >= WM_MOUSEFIRST && m <= WM_MOUSELAST) {
+        if (m != WM_MOUSEWHEEL && m != WM_MOUSEHWHEEL) {
+            POINT p{GET_X_LPARAM(l),GET_Y_LPARAM(l)};
+            MapWindowPoints(h,self->owner_,&p,1);
+            l = MAKELPARAM(p.x,p.y);
+        }
+        PostMessageW(self->owner_,m,w,l);
+        return 0;
+    }
     switch (m) {
     case WM_NCHITTEST:
         if (self && self->child_) return HTTRANSPARENT; // the game keeps mouse and keyboard
         break;
+    case WM_MOUSEACTIVATE:
+        if (self && self->popup_) return MA_NOACTIVATE;
+        break;
     case WM_ERASEBKGND: return 1;
     case WM_PAINT: {
+        if (self) self->follow_owner();
         PAINTSTRUCT ps; HDC dc = BeginPaint(h,&ps);
         if (self) self->paint(dc);
         EndPaint(h,&ps);

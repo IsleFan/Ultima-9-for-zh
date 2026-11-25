@@ -156,7 +156,8 @@ public:
             player_.set_notify(notify_,notify_message_,notify_param_);
             if (!visible_) player_.set_visible(false);
             trace("run_window",rect(x,y,w,h)+",\"requested\":["+std::to_string(x_)+","+std::to_string(y_)+","+std::to_string(w_)+","+std::to_string(h_)+"],"+num("owner",reinterpret_cast<uintptr_t>(owner_))+","+
-                  num("owner_visible",owner_ ? IsWindowVisible(owner_) : -1)+","+num("visible",visible_ ? 1 : 0));
+                  num("owner_visible",owner_ ? IsWindowVisible(owner_) : -1)+","+num("visible",visible_ ? 1 : 0)+","+
+                  num("popup",player_.popup() ? 1 : 0));
         }
         const bool resume = player_.paused();
         if (resume) player_.pause(false); else player_.play();
@@ -206,7 +207,7 @@ public:
     // IVideoWindow
     STDMETHODIMP put_Caption(BSTR) override { return S_OK; }
     STDMETHODIMP get_Caption(BSTR*) override { return E_NOTIMPL; }
-    STDMETHODIMP put_WindowStyle(long style) override { trace("put_window_style",num("style",style)); return S_OK; } // the player window is always an input-transparent child
+    STDMETHODIMP put_WindowStyle(long style) override { trace("put_window_style",num("style",style)); return S_OK; } // the player window is an input-transparent child (an owned popup under Wine on macOS)
     STDMETHODIMP get_WindowStyle(long*) override { return E_NOTIMPL; }
     STDMETHODIMP put_WindowStyleEx(long) override { return S_OK; }
     STDMETHODIMP get_WindowStyleEx(long*) override { return E_NOTIMPL; }
