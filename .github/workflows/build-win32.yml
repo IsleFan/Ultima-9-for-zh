@@ -27,7 +27,8 @@ jobs:
           New-Item -ItemType Directory out | Out-Null
           Copy-Item build/Release/U9ChtRuntime.dll, build/Release/U9Cht.exe, build/Release/U9ChtLauncher.exe, build/Release/U9ChtProxy.dll out/
           git rev-parse HEAD | Out-File out/COMMIT.txt
-          Get-FileHash out/* -Algorithm SHA256 | Format-Table -AutoSize | Out-String -Width 200 | Out-File out/SHA256.txt
+          $hashes = Get-ChildItem out -File | Get-FileHash -Algorithm SHA256 | Format-Table -AutoSize | Out-String -Width 200
+          $hashes | Out-File out/SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
           name: u9cht-win32
