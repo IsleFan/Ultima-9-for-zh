@@ -68,10 +68,11 @@ w04 也證實了下列幾項：
   - 記錄欄位 `texture_glyphs.advance_snaps`：Wine 在 1280×960 下是 **3**。Windows 上兩邊本來就一致，應為 0。
 - 附帶的改進：`runtime_fail` 現在多了 `reason`（失敗的檢查是哪一項）。字寬錯誤的訊息也會寫出字碼、字高和寬度。原本只有錯誤編號，查不出原因。
 
-### 問題 3：切換視窗後，遊戲收不到滑鼠（Wine 的問題，未處理）
+### 問題 3：切換視窗後，遊戲收不到滑鼠（原版在 Wine 下也會，未處理）
 
 - 現象：切到別的視窗再切回來，幾次之後遊戲收不到滑鼠，點不到 UI，選項書也開不了。
-- **原版也會**（w06，未放中文化）。所以不是中文化造成的（STRONG EVIDENCE）。
+- **原版也會**（w06，未放中文化），所以沒有中文化時也會發生（CONFIRMED）。
+  兩者發生的頻率沒有比較過，中文化是否讓它更容易發生：UNKNOWN。
 - 這台電腦的 Wine 在 WSLg 下用 X11 驅動。Mac 的 CrossOver 用 macdrv，焦點處理方式不同，所以在 Mac 上不一定會發生。要請 Mac 測試者特別看。
 - 可以試的繞過方法（未測）：Wine 的 DirectInput 設定 `MouseWarpOverride`；或不用虛擬桌面。
 
@@ -83,12 +84,15 @@ w04 也證實了下列幾項：
    - `dsound` 設成「native, builtin」：載入中文化的代理。
 3. 解壓中文化，在 CrossOver 裡執行 `U9Cht.exe`。
 
-以上都還沒在 Mac 上驗證。
+上面的步驟是 WSL2 預先測試時寫的，CrossOver 本身還沒有人在 Mac 上試過；Mac 實機結果見下一節。
 
 ## Mac 實機結果（2026-11-25）
 
 環境：macOS 27.2.1，Apple Silicon（Rosetta 2）；GOG 版 1.19f；中文化 `U9CHT-0.1.1-internal`；
 不使用 CrossOver，改用免費的 Wine 建置（WineHQ 官方 macOS 套件與 Sikarugir 引擎），DLL 覆寫與上一節相同。
+
+使用者轉述的整體結果：初步跑得起來，沒有太大的問題；效能不佳，但直接跑英文版也一樣（使用者的判斷，沒有幀率數據）。
+慢的可能原因（HYPOTHESIS，沒有量測）：x86 程式要經 Rosetta 2 轉譯；Wine 的 Direct3D 9 走 wined3d → OpenGL，而 macOS 的 OpenGL 已停止發展。
 
 ### 問題 4：Apple Silicon 上 32 位元程式隨機當機（Wine／Rosetta 的問題，不在中文化）
 
