@@ -749,7 +749,11 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     app.open_keys_message = RegisterWindowMessageW(OpenKeyBindingsMessage);
     wc.lpfnWndProc = proc; wc.hInstance = instance; wc.lpszClassName = FrontWindowClass;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-    wc.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
+    auto icon = [&](int cx, int cy) {
+        return HICON(LoadImageW(instance, MAKEINTRESOURCEW(1), IMAGE_ICON, GetSystemMetrics(cx), GetSystemMetrics(cy), LR_SHARED));
+    };
+    wc.hIcon = icon(SM_CXICON, SM_CYICON);  // front.rc
+    wc.hIconSm = icon(SM_CXSMICON, SM_CYSMICON);
     RegisterClassExW(&wc);
     const DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
     app.dpi = int(GetDpiForSystem());

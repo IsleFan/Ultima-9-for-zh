@@ -154,6 +154,11 @@ Everything sits beside `U9Cht.exe` unless overridden on the command line:
 - `U9Cht.exe --screenshot FILE.bmp` draws the page once and exits. Add `--page keys:N` for tab N of the key bindings page.
 - The page draws with Microsoft JhengHei UI. Where it is missing (Wine, CrossOver on Mac), it registers the first font in `fonts\` for itself only (`FR_PRIVATE`) and uses that. `--ui-font bundled` forces the fallback on Windows, for checking it with `--screenshot`.
 
+## Icon
+
+`u9cht.ico` (a gold ankh, resource 1 in `front.rc`) is drawn by `scripts/make_icon.py` from plain geometry. It
+holds no game art.
+
 ## Not yet done
 
 Building `data/` on the player's computer. It needs `build_localization.py`, the player's own game files and a
