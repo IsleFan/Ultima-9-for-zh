@@ -1,6 +1,7 @@
 #include "engine.h"
 #include "input_hooks.h"
 #include "keymap.h"
+#include "file_redirect.h"
 #include <intrin.h>
 #include <algorithm>
 #include <cstdio>
@@ -42,6 +43,10 @@ void* menu_dtor_gateway = nullptr;
 void* triangle_original = reinterpret_cast<void*>(0x589F50);
 decltype(&WideCharToMultiByte) wide_original = nullptr;
 decltype(&ExitProcess) exit_original = nullptr;
+// File redirect (file_redirect.h): set before the hooks are installed, never changed while they are.
+decltype(&CreateFileA) create_file_original = nullptr;
+std::wstring redirect_bitmap16;
+std::atomic<long> file_probe_left{0};   // developer marker data/runtime/file_probe.on: log the first opened names
 using CoCreateFn = HRESULT(WINAPI*)(REFCLSID, LPUNKNOWN, DWORD, REFIID, LPVOID*);
 CoCreateFn co_create_original = nullptr;
 struct Constructor { uintptr_t object = 0; int plan = -1; const wchar_t* wide = nullptr; };
@@ -1291,6 +1296,33 @@ HRESULT WINAPI co_create_hook(REFCLSID clsid, LPUNKNOWN outer, DWORD context, RE
     if (guard.state && guard.state->movies_enabled && !outer && clsid == CLSID_FilterGraph)
         return create_movie_graph(guard.state->movie_config,riid,out);
     return co_create_original(clsid,outer,context,riid,out);
+}
+HANDLE WINAPI create_file_hook(LPCSTR name, DWORD access, DWORD share, LPSECURITY_ATTRIBUTES security, DWORD disposition,
+                               DWORD flags, HANDLE templ) {
+    if (file_probe_left.load() > 0 && file_probe_left.fetch_sub(1) > 0 && name) {
+        Guard guard;
+        if (guard.state) {
+            std::string escaped;
+            for (const char* p = name; *p && escaped.size() < 240; ++p) {
+                const unsigned char c = static_cast<unsigned char>(*p);
+                if (c == '\\' || c == '"') { escaped += '\\'; escaped += char(c); }
+                else if (c < 0x20 || c >= 0x7F) { char hex[8]; std::snprintf(hex, sizeof hex, "\\u%04x", c); escaped += hex; }
+                else escaped += char(c);
+            }
+            guard.state->log->event("file_probe","\"name\":\""+escaped+"\",\"access\":"+std::to_string(access)+",\"disposition\":"+std::to_string(disposition));
+        }
+    }
+    if (name && !redirect_bitmap16.empty() && file_redirect::is_bitmap16(name) && file_redirect::read_only(access, disposition)) {
+        const HANDLE h = CreateFileW(redirect_bitmap16.c_str(), access, share, security, disposition, flags, templ);
+        Guard guard;
+        if (guard.state) {
+            if (h != INVALID_HANDLE_VALUE) ++guard.state->redirects; else ++guard.state->redirect_failures;
+            guard.state->log->event("file_redirect","\"file\":\"bitmap16.flx\",\"ok\":"+std::string(h != INVALID_HANDLE_VALUE ? "true" : "false")+
+                ",\"error\":"+std::to_string(h != INVALID_HANDLE_VALUE ? 0 : GetLastError())+",\"count\":"+std::to_string(guard.state->redirects.load()));
+        }
+        if (h != INVALID_HANDLE_VALUE) return h;   // otherwise the game opens its own file
+    }
+    return create_file_original(name, access, share, security, disposition, flags, templ);
 }
 void WINAPI exit_hook(UINT code) {
     if (engine) engine->shutdown(false);
@@ -3146,6 +3178,24 @@ void Engine::install(const Config& config, Logger& logger) {
     smart_jump = render && (config.features & FeatureSmartJump) != 0;
     if (smart_jump) jump_gateway = prepare("avatar_jump",0x4193A0,jump_hook,{0x56,0x8B,0xF1,0x8A,0x86,0x8E,0x06,0,0},{1,2,6});
     log->event("smart_jump","\"enabled\":"+std::string(smart_jump?"true":"false"));
+    if (render) {   // File redirect: <data>edirectitmap16.flx, used only when it has the size of the game's own file.
+        const auto data = config_path(config.allowlist_path).parent_path().parent_path();
+        const auto mine = data / file_redirect::RedirectFolder / L"bitmap16.flx";
+        const auto theirs = config_path(config.game_dir) / L"static" / L"bitmap16.flx";
+        std::error_code a, b;
+        const auto mine_size = std::filesystem::file_size(mine, a), theirs_size = std::filesystem::file_size(theirs, b);
+        const bool use = !a && !b && mine_size == theirs_size;
+        const bool probe = std::ifstream(config_path(config.allowlist_path).parent_path() / L"file_probe.on", std::ios::binary).good();
+        if (probe) file_probe_left = 300;
+        if (use || probe) {
+            if (use) redirect_bitmap16 = mine.wstring();
+            create_file_original = &CreateFileA;
+            hooks.prepare_pointer("create_file",reinterpret_cast<uintptr_t*>(0x7400CC),
+                                  reinterpret_cast<uintptr_t>(create_file_original),reinterpret_cast<uintptr_t>(create_file_hook));
+        }
+        log->event("file_redirect_setup","\"file\":\"bitmap16.flx\",\"enabled\":"+std::string(use?"true":"false")+
+                   ",\"present\":"+std::string(a?"false":"true")+",\"size_matches\":"+std::string(!a && !b && mine_size == theirs_size?"true":"false"));
+    }
     wide_original = &WideCharToMultiByte;
     exit_original = &ExitProcess;
     hooks.prepare_pointer("wide_conversion",reinterpret_cast<uintptr_t*>(0x74010C),

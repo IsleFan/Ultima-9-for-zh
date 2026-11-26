@@ -267,6 +267,8 @@ struct Engine {
     std::vector<cheat::Binding> map_bindings;
     std::atomic<uint64_t> map_key_presses{0};
     bool opens_map(UINT vk, UINT mods) noexcept;
+    // File redirect (file_redirect.h): opens of staticitmap16.flx served from <data>edirect.
+    std::atomic<long> redirects{0}, redirect_failures{0};
     // Keys of the runtime command open_key_bindings (keymap.h page_keys), as virtual key + cheat::Mod* bits.
     // Ctrl+Shift+K until the keymap has been read.
     std::vector<cheat::Binding> page_bindings{{uint32_t('K'), cheat::ModCtrl | cheat::ModShift, "open_key_bindings"}};

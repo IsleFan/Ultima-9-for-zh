@@ -60,9 +60,24 @@ inside `(6,11)-(57,22)` (CONFIRMED). Entries 3379, 3382 and 3383 are blank arrow
   outline), mipmaps made again, written in place into the private copy (same length, table untouched). In game, at
   the Britain/Stonegate crossroads, both boards read clearly (RUNTIME PASS, screenshot by the player).
 
+## Delivery: file redirect (authorized 2026-11-26)
+
+The runtime hooks u9.exe's `CreateFileA` import (IAT slot `0x7400CC`, `runtime/U9ChtRuntime/file_redirect.h`). When the
+game opens `staticitmap16.flx` for reading, the runtime opens `<data>edirectitmap16.flx` instead. The game
+folder is never changed.
+
+- The game opens all its resources by full path with `GENERIC_READ` and `OPEN_ALWAYS` (CONFIRMED with a temporary
+  file probe that logged the opened names). It opens `bitmap16.flx`, `bitmapC.flx` and `bitmapsh.flx` twice each
+  at start.
+- Redirected only for read access with `OPEN_EXISTING` or `OPEN_ALWAYS`, and only when the copy has the size of
+  the game's file (event `file_redirect_setup`). When opening the copy fails, the game's own file is opened.
+- 2026-11-26, private copy back to the original hash, copy in the test folder's `dataedirect`: both opens were
+  redirected (`file_redirect` `ok:true`), the boards showed in Chinese, the game ended normally (RUNTIME PASS).
+
 ## Not done
 
 - Drawing the text is a local script that uses Pillow (`.local/research-signs/`), not part of the repository.
-- No release path yet: the boards would ship as patches applied on the player's machine, written in place because
-  the sizes do not change; `bitmapC.flx` and `bitmapsh.flx` need their own formats.
+- No release path yet: the front page has to make `dataedirectitmap16.flx` from the player's own file and a
+  patch of the ten entries (the copy holds the game's art and must never be distributed). `bitmapC.flx` and
+  `bitmapsh.flx` need their own formats.
 - 4471 Asylum has no approved Chinese name.
