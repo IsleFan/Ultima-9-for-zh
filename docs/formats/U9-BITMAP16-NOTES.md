@@ -80,4 +80,7 @@ folder is never changed.
 - No release path yet: the front page has to make `data\redirect\bitmap16.flx` from the player's own file and a
   patch of the ten entries (the copy holds the game's art and must never be distributed). `bitmapC.flx` and
   `bitmapsh.flx` need their own formats.
-- 4471 Asylum has no approved Chinese name.
+- 4471 Asylum has no approved Chinese name. The name occurs in no text of text.flx, BOOKS-EN, TYPENAME or misctext
+  (local scan, 2026-11-26).
+- 2026-11-26: the other seven boards are drawn the same way in the test copy (4473 小灣鎮, 4474 昇月城, 4475 獸爪村,
+  4476 特林希克, 4477 瓦羅尼亞, 4478 紫杉城, 4568 巨大石柱). Not yet seen in game.
