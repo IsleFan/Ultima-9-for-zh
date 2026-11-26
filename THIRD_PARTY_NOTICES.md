@@ -39,3 +39,8 @@ License 1.1; its Hanzi derive from Kosugi Maru (Apache-2.0). The license text is
 `fonts/jf-openhuninn-LICENSE.txt` (kept in the repository as `release/jf-openhuninn-LICENSE.txt`, taken from
 [justfont/open-huninn-font](https://github.com/justfont/open-huninn-font/tree/f240f9071a78298f379bc087cae2010df11cf477)
 `LICENSE`). The font file itself is not kept in the repository.
+
+The signpost text layers (`translation/textures/signposts/*.png`, shipped inside `data/patches/bitmap16.u9cs`) are
+this project's drawing of place names with **Noto Sans TC** (Bold) by Google, under the SIL Open Font License 1.1.
+Only rendered pixels are shipped, not the font. They are drawn by `scripts/make_signpost_layers.py`, a developer
+tool that uses **Pillow** (HPND license); Pillow is not needed to build or run a release.

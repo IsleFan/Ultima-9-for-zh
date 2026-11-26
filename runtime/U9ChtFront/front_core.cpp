@@ -1,5 +1,6 @@
 #include "front_core.h"
 #include "flx_patch.h"
+#include "sign_patch.h"
 #include "platform.h"
 #include "protocol.h"
 #include "version_manifest.h"
@@ -438,8 +439,91 @@ Result prepare_static(const fs::path& game, const fs::path& data, const Manifest
     return {true, built ? L"已從遊戲檔產生中文化資料。" : L""};
 }
 
+namespace {
+std::wstring hex(const sign_patch::Hash& h) {
+    static const wchar_t digits[] = L"0123456789abcdef";
+    std::wstring out;
+    for (const auto b : h) { out += digits[b >> 4]; out += digits[b & 15]; }
+    return out;
+}
+// Slot `index` of an open FLX file (count at 0x50, table at 0x80), or false.
+bool flx_entry(std::ifstream& f, uint32_t index, std::vector<uint8_t>& out, uint64_t& offset) {
+    uint8_t buf[8];
+    f.seekg(0x50); f.read(reinterpret_cast<char*>(buf), 4);
+    const uint32_t count = uint32_t(buf[0]) | uint32_t(buf[1]) << 8 | uint32_t(buf[2]) << 16 | uint32_t(buf[3]) << 24;
+    if (!f || index >= count) return false;
+    f.seekg(std::streamoff(0x80 + 8ull * index)); f.read(reinterpret_cast<char*>(buf), 8);
+    if (!f) return false;
+    offset = uint32_t(buf[0]) | uint32_t(buf[1]) << 8 | uint32_t(buf[2]) << 16 | uint32_t(buf[3]) << 24;
+    const uint32_t length = uint32_t(buf[4]) | uint32_t(buf[5]) << 8 | uint32_t(buf[6]) << 16 | uint32_t(buf[7]) << 24;
+    if (!length || length > (1u << 20)) return false;
+    out.resize(length);
+    f.seekg(std::streamoff(offset)); f.read(reinterpret_cast<char*>(out.data()), std::streamsize(length));
+    return bool(f);
+}
+}
+
+Result prepare_redirect(const fs::path& game, const fs::path& data) {
+    std::error_code ec;
+    const auto patch_file = data / L"patches" / L"bitmap16.u9cs";
+    if (!fs::is_regular_file(patch_file, ec)) return {true, L""};
+    const auto target = data / L"redirect" / L"bitmap16.flx";
+    const auto stamp = fs::path(target.wstring() + L".sha256");
+    const auto keep_english = [&](const std::wstring& why) {
+        fs::remove(target, ec); fs::remove(stamp, ec);
+        return Result{true, L"路標維持英文：" + why};
+    };
+    std::string raw;
+    if (!read_bytes(patch_file, raw)) return keep_english(L"讀不到 bitmap16.u9cs。");
+    const auto p = sign_patch::parse(std::vector<uint8_t>(raw.begin(), raw.end()));
+    if (!p) return keep_english(L"bitmap16.u9cs 損毀。");
+    const auto expected = hex(p->result);
+    std::string done;
+    if (read_bytes(stamp, done) && widen(done) == expected && fs::file_size(target, ec) == p->source_size && !ec)
+        return {true, L""};
+    const auto source = game / L"static" / L"bitmap16.flx";
+    if (fs::file_size(source, ec) != p->source_size || ec || hash_or_empty(source) != hex(p->source))
+        return keep_english(L"遊戲的 bitmap16.flx 和中文化資料的版本不符。");
+    std::vector<std::pair<uint64_t, std::vector<uint8_t>>> boards;
+    {
+        std::ifstream f(source, std::ios::binary);
+        std::vector<uint8_t> base, original;
+        uint64_t offset = 0;
+        if (!flx_entry(f, p->base_entry, base, offset) || sha256_bytes(base.data(), base.size()) != hex(p->base))
+            return keep_english(L"空白路標不符。");
+        for (const auto& b : p->boards) {
+            if (!flx_entry(f, b.entry, original, offset) || sha256_bytes(original.data(), original.size()) != hex(b.original))
+                return keep_english(L"路標 " + std::to_wstring(b.entry) + L" 不符。");
+            auto made = sign_patch::board(base, original, b.rgba);
+            if (!made || sha256_bytes(made->data(), made->size()) != hex(b.result))
+                return keep_english(L"路標 " + std::to_wstring(b.entry) + L" 產生結果不符。");
+            boards.emplace_back(offset, std::move(*made));
+        }
+    }
+    fs::create_directories(target.parent_path(), ec);
+    const auto temp = fs::path(target.wstring() + L".u9cht-tmp");
+    if (!CopyFileW(source.c_str(), temp.c_str(), FALSE)) return keep_english(L"無法複製 bitmap16.flx。");
+    SetFileAttributesW(temp.c_str(), FILE_ATTRIBUTE_NORMAL);
+    {
+        std::fstream f(temp, std::ios::binary | std::ios::in | std::ios::out);
+        for (const auto& [offset, bytes] : boards) {
+            f.seekp(std::streamoff(offset)); f.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+        }
+        f.flush();
+        if (!f) { f.close(); fs::remove(temp, ec); return keep_english(L"無法寫入路標。"); }
+    }
+    if (hash_or_empty(temp) != expected) { fs::remove(temp, ec); return keep_english(L"產生後檢查不符。"); }
+    if (!MoveFileExW(temp.c_str(), target.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        fs::remove(temp, ec); return keep_english(L"無法放好 bitmap16.flx。");
+    }
+    write_bytes(stamp, utf8(expected));
+    return {true, L"已產生中文路標。"};
+}
+
 Result install(const fs::path& game, const fs::path& data, const Manifest& m, const fs::path& backup) {
     if (const auto prepared = prepare_static(game, data, m, backup); !prepared.ok) return prepared;
+    // Signposts are an extra: a failure leaves them in English and never stops the game.
+    const auto signs = prepare_redirect(game, data);
     std::error_code ec;
     if (fs::is_regular_file(backup / Receipt, ec)) return {false, L"上次的安裝還沒還原，請重新開啟本程式。"};
     for (const auto& [name, out] : m.output) {
@@ -466,6 +550,6 @@ Result install(const fs::path& game, const fs::path& data, const Manifest& m, co
                            (undo.ok ? L"" : L"\n" + undo.message)};
         }
     }
-    return {true, L"已套用中文化資料。"};
+    return {true, L"已套用中文化資料。" + (signs.message.empty() ? std::wstring() : L"\n" + signs.message)};
 }
 }

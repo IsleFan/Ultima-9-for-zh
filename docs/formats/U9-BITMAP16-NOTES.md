@@ -74,12 +74,27 @@ folder is never changed.
 - 2026-11-26, private copy back to the original hash, copy in the test folder's `data\redirect`: both opens were
   redirected (`file_redirect` `ok:true`), the boards showed in Chinese, the game ended normally (RUNTIME PASS).
 
+## Release patch (U9CS)
+
+A release carries no game art. `data/patches/bitmap16.u9cs` holds, for each board, a 64x32 RGBA text layer (this
+project's drawing, `translation/textures/signposts/`) and the hashes to check:
+
+- Layout: `runtime/common/sign_patch.h` (C++, the front page) and `u9cht/bitmap_flx.py` (`make_sign_patch`,
+  `apply_sign_patch`, the reference). Both use the same integer arithmetic; a golden test vector checks that they
+  make the same bytes (`tests/test_bitmap_flx.py`, `runtime/tests/sign_patch_tests.cpp`).
+- Per board: `(L*a + B*(255-a) + 127) // 255` per 8-bit channel over the blank board 3381 of the player's file,
+  back to RGB565 (transparent pixels keep their exact value), mipmaps made again, written into the target slot.
+- `scripts/package_release.py` makes the patch from the developer's original and applies it once before it ships
+  (about 74 KB for nine boards).
+- `front::prepare_redirect` (called by `install`): the first start copies the game's `bitmap16.flx` to
+  `data\redirect\bitmap16.flx`, writes the boards, checks the whole-file hash and writes a stamp
+  (`bitmap16.flx.sha256`); later starts reuse it. Any mismatch removes the copy and keeps the English boards; it
+  never stops the game.
+- Layers: `scripts/make_signpost_layers.py --font NotoSansTC-VF.ttf` (Pillow, developer machine only).
+
 ## Not done
 
-- Drawing the text is a local script that uses Pillow (`.local/research-signs/`), not part of the repository.
-- No release path yet: the front page has to make `data\redirect\bitmap16.flx` from the player's own file and a
-  patch of the ten entries (the copy holds the game's art and must never be distributed). `bitmapC.flx` and
-  `bitmapsh.flx` need their own formats.
+- `bitmapC.flx` and `bitmapsh.flx` (other texture settings) keep the English boards.
 - 4471 Asylum stays in English (decision of the project owner, 2026-11-26). The name occurs in no text of text.flx, BOOKS-EN, TYPENAME or misctext
   (local scan, 2026-11-26).
 - 2026-11-26: the other seven boards are drawn the same way in the test copy (4473 小灣鎮, 4474 昇月城, 4475 獸爪村,

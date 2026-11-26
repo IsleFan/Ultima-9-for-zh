@@ -1,5 +1,6 @@
 // Front page core (U9ChtFront/front_core.h) on synthetic files only: no game asset is read.
 #include "front_core.h"
+#include "sign_patch.h"
 #include "platform.h"
 #include "protocol.h"
 #include "version_manifest.h"
@@ -251,6 +252,59 @@ int main() {
         check(!prepare_static(game, data, m, backup).ok && !fs::exists(data / L"static/text.flx"), "damaged patch refused");
         fs::remove(data / L"patches" / L"text.flx.u9cp", ec);
         check(!prepare_static(game, data, m, backup).ok, "missing patch refused");
+    }
+    {   // Signposts: prepare_redirect on a synthetic bitmap16.flx (no game art).
+        const auto game = root / L"sign-game", data = root / L"sign-data";
+        fs::create_directories(game / L"static", ec); fs::create_directories(data / L"patches", ec);
+        auto put32 = [](std::string& s, uint32_t v) { for (int i = 0; i < 4; ++i) s += char(uint8_t(v >> (8 * i))); };
+        auto board = [&](uint32_t seed) {   // tests/test_bitmap_flx.py synthetic_payload(8, 4, 2, seed)
+            std::string px; uint32_t v = seed, w = 8, h = 4;
+            for (int m = 0; m < 3; ++m) {
+                for (uint32_t i = 0; i < w * h; ++i) { v = (v * 1103515245u + 12345u) & 0xFFFF; px += char(uint8_t(v)); px += char(uint8_t(v >> 8)); }
+                w /= 2; h = h > 1 ? h / 2 : 1;
+            }
+            std::string frame; put32(frame, 0x60000400); put32(frame, 8); put32(frame, 4); put32(frame, 0); put32(frame, 0);
+            for (uint32_t y = 0; y < 4; ++y) put32(frame, 0x14 + 16 + 16 * y);
+            frame += px;
+            std::string out; put32(out, 8 | 2 << 16); put32(out, 4); put32(out, 1); put32(out, 0x56000); put32(out, 0x18);
+            put32(out, uint32_t(frame.size())); return out + frame;
+        };
+        const std::string base = board(1), sign = board(2);
+        std::string flx(0x80 + 8 * 4, '\0');
+        flx.replace(0, 4, "    "); flx[0x50] = 4; flx[0x54] = 2;
+        auto slot = [&](int i, uint32_t off, uint32_t len) { for (int k = 0; k < 4; ++k) { flx[0x80 + 8 * i + k] = char(uint8_t(off >> (8 * k))); flx[0x84 + 8 * i + k] = char(uint8_t(len >> (8 * k))); } };
+        const uint32_t at = uint32_t(flx.size());
+        slot(1, at, uint32_t(base.size())); slot(3, at + uint32_t(base.size()), uint32_t(sign.size()));
+        flx += base + sign;
+        write(game / L"static" / L"bitmap16.flx", flx);
+        std::string layer;
+        for (uint32_t i = 0; i < 32; ++i) { layer += char(uint8_t(i * 11)); layer += char(uint8_t(i * 29)); layer += char(uint8_t(i * 53)); layer += char(i % 5 ? uint8_t(i * 37) : 0); }
+        auto bin = [](const std::wstring& h) { std::string o; for (size_t i = 0; i + 1 < h.size(); i += 2) o += char(std::stoi(h.substr(i, 2), nullptr, 16)); return o; };
+        auto hash = [](const std::string& s) { return sha256_bytes(s.data(), s.size()); };
+        const std::wstring golden = L"5036293e837c1f8282353d26ce38750012e81d96bb9819ff427e64a16b62e8e5";   // test_bitmap_flx.py
+        std::string patch = "U9CS"; put32(patch, 1); put32(patch, uint32_t(flx.size())); patch += bin(hash(flx));
+        put32(patch, 1); patch += bin(hash(base)); put32(patch, 1);
+        put32(patch, 3); patch += char(8); patch += char(0); patch += char(4); patch += char(0); patch += bin(hash(sign));
+        patch += layer; patch += bin(golden);
+        const auto made = u9cht::sign_patch::board(std::vector<uint8_t>(base.begin(), base.end()), std::vector<uint8_t>(sign.begin(), sign.end()),
+                                                   std::vector<uint8_t>(layer.begin(), layer.end()));
+        check(made && sha256_bytes(made->data(), made->size()) == golden, "golden board");
+        std::string expected = flx;
+        if (made) expected.replace(at + base.size(), made->size(), std::string(made->begin(), made->end()));
+        write(data / L"patches" / L"bitmap16.u9cs", patch + bin(hash(expected)));
+        auto r = prepare_redirect(game, data);
+        check(r.ok && r.message == L"已產生中文路標。" && read(data / L"redirect/bitmap16.flx") == expected, "redirect copy made");
+        check(read(game / L"static" / L"bitmap16.flx") == flx, "game file untouched");
+        check(prepare_redirect(game, data).message.empty(), "second start reuses the copy");
+        write(data / L"patches" / L"bitmap16.u9cs", patch + std::string(32, char(0)));
+        r = prepare_redirect(game, data);
+        check(r.ok && r.message.find(L"路標維持英文") == 0 && !fs::exists(data / L"redirect/bitmap16.flx"),
+              "wrong result hash: copy removed, boards stay English, still ok");
+        write(data / L"patches" / L"bitmap16.u9cs", patch + bin(hash(expected)));
+        write(game / L"static" / L"bitmap16.flx", flx.substr(0, flx.size() - 1));
+        check(prepare_redirect(game, data).message.find(L"版本不符") != std::wstring::npos, "other game file: English");
+        fs::remove(data / L"patches" / L"bitmap16.u9cs", ec);
+        check(prepare_redirect(game, data).ok && prepare_redirect(game, data).message.empty(), "no patch: nothing to do");
     }
     fs::remove_all(root, ec);
     if (failures) { std::cerr << failures << " failure(s)\n"; return 1; }

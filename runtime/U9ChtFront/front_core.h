@@ -86,7 +86,11 @@ Result recover(const fs::path& game, const fs::path& backup);
 // data/static/<name> from the player's original, taken from the game folder or, while an install is still in
 // place, from `backup`, and checks it against the manifest. Files already there with the right hash are kept.
 Result prepare_static(const fs::path& game, const fs::path& data, const Manifest& m, const fs::path& backup);
-// Calls prepare_static first.
+// Signposts (docs/formats/U9-BITMAP16-NOTES.md): with <data>/patches/bitmap16.u9cs, makes
+// <data>/redirect/bitmap16.flx from the game's own file once (a stamp file holds the result hash). Always ok: on any
+// mismatch the copy is removed, the boards stay English and the message says why. The game folder is not changed.
+Result prepare_redirect(const fs::path& game, const fs::path& data);
+// Calls prepare_static first, then prepare_redirect.
 Result install(const fs::path& game, const fs::path& data, const Manifest& m, const fs::path& backup);
 
 // Proxy loading (protocol.h): U9ChtProxy.dll is copied to <game>/dsound.dll for one session. A dsound.dll already

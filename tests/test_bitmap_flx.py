@@ -22,6 +22,14 @@ def synthetic_payload(w=8, h=4, mips=2, seed=1):
     return bf.build_texture(tex)
 
 
+def synthetic_layer(w=8, h=4):
+    # alpha 0 on every fifth pixel, otherwise a spread of values
+    return [((i * 11) % 256, (i * 29) % 256, (i * 53) % 256, 0 if i % 5 == 0 else (i * 37) % 256) for i in range(w * h)]
+
+
+GOLDEN_BOARD_SHA256 = "5036293e837c1f8282353d26ce38750012e81d96bb9819ff427e64a16b62e8e5"
+
+
 def synthetic_flx(payloads, slots=6):
     header = bytearray(b" " * 0x4C) + bytearray(0x34)
     struct.pack_into("<II", header, 0x50, slots, 2)
@@ -101,6 +109,55 @@ class BitmapFlxTests(unittest.TestCase):
                 bf.read_entry(path, 0)                                # empty slot
             with self.assertRaises(bf.FormatError):
                 bf.read_entry(path, 99)                               # outside the table
+
+    # ---- U9CS signpost patches ----
+
+    def test_overlay(self):
+        base = [0x1234, 0xF800, 0x07E0]
+        out = bf.overlay(base, [(255, 255, 255, 0), (255, 255, 255, 255), (0, 0, 0, 128)])
+        self.assertEqual(out[0], 0x1234)                              # transparent: exact value kept
+        self.assertEqual(out[1], 0xFFFF)                              # opaque white
+        self.assertEqual(out[2], bf.from_rgb(0, (255 * 127 + 127) // 255, 0))
+
+    def test_golden_board(self):
+        # Same input as runtime/tests/sign_patch_tests.cpp; both must give this payload.
+        self.assertEqual(bf.digest(bf.sign_payload(synthetic_payload(seed=1), synthetic_payload(seed=2), synthetic_layer())),
+                         GOLDEN_BOARD_SHA256)
+
+    def test_sign_patch_round_trip(self):
+        base, a, b = synthetic_payload(seed=1), synthetic_payload(seed=2), synthetic_payload(seed=3)
+        with tempfile.TemporaryDirectory() as d:
+            src, out = Path(d) / "bitmap16.flx", Path(d) / "out.flx"
+            src.write_bytes(synthetic_flx({0: base, 2: a, 4: b}))
+            layer = synthetic_layer()
+            patch = bf.make_sign_patch(src, 0, {2: (8, 4, layer), 4: (8, 4, layer)})
+            p = bf.parse_sign_patch(patch)
+            self.assertEqual((p.base_entry, len(p.signs), p.source_size), (0, 2, src.stat().st_size))
+            self.assertEqual(bf.apply_sign_patch(src, patch, out), p.result_sha256)
+            self.assertEqual(bf.read_entry(out, 2), bf.sign_payload(base, a, layer))
+            self.assertEqual(bf.read_entry(out, 0), base)
+            self.assertEqual(out.stat().st_size, src.stat().st_size)
+            # a changed layer no longer gives the recorded board
+            bad = bytearray(patch); bad[4 + 8 + 32 + 4 + 32 + 4 + 8 + 32 + 3] ^= 0x40
+            with self.assertRaises(bf.FormatError):
+                bf.apply_sign_patch(src, bytes(bad), out)
+            # another source file is refused
+            src.write_bytes(synthetic_flx({0: base, 2: b, 4: a}))
+            with self.assertRaises(bf.FormatError):
+                bf.apply_sign_patch(src, patch, out)
+            for broken in (patch[:-1], patch + b"\0", b"U9CX" + patch[4:]):
+                with self.assertRaises(bf.FormatError):
+                    bf.parse_sign_patch(broken)
+
+    def test_committed_layers(self):
+        root = Path(__file__).resolve().parents[1] / "translation" / "textures" / "signposts"
+        import json
+        meta = json.loads((root / "signposts.json").read_text(encoding="utf-8"))
+        self.assertNotIn("4471", meta["signs"])                       # Asylum stays English (2026-11-26)
+        for entry in meta["signs"]:
+            w, h, pixels = bf.read_png_rgba((root / f"{entry}.png").read_bytes())
+            self.assertEqual((w, h), (64, 32))
+            self.assertTrue(any(p[3] for p in pixels) and any(p[3] == 0 for p in pixels), entry)
 
     @unittest.skipUnless(os.environ.get("U9_GAME_DIR"), "LOCAL-ONLY: set U9_GAME_DIR")
     def test_local_signposts_round_trip(self):

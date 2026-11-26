@@ -43,6 +43,13 @@ text). `prepare_static` (called by `install`) builds each missing or wrong file 
 from the game folder or, while an install is in place, from `backup/`, and checks it against the manifest. See
 `docs/release/PATCH_FORMAT.md`.
 
+## Signposts: bitmap16.flx copy
+
+With `data/patches/bitmap16.u9cs`, `install` first calls `prepare_redirect`: it makes `data\redirect\bitmap16.flx`
+from the game's own file once (about 320 MB, checked by hash, then reused). The runtime opens that copy whenever
+the game opens `static\bitmap16.flx` (`file_redirect.h`), so the game folder is never changed. A mismatch keeps the
+English boards and does not stop the game. See `docs/formats/U9-BITMAP16-NOTES.md`.
+
 ## Key bindings page
 
 `keymap.h` and `keymap.cpp` read and write a keymap the way `u9.exe` reads it. The rules were traced in the game's code; see `docs/research/U9_EXTENDED_SETUP_TOOL.md`.

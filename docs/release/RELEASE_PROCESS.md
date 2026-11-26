@@ -24,11 +24,13 @@ Contents of a release:
 | `U9Cht.exe`, `U9ChtLauncher.exe`, `U9ChtRuntime.dll`, `U9ChtProxy.dll` | runtime build |
 | `data/build-manifest.json`, `data/runtime/allowlist.u9ct`, `data/runtime/movies.tsv` | localization build |
 | `data/patches/*.u9cp` | made by the script |
+| `data/patches/bitmap16.u9cs` | made by the script from `translation/textures/signposts/` (signposts) |
 | `fonts/jf-openhuninn-2.1.ttf`, `fonts/jf-openhuninn-LICENSE.txt` | jf open huninn 2.1 (OFL 1.1) |
 | `說明.txt` | `release/說明.txt` |
 | `THIRD_PARTY_NOTICES.md` | repository |
 
-The front page writes `u9cht.ini`, `front.ini`, `logs/`, `backup/` and `data/static/` beside itself at run time.
+The front page writes `u9cht.ini`, `front.ini`, `logs/`, `backup/`, `data/static/` and `data/redirect/` (the signpost copy of
+`bitmap16.flx`, about 320 MB) beside itself at run time.
 
 ## Cloud saves
 

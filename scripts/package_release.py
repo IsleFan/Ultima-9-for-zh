@@ -4,6 +4,7 @@ The release holds no game file and nothing that carries the game's English text:
   U9Cht.exe, U9ChtLauncher.exe, U9ChtRuntime.dll, U9ChtProxy.dll   (--runtime)
   data/build-manifest.json, data/runtime/allowlist.u9ct, data/runtime/movies.tsv   (--build)
   data/patches/<name>.u9cp   made here from the local originals (--game-dir) and the built FLX
+  data/patches/bitmap16.u9cs the signpost text layers (translation/textures/signposts) and the hashes to check
   fonts/<font> and its license, 說明.txt, THIRD_PARTY_NOTICES.md
 Every patch is applied again and must give the built file. The folder is then scanned: no FLX, no local path,
 no 16+ character Latin run in any patch's added bytes. Output goes under .local/ only (it is never tracked).
@@ -21,6 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from u9cht.l10n import patch  # noqa: E402
+from u9cht import bitmap_flx  # noqa: E402
 
 PROGRAMS = ("U9Cht.exe", "U9ChtLauncher.exe", "U9ChtRuntime.dll", "U9ChtProxy.dll")
 RESOURCES = ("text.flx", "misctext.flx", "TYPENAME.FLX", "BOOKS-EN.FLX")
@@ -88,6 +90,21 @@ def main(argv=None):
         (folder / "data" / "patches" / f"{name}.u9cp").write_bytes(p)
         report["patches"][name] = {"source": len(source), "target": len(target), "patch": len(p), "sha256": sha256(p)}
 
+    # Signposts (docs/formats/U9-BITMAP16-NOTES.md): our text layers plus hashes; the front page makes the boards
+    # from the player's bitmap16.flx. Applied here once to check it before it ships.
+    signs = ROOT / "translation" / "textures" / "signposts"
+    meta = json.loads((signs / "signposts.json").read_text(encoding="utf-8"))
+    layers = {int(e): bitmap_flx.read_png_rgba((signs / f"{e}.png").read_bytes()) for e in meta["signs"]}
+    original = game / "static" / "bitmap16.flx"
+    sign_patch = bitmap_flx.make_sign_patch(original, meta["base_entry"], layers)
+    check = output / f"{a.name}.bitmap16-check.flx"
+    try:
+        bitmap_flx.apply_sign_patch(original, sign_patch, check)
+    finally:
+        check.unlink(missing_ok=True)
+    (folder / "data" / "patches" / "bitmap16.u9cs").write_bytes(sign_patch)
+    report["patches"]["bitmap16.flx (signposts)"] = {"boards": len(layers), "patch": len(sign_patch), "sha256": sha256(sign_patch)}
+
     font = Path(a.font)
     shutil.copy2(font, folder / "fonts" / font.name)
     shutil.copy2(ROOT / "release" / "jf-openhuninn-LICENSE.txt", folder / "fonts" / "jf-openhuninn-LICENSE.txt")
@@ -100,7 +117,7 @@ def main(argv=None):
     for f in files:
         if f.suffix.lower() == ".flx":
             fail(f"FLX in the release: {f.relative_to(folder)}")
-        if f.suffix.lower() in (".json", ".tsv", ".txt", ".md", ".u9ct", ".u9cp"):
+        if f.suffix.lower() in (".json", ".tsv", ".txt", ".md", ".u9ct", ".u9cp", ".u9cs"):
             data = f.read_bytes()
             for text in (data, data.decode("utf-16-le", "ignore").encode("utf-8", "ignore")):
                 if local_path.search(text):
