@@ -84,3 +84,48 @@ w04 也證實了下列幾項：
 3. 解壓中文化，在 CrossOver 裡執行 `U9Cht.exe`。
 
 以上都還沒在 Mac 上驗證。
+
+## Mac 實機結果（2026-11-25）
+
+環境：macOS 27.2.1，Apple Silicon（Rosetta 2）；GOG 版 1.19f；中文化 `U9CHT-0.1.1-internal`；
+不使用 CrossOver，改用免費的 Wine 建置（WineHQ 官方 macOS 套件與 Sikarugir 引擎），DLL 覆寫與上一節相同。
+
+### 問題 4：Apple Silicon 上 32 位元程式隨機當機（Wine／Rosetta 的問題，不在中文化）
+
+- 現象：載入場景時 `page fault ... in wow64 32-bit code`，位址 `wow64cpu+0x1135`／`+0x1239`。原版也會（CONFIRMED）。
+- WineHQ bug 60494：wow64cpu 的 64 位元切換程式在 32 位元模式下執行；Wine 維護者標為 Rosetta 的問題，不修。
+- 實測（直接啟動 `u9.exe`，每次 30～45 秒）：
+
+| 引擎 | 當機 | 首頁「開始遊戲」 | 字幕開啟時的影片 |
+| --- | --- | --- | --- |
+| WineHQ 官方 11.21（Gcenx 建置） | 約半數 | 可以 | 正常 |
+| Sikarugir Wine 10.0 rev 5／7／8 | 0／6～10 | 可以 | 黑畫面（修正前） |
+| CrossOver 24.0.7 原始碼版（Sikarugir 建置，Wine 9） | 0／10 | 失敗（問題 5） | 黑畫面（最小重現） |
+| Sikarugir Wine 11.0（4 個建置） | — | 在 macOS 27 上無法建立 prefix | — |
+
+### 問題 5：`KERNEL32.CopyFile2` 未實作（CONFIRMED，已修）
+
+- CrossOver 24.0.7 原始碼版按「開始遊戲」時中止：`unimplemented function KERNEL32.dll.CopyFile2`。
+- 來源：`front_core.cpp` 的 `std::filesystem::copy_file`，MSVC STL 內部用 `CopyFile2`。
+- 修正：`copy_verified` 改用 `CopyFileW`，之後一樣驗證雜湊。
+
+### 問題 6：影片字幕開啟時只有聲音、沒有畫面（CONFIRMED，已修）
+
+- 原因：Wine 的 macOS 驅動不顯示「有 OpenGL 畫面的視窗」裡的 GDI 子視窗。遊戲視窗由 GOG 包裝 → d3d9 → wined3d → OpenGL 繪製，
+  播放器的 `WS_CHILD` 視窗用 GDI 畫，所以整片黑，`waveOut` 的聲音照常。
+- 證據：
+  - 影片播放中列舉視窗：遊戲視窗下只有 `U9ChtMovie`；用 `GetDC`＋`BitBlt` 讀它的內容是全黑（0% 非黑像素）。
+  - 與遊戲無關的最小重現（OpenGL 上層＋`StretchDIBits` 子視窗）：Sikarugir Wine 10、CrossOver 24 原始碼版都看不到子視窗；
+    官方 Wine 11.21 看得到；上層不用 OpenGL 時都看得到。
+  - Wine Mac 驅動的 `OpenGLSurfaceMode`（`behind`／`transparent`）、`ForceOpenGLBackingStore`、`SkipSingleBufferFlushes` 都無效。
+  - WSL2 的預先測試用 X11 驅動＋虛擬桌面，所以沒有遇到。
+- 修正：`ntdll` 的 `wine_get_host_version` 回報 `Darwin` 時，播放器改用遊戲視窗擁有的彈出視窗
+  （`WS_POPUP`，`WS_EX_NOACTIVATE|WS_EX_TOOLWINDOW`，對齊遊戲的 client 區，每次重畫時跟隨），滑鼠訊息轉給遊戲視窗。
+  Windows 與其他 Wine 主機仍用原本的子視窗。`run_window` 記錄多了 `"popup"`。
+  - 第一版以 `WS_VISIBLE` 建立，Wine 仍把彈出視窗設成前景，全螢幕的遊戲因此最小化，兩者都被移到螢幕外。
+    改成先隱藏建立、再 `SW_SHOWNOACTIVATE` 後，遊戲維持前景（CONFIRMED）。
+- 驗證（Sikarugir Wine 10.0 rev 8，全新遊戲狀態，經首頁啟動）：
+  - 開場影片 `Column.dat` 畫面正常；暫時加一句測試字幕到測試副本的 `movies.tsv`，字幕與影片同時顯示（CONFIRMED）。
+  - 播放中按 Esc：`stop` 的堆疊掃描是 `0x585171`（鍵盤路徑），`U9ChtMovie` 隨即銷毀，遊戲接到開場場景，未最小化（CONFIRMED）。
+  - 播放中點一下滑鼠：0.5 秒時 `stop`，堆疊掃描是 `0x58518E`（`0x585189` 輸入事件路徑的返回位址），所以彈出視窗轉給遊戲的點擊有效（CONFIRMED）。
+  - 未驗證：有正式字幕的影片（intro、raven、samhayne、ambush）全片播放；Intel Mac；CrossOver 商業版；`CopyFile2` 修正在 CrossOver 24 原始碼版上的實際啟動（只確認 `U9Cht.exe` 已不匯入 `CopyFile2`）。

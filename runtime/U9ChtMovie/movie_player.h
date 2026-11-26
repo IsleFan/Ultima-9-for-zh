@@ -15,6 +15,9 @@
 typedef struct plm_t plm_t;
 
 namespace u9cht {
+// True when running under Wine with the macOS host (ntdll's wine_get_host_version reports "Darwin").
+bool wine_on_macos() noexcept;
+
 struct MovieStyle {
     std::wstring font_family = L"Microsoft JhengHei";
     uint32_t subtitle_px_at_480 = 26;  // subtitle em at a 480-pixel tall window, scaled with the window
@@ -34,7 +37,10 @@ public:
     void set_reference(std::vector<SubtitleCue> cues);
     void set_style(const MovieStyle& style) { style_ = style; }
     // Creates the presentation window: a top-level window (parent null) or an input-transparent child.
+    // Under Wine on macOS the child becomes a non-activating popup owned by `parent` (see wine_on_macos()).
+    // x/y are client coordinates of `parent` in both cases.
     bool create_window(HWND parent, int x, int y, int w, int h, const wchar_t* title = L"");
+    bool popup() const noexcept { return popup_; }
     void set_position(int x, int y, int w, int h);
     void set_visible(bool visible);
     void set_notify(HWND hwnd, UINT message, LONG_PTR param) { notify_hwnd_ = hwnd; notify_message_ = message; notify_param_ = param; }
@@ -58,6 +64,7 @@ public:
 
 private:
     static LRESULT CALLBACK proc(HWND, UINT, WPARAM, LPARAM);
+    void follow_owner();               // popup only: keep the window on the owner's client area
     void paint(HDC dc);
     void render_subtitle(HDC target, const std::u16string& text, int px, int cw, int ch, int picture_bottom);
     void free_subtitle();
@@ -79,7 +86,9 @@ private:
     MovieStyle style_;
 
     HWND hwnd_ = nullptr;
-    bool child_ = false;
+    bool child_ = false, popup_ = false;
+    HWND owner_ = nullptr;             // parent or popup owner
+    POINT offset_{};                   // popup: position in the owner's client coordinates
     HWND notify_hwnd_ = nullptr;
     UINT notify_message_ = 0;
     LONG_PTR notify_param_ = 0;

@@ -43,10 +43,11 @@ void write_utf16(const fs::path& file, const std::wstring& text) {
     out.write(reinterpret_cast<const char*>(text.data()), std::streamsize(text.size() * sizeof(wchar_t)));
     if (!out) throw std::runtime_error("cannot write " + utf8(file.wstring()));
 }
+// CopyFileW rather than std::filesystem::copy_file: MSVC's STL implements copy_file with CopyFile2, which older
+// Wine builds lack (CrossOver 24.0.7 source build, Wine 9: "unimplemented function KERNEL32.dll.CopyFile2",
+// the front page aborted on Start; CONFIRMED 2026-11-25 on macOS). The result is still checked by hash.
 bool copy_verified(const fs::path& from, const fs::path& to, const std::wstring& expected) {
-    std::error_code ec;
-    fs::copy_file(from, to, fs::copy_options::overwrite_existing, ec);
-    return !ec && hash_or_empty(to) == expected;
+    return CopyFileW(from.c_str(), to.c_str(), FALSE) && hash_or_empty(to) == expected;
 }
 struct Entry { std::wstring name, original, installed; };
 std::vector<Entry> read_receipt(const fs::path& file) {
