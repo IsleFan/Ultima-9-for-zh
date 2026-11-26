@@ -85,3 +85,44 @@ FeatureHoverNames).
 typed; `hover_text_blocks` 2374, runtime `errors` 0 (`front-release/logs/20261119-235004*`, local only).
 
 Not checked: the save name box with hover names on.
+
+## 4. Random crashes in long Windows sessions (2026-11-26, open)
+
+**Seen:** during the Windows check of the 0.1.2 release (private Steam copy, front page, windowed 1600x1200), three of
+five localized sessions ended in a crash of `u9.exe`. The player feels that the longer the session, the likelier it is.
+
+| Session (`release-test/U9CHT-0.1.2-internal/logs/`, local only) | Length | Features | Result |
+| --- | --- | --- | --- |
+| `20261126-202708` | ~16 min | all on | crash `u9.exe+0x19CEAC`, 12 s after the 3rd Ctrl+Shift+K |
+| `20261126-214607` | ~4 min | all on | crash `u9.exe+0x4E516` in combat |
+| `20261126-215503` | ~2.5 min | combat features off | no crash |
+| `20261126-220003` | ~8.5 min | combat features off | crash `u9.exe+0x94A19` |
+| `20261126-223311` | ~18 min | all on | no crash |
+
+"Combat features" are status numbers, floating numbers and the enemy bar. The original game (`u9.exe` started
+directly, same copy and save) ran 18 minutes without a crash in one session.
+
+**What the crashes show (CONFIRMED by the runtime's `exception` events and disassembly):**
+
+- `0x59CEAC`: a COM call through `[esi+0x3FC3B4]`, which is null. The same address and stack crashed the
+  2026-11-18 session of issue 1 ("Unable to create Primary Surface"), before the Mac fixes and the icon existed.
+  Both followed a change of focus.
+- `0x44E516`: reads `[[0xAE9100]+0xA4]` with `[0xAE9100]` null. The global is written only at `0x4358DA` and
+  `0x435A0F`, from `[obj+0x114]`. The runtime never writes it; it only reads other fields under `[0x850228]`.
+- `0x494A19`: reads a garbage address (`0x8658A9A8`).
+
+**Memory (sampled every 10 s from outside, `p10-misc/vanilla-mem/`, local only):** `u9.exe` is not large address
+aware (2 GB). Highest virtual size: original 1.26 GB, localized 1.31 GB; highest private bytes 0.73 / 0.79 GB.
+Neither grows steadily.
+
+**Classification:**
+
+- STRONG EVIDENCE: running out of address space is not the cause.
+- UNKNOWN: whether the localization causes or adds to the crashes. Three crashes in five localized sessions
+  against one clean original session is too little to tell; the original game is not known to be stable either.
+- HYPOTHESIS: different crash sites with null or garbage pointers fit memory written wrongly earlier, or the
+  game's own fragile state handling (focus changes, issue 1).
+- Ruled out: the three combat features alone (a crash with them off).
+
+**Next steps (not started):** more original sessions of the same length to get its crash rate; if the original
+stays clean, turn features off in halves, or compare with the session tool and the older injection path.

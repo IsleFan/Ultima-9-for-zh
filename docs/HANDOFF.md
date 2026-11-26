@@ -523,6 +523,10 @@
 - 舊版 Wine 沒有 `CopyFile2`，首頁按「開始遊戲」會中止：`copy_verified` 改用 `CopyFileW`。這個改動在 Windows 上也生效，還沒在 Windows 進遊戲驗證。
 - Apple Silicon 上官方 Wine 約半數隨機當機（原版也會，WineHQ bug 60494）；Sikarugir Wine 10.0 沒有。Mac 說明要改成推薦 Sikarugir（`MAC_TEST_GUIDE.md` 還沒改）。
 - 同日：首頁加了安卡圖示（`scripts/make_icon.py`）；Windows 解壓 0.1.1 zip 進遊戲驗證三輪，正常結束、檔案還原。
+- 同日：打包 `.local/release/U9CHT-0.1.2-internal.zip`（`b5cefb5`）並在 Windows 驗證：圖示、開始遊戲、影片字幕、對話、介面、日誌正常，檔案正常還原。
+- 同日：「叫出按鍵設定頁」改成可自訂（`73ddef6`，runtime 指令 `open_key_bindings`，「一般」分頁，預設 Ctrl+Shift+K）。測試資料夾 `release-test/U9CHT-0.1.2-internal` 的四個程式已換成這一版，和 0.1.2 zip 不同。遊戲中叫出 4 次、即時重新載入成功；改成別的鍵之後是否有效，使用者沒有明確回報。
+- 同日：長時間遊玩偶發閃退，中文化 5 輪閃 3 輪、原版 1 輪沒閃，見 `docs/research/U9_KNOWN_ISSUES.md` 第 4 節。位址空間不是原因。**下一步：多跑幾輪原版，確認原版的閃退率。**
+- 待辦：3D 路標木牌上的地名（例如 Britain、Stonegate）是畫在貼圖上的字（推測在 `bitmap16.flx`），還沒研究格式。點擊路標跳出的文字已經是中文。
 
 2026-11-20 曾暫停，2026-11-23 恢復。
 
