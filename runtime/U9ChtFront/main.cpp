@@ -411,6 +411,19 @@ void start_game() {
         if (!shown.ok) { set_message(shown.message, true); return; }
     }
     if (const auto res = apply_resolution(app.s.game_dir, {app.s.width, app.s.height}); !res.ok) { set_message(res.message, true); return; }
+    {   // The first start makes data/static and the signpost copy (about 320 MB): say so before the page stops
+        // painting while it works.
+        const bool signs = fs::exists(app.data / L"patches" / L"bitmap16.u9cs", ec) &&
+                           !fs::exists(app.data / L"redirect" / L"bitmap16.flx.sha256", ec);
+        bool texts = false;
+        for (const auto& [file, out] : app.manifest.output) if (!fs::exists(app.data / L"static" / file, ec)) texts = true;
+        if (signs || texts) {
+            set_message(signs ? L"第一次開始：正在產生中文化資料和中文路標（要複製約 320 MB），請稍候…"
+                              : L"第一次開始：正在產生中文化資料，請稍候…", false);
+            InvalidateRect(app.window, nullptr, FALSE); UpdateWindow(app.window);
+            SetCursor(LoadCursorW(nullptr, IDC_WAIT));
+        }
+    }
     const auto installed = install(app.s.game_dir, app.data, app.manifest, app.backup());
     if (!installed.ok) { set_message(installed.message, true); return; }
     fs::create_directories(app.base / L"logs", ec);
