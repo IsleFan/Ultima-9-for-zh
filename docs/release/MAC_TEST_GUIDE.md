@@ -1,13 +1,20 @@
 # 創世紀 IX 繁體中文版：Mac 測試說明
 
-謝謝你幫忙測試！這份說明會帶你在 Mac 上用 **CrossOver** 執行中文化，並告訴你要看哪些地方、回傳哪些資料。
+謝謝你幫忙測試！這份說明會帶你在 Mac 上用 **Sikarugir**（免費）執行中文化，並告訴你要看哪些地方、回傳哪些資料。
 
 先說明兩件事：
 
-- 這個遊戲只有 Windows 版，沒有 Mac 版。CrossOver 讓 Windows 程式可以直接在 Mac 上執行。
-- 中文化**不附遊戲本體**。你需要自己的 **GOG 版**《Ultima 9: Ascension》。Steam 版在 CrossOver 裡比較麻煩，這次先不測。
+- 這個遊戲只有 Windows 版，沒有 Mac 版。Sikarugir 用 Wine 讓 Windows 程式在 Mac 上執行。
+- 中文化**不附遊戲本體**。你需要自己的 **GOG 版**《Ultima 9: Ascension》。Steam 版還沒有在 Mac 上試過。
 
-我們已經在 Windows 電腦上用 Wine（CrossOver 的核心）測過，可以正常進遊戲、顯示中文。但 Mac 上還沒人試過，所以結果好壞都很有幫助。
+目前的狀況（2026-11-26）：
+
+- 已經有夥伴在 Apple 晶片的 Mac（macOS 27）上，用 Sikarugir 的 **Wine 10.0** 引擎跑過中文化，可以進遊戲，影片字幕也修好了。
+- 不建議用 WineHQ 官方的 Wine：在 Apple 晶片上大約一半的機會會隨機當機，原版遊戲也一樣（WineHQ bug 60494）。Sikarugir Wine 10.0 在測試中沒有當機。
+- 畫面會比在 Windows 上慢，原版英文遊戲也一樣慢。
+- CrossOver 也是一種選擇，但還沒有人用它測過這個中文化。
+
+> 下面標「（待確認）」的選單名稱是照 Sikarugir 的一般用法寫的，還沒有對著實際畫面核對過。如果和你看到的不同，請告訴我們實際的名稱。
 
 ---
 
@@ -15,39 +22,54 @@
 
 | 項目 | 說明 |
 | --- | --- |
-| Mac | Apple 晶片（M1～M4）或 Intel 都可以 |
-| CrossOver | 到 CodeWeavers 官網下載，有 **14 天免費試用** |
+| Mac | macOS 14.6 以上。Apple 晶片（M1～M4）要裝 Rosetta 2；Intel 還沒人試過 |
+| Sikarugir | 免費，見步驟一 |
 | 遊戲 | GOG 版《Ultima 9: Ascension》的**離線安裝檔**（GOG 網站「遊戲庫」→ 這個遊戲 →「下載離線備份安裝檔」） |
-| 中文化 | 我們給你的 `U9CHT-0.1.1-internal.zip` |
+| 中文化 | 我們給你的 `U9CHT-0.1.2-internal.zip` |
 
 整個測試大約需要 30～60 分鐘。
 
 ---
 
-## 步驟一：建立 CrossOver 的「容器」（bottle）
+## 步驟一：安裝 Sikarugir
 
-CrossOver 把每個 Windows 環境叫做一個「容器」（bottle）。
+在「終端機」執行（需要先裝好 Homebrew）：
 
-1. 開啟 CrossOver。
-2. 建立新的容器：選單「容器」（Bottle）→「新增容器」（New Bottle）。
-   - 名稱：`Ultima9`
-   - 類型：**Windows 10 64-bit**
-3. 等它建立完成。
+```sh
+brew trust Sikarugir-App/sikarugir
+brew install --cask Sikarugir-App/sikarugir/sikarugir
+```
 
-## 步驟二：在容器裡安裝遊戲
+Apple 晶片的 Mac 還要裝 Rosetta 2：
 
-1. 在 CrossOver 選「安裝 Windows 應用程式」（Install a Windows Application）。
-2. 選「安裝其他的應用程式」，安裝程式選你下載的 GOG 離線安裝檔（`setup_ultima_9_....exe`）。
-3. 安裝到剛才建立的 `Ultima9` 容器。安裝位置用預設的就好，通常是 `C:\GOG Games\Ultima 9`。
+```sh
+/usr/sbin/softwareupdate --install-rosetta --agree-to-license
+```
 
-> **可以先試玩原版**：在容器裡執行 `u9.exe`，確認原版能跑。如果介面圖片全黑、書頁沒有字，請先完成步驟三再試。
+指令取自 Sikarugir 的 GitHub 頁面（Sikarugir-App/Sikarugir）。注意：`sikarugir.com` 這個網站和 Sikarugir 團隊無關。
 
-## 步驟三：設定兩個 DLL（重要）
+## 步驟二：建立遊戲用的「包裝」（wrapper）
+
+Sikarugir 把每個 Windows 環境做成一個 Mac 應用程式，叫做「包裝」（wrapper）。
+
+1. 開啟 Sikarugir 的 **Creator**。
+2. 新增引擎，選 **Wine 10.0**，按下載並安裝。我們測過的是 Sikarugir Wine 10.0 rev 8。
+   - 請不要用 Wine 11.0：在 macOS 27 上無法建立環境。
+3. 建立新的空白包裝，名稱用 `Ultima9`。
+   - 建立時視窗可能幾分鐘沒有反應，等它完成。
+   - 包裝會放在 `~/Applications/Sikarugir`。
+
+## 步驟三：在包裝裡安裝遊戲
+
+1. 打開 `Ultima9` 包裝的設定畫面（包裝裡的設定程式叫 `Configure`；怎麼打開待確認，可能是在 `Ultima9` 上按右鍵 → 顯示套件內容）。
+2. 選「安裝軟體」（Install Software，待確認），選你下載的 GOG 離線安裝檔（`setup_ultima_9_....exe`）。
+3. 安裝位置用預設的就好，通常是 `C:\GOG Games\Ultima 9`。
+
+## 步驟四：設定兩個 DLL（重要）
 
 不做這一步，遊戲畫面會不正常，中文化也不會載入。
 
-1. 選取 `Ultima9` 容器，打開「Wine 設定」（Wine Configuration）。
-   - 一般在容器的「控制台」或「進階」設定裡。
+1. 在包裝的設定畫面打開 Wine 設定（`winecfg`，待確認：通常在「工具」Tools 分頁的 Config Utility）。
 2. 切到「函式庫」（Libraries）分頁。
 3. 在「新增函式庫覆載」的欄位輸入 `ddraw`，按「新增」。
    - 選取清單裡的 `ddraw`，按「編輯」，選 **原生（Windows）**（Native (Windows)）。
@@ -62,24 +84,21 @@ ddraw (原生)
 dsound (原生, 內建)
 ```
 
-## 步驟四：放入中文化
+## 步驟五：放入中文化
 
-1. 在 CrossOver 選取 `Ultima9` 容器，選「開啟 C: 磁碟」（Open C: Drive），會打開一個 Finder 視窗。
-2. 把 `U9CHT-0.1.1-internal.zip` 解壓縮，把整個資料夾 `U9CHT-0.1.1-internal` 拖進這個 C: 磁碟。
-   - 結果應該是 `C:\U9CHT-0.1.1-internal\U9Cht.exe`。
+1. 把 `U9CHT-0.1.2-internal.zip` 解壓縮。
+2. 把整個資料夾 `U9CHT-0.1.2-internal` 放進包裝的 C: 磁碟（待確認：設定畫面裡通常有開啟 C: 磁碟的按鈕；或在包裝上按右鍵 → 顯示套件內容 → `Contents/SharedSupport/prefix/drive_c`）。
+   - 結果應該是 `C:\U9CHT-0.1.2-internal\U9Cht.exe`。
 
-## 步驟五：開啟中文化首頁
+## 步驟六：開啟中文化首頁
 
-1. 在 CrossOver 選取 `Ultima9` 容器，選「執行指令」（Run Command）。
-2. 「瀏覽」選 `C:\U9CHT-0.1.1-internal\U9Cht.exe`，執行。
-3. 首頁會出現。最上方的「遊戲位置」：
+1. 在包裝的設定畫面，把要執行的程式設成 `C:\U9CHT-0.1.2-internal\U9Cht.exe`，再開啟包裝（待確認）。
+2. 首頁會出現，視窗圖示是金色的安卡。最上方的「遊戲位置」：
    - 如果顯示綠色的「✔ 已找到遊戲」，就可以了；
    - 如果找不到，按「選擇資料夾」，選遊戲的安裝資料夾（例如 `C:\GOG Games\Ultima 9`）。
-4. 下方「解析度」建議先用 **1024×768**，並勾選「**視窗化**」。
+3. 下方「解析度」建議先用 **1024×768**，並勾選「**視窗化**」。
 
-> 方便的話，可以在「執行指令」視窗裡勾選「儲存為捷徑」，下次直接從 CrossOver 點它開啟。
-
-## 步驟六：開始遊戲
+## 步驟七：開始遊戲
 
 按首頁左下角的「**開始遊戲**」。
 
@@ -102,8 +121,8 @@ dsound (原生, 內建)
 | 6 | 書與日誌 | 按 **J** 開日誌，內容是中文 |
 | 7 | 游標停留顯示名稱 | 游標停在地上的物品上一下，會出現中文名稱 |
 | 8 | 存檔與讀檔 | 存一次檔，再讀回來 |
-| 9 | 切換視窗 | 切到別的 App 再切回遊戲，重複幾次，看滑鼠還能不能點介面（我們在 Windows 的 Wine 上，切幾次就會點不到；想知道 Mac 上會不會） |
-| 10 | 聲音與順暢度 | 音樂、音效正常嗎？畫面會不會很卡？ |
+| 9 | 切換視窗 | 切到別的 App 再切回遊戲，重複幾次，看滑鼠還能不能點介面（我們在 Windows 的 Wine 上，切幾次就會點不到；原版也一樣。方便的話也用原版試試看，比較兩者） |
+| 10 | 聲音與順暢度 | 音樂、音效正常嗎？畫面大約多卡？ |
 | 11 | 離開遊戲 | 用遊戲內選單離開，回到首頁，再按首頁的「結束」 |
 
 如果遊戲卡住或當掉，請記下當時在做什麼。
@@ -115,9 +134,10 @@ dsound (原生, 內建)
 1. **你的環境**：
    - Mac 機型與晶片（「關於這台 Mac」裡的「晶片」或「處理器」）；
    - macOS 版本；
-   - CrossOver 版本。
+   - Sikarugir 版本和引擎名稱（例如 Wine 10.0 rev 8）。
 2. **上面 11 項的結果**，以及不正常項目的截圖。
-3. **記錄檔**：`C:\U9CHT-0.1.1-internal\logs` 整個資料夾（從「開啟 C: 磁碟」找到它，壓縮後傳給我們）。記錄裡只有中文化自己的狀態，沒有個人資料。
+3. **記錄檔**：`C:\U9CHT-0.1.2-internal\logs` 整個資料夾，壓縮後傳給我們。記錄裡有中文化的狀態和遊戲資料夾的路徑；傳之前可以先打開看看。
+4. 如果步驟裡的選單名稱和你看到的不同，請告訴我們實際的名稱。
 
 ---
 
@@ -130,10 +150,16 @@ dsound (原生, 內建)
 請把 `logs` 資料夾傳給我們，我們從記錄裡看原因。
 
 **遊戲畫面的介面全黑、書頁沒有字？**
-步驟三的 `ddraw` 沒有設成「原生」。
+步驟四的 `ddraw` 沒有設成「原生」。
 
 **遊戲進得去，但全是英文？**
-步驟三的 `dsound` 沒有設成「原生先於內建」。
+步驟四的 `dsound` 沒有設成「原生先於內建」。
+
+**想試試能不能比較順？（可選）**
+Sikarugir 有幾種圖形轉換方式可以切換（例如 DXVK、D9VK、D3DMetal、WineD3D）。先用預設值完成上面的檢查，之後如果有時間，可以換一種再玩一下，告訴我們哪一種比較順、有沒有畫面出錯。我們還沒試過任何一種。
+
+**載入場景時常常當機？**
+請確認用的是 Sikarugir 的 Wine 10.0 引擎，不是 WineHQ 官方的 Wine。
 
 **測完想移除？**
-在 CrossOver 刪除 `Ultima9` 容器即可，Mac 上不會留下其他東西。
+刪除 `~/Applications/Sikarugir` 裡的 `Ultima9` 包裝。Sikarugir 本身可以用 `brew uninstall --cask sikarugir` 移除。
