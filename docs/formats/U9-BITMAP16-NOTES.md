@@ -63,7 +63,7 @@ inside `(6,11)-(57,22)` (CONFIRMED). Entries 3379, 3382 and 3383 are blank arrow
 ## Delivery: file redirect (authorized 2026-11-26)
 
 The runtime hooks u9.exe's `CreateFileA` import (IAT slot `0x7400CC`, `runtime/U9ChtRuntime/file_redirect.h`). When the
-game opens `staticitmap16.flx` for reading, the runtime opens `<data>edirectitmap16.flx` instead. The game
+game opens `static\bitmap16.flx` for reading, the runtime opens `<data>\redirect\bitmap16.flx` instead. The game
 folder is never changed.
 
 - The game opens all its resources by full path with `GENERIC_READ` and `OPEN_ALWAYS` (CONFIRMED with a temporary
@@ -71,13 +71,13 @@ folder is never changed.
   at start.
 - Redirected only for read access with `OPEN_EXISTING` or `OPEN_ALWAYS`, and only when the copy has the size of
   the game's file (event `file_redirect_setup`). When opening the copy fails, the game's own file is opened.
-- 2026-11-26, private copy back to the original hash, copy in the test folder's `dataedirect`: both opens were
+- 2026-11-26, private copy back to the original hash, copy in the test folder's `data\redirect`: both opens were
   redirected (`file_redirect` `ok:true`), the boards showed in Chinese, the game ended normally (RUNTIME PASS).
 
 ## Not done
 
 - Drawing the text is a local script that uses Pillow (`.local/research-signs/`), not part of the repository.
-- No release path yet: the front page has to make `dataedirectitmap16.flx` from the player's own file and a
+- No release path yet: the front page has to make `data\redirect\bitmap16.flx` from the player's own file and a
   patch of the ten entries (the copy holds the game's art and must never be distributed). `bitmapC.flx` and
   `bitmapsh.flx` need their own formats.
 - 4471 Asylum has no approved Chinese name.

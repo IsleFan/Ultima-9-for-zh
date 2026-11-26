@@ -527,9 +527,9 @@
 - 同日：「叫出按鍵設定頁」改成可自訂（`73ddef6`，runtime 指令 `open_key_bindings`，「一般」分頁，預設 Ctrl+Shift+K）。測試資料夾 `release-test/U9CHT-0.1.2-internal` 的四個程式已換成這一版，和 0.1.2 zip 不同。遊戲中叫出 4 次、即時重新載入成功；改成別的鍵之後是否有效，使用者沒有明確回報。
 - 同日：長時間遊玩偶發閃退，中文化 5 輪閃 3 輪、原版 1 輪沒閃，見 `docs/research/U9_KNOWN_ISSUES.md` 第 4 節。位址空間不是原因。**下一步：多跑幾輪原版，確認原版的閃退率。**
 - 路標貼圖（2026-11-26，`docs/formats/U9-BITMAP16-NOTES.md`）：10 塊地名牌在 `bitmap16.flx` 4471～4478、4568、4569（64×32）。讀寫工具 `u9cht/bitmap_flx.py`，往返位元組完全相同。不列顛城（4472）、石門（4569）已改好，遊戲中確認清楚可讀。
-  - 改用**開檔導向**（使用者 2026-11-26 授權新增 `CreateFileA` hook）：遊戲開 `staticitmap16.flx` 時改開 `dataedirectitmap16.flx`，遊戲資料夾不動。遊戲中確認成功。
+  - 改用**開檔導向**（使用者 2026-11-26 授權新增 `CreateFileA` hook）：遊戲開 `static\bitmap16.flx` 時改開 `data\redirect\bitmap16.flx`，遊戲資料夾不動。遊戲中確認成功。
   - 私人副本 `.local/steam-game/static/bitmap16.flx` 已還原成原版（`3ec4ece8…`）。修改版在 `.local/release-test/U9CHT-0.1.2-internal/data/redirect/`。`research-signs/restore.py` 仍可用來檢查／還原。
-  - 繪圖腳本在 `.local/research-signs/`（用 Pillow，不進 repo）。還沒有發布方式（首頁要從玩家的原檔加差異檔產生 `dataedirectitmap16.flx`），`bitmapC.flx`／`bitmapsh.flx` 未處理，Asylum 沒有譯名。
+  - 繪圖腳本在 `.local/research-signs/`（用 Pillow，不進 repo）。還沒有發布方式（首頁要從玩家的原檔加差異檔產生 `data\redirect\bitmap16.flx`），`bitmapC.flx`／`bitmapsh.flx` 未處理，Asylum 沒有譯名。
 
 2026-11-20 曾暫停，2026-11-23 恢復。
 
