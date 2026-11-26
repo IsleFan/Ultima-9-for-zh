@@ -132,6 +132,8 @@ const std::vector<Command>& commands() {
         {"add_gold", UnknownCategory, 5, L"作弊：金幣增加一千（中文化）"},
         // Not a game command either: the runtime marks takeable objects while its key is held (F when unbound).
         {"show_takeable", UnknownCategory, 1, L"按住標出可拿物品（中文化）"},
+        // Not a game command: the runtime asks the front page to open this page (default Ctrl+Shift+K).
+        {PageCommand, UnknownCategory, 3, L"叫出按鍵設定頁（中文化）"},
     };
     return table;
 }
@@ -206,7 +208,6 @@ uint16_t code_from_press(unsigned vk, bool extended, bool shift, bool ctrl, bool
     const auto code = uint16_t(vk | (extended ? Extended : 0));
     if (!name_of(code) || vk == 0x2C) return fail(KeyError::Unsupported);
     const auto full = uint16_t(code | (shift ? Shift : 0) | (ctrl ? Ctrl : 0) | (alt ? Alt : 0));
-    if (full == PageHotkey) return fail(KeyError::Hotkey);
     return full;
 }
 
@@ -302,6 +303,20 @@ int conflicts(const Keymap& k) {
     for (size_t i = 0; i < k.keys.size(); ++i)
         for (const auto code : k.keys[i]) if (owner(k, code) != int(i)) ++n;
     return n;
+}
+
+std::vector<uint16_t> page_keys(const Keymap& k) {
+    const int page = find_command(PageCommand);
+    if (page < 0 || size_t(page) >= k.keys.size()) return {};
+    if (!k.keys[size_t(page)].empty()) return k.keys[size_t(page)];
+    for (const auto& [name, code] : k.extra) if (code == DefaultPageHotkey) return {};
+    if (owner(k, DefaultPageHotkey) >= 0) return {};
+    return {DefaultPageHotkey};
+}
+
+void fill_page_default(Keymap& k) {
+    const int page = find_command(PageCommand);
+    if (page >= 0 && size_t(page) < k.keys.size() && k.keys[size_t(page)].empty()) k.keys[size_t(page)] = page_keys(k);
 }
 
 namespace {

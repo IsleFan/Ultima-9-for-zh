@@ -34,7 +34,7 @@ int main() {
             check(names.insert(c.name).second, "command names are unique");
             check(std::string(c.name).size() < 32 && c.page >= 0 && c.page < Pages && c.label && *c.label, "command entry sane");
         }
-        check(commands().size() == 99, "99 bindable commands (97 of the game, add_gold and show_takeable of the runtime)");
+        check(commands().size() == 100, "100 bindable commands (97 of the game; add_gold, show_takeable and open_key_bindings of the runtime)");
         check(index_of("abort_targeting") < 0 && index_of("toggle_movement_speed") >= 0, "only commands the game registers");
         int rows[Pages]{};
         for (const auto& c : commands()) ++rows[c.page];
@@ -87,7 +87,7 @@ int main() {
         check(code_from_press(0x6F, true, false, false, false, &e) == 0 && e == KeyError::Unsupported, "keypad / arrives extended");
         check(code_from_press(0x2C, false, false, false, false, &e) == 0 && e == KeyError::Unsupported, "print screen is built in");
         check(code_from_press(0xE2, false, false, false, false, &e) == 0 && e == KeyError::Unsupported, "a key the game does not name");
-        check(code_from_press(0x4B, false, true, true, false, &e) == 0 && e == KeyError::Hotkey, "ctrl+shift+k opens the page");
+        check(code_from_press(0x4B, false, true, true, false, &e) == DefaultPageHotkey, "ctrl+shift+k is bindable");
         check(code_from_press(0x4B, false, false, true, false, &e) == (Ctrl | 0x4B) && code_from_press(0x4B, false, true, true, true, &e) != 0,
               "ctrl+k and ctrl+shift+alt+k stay bindable");
     }
@@ -194,6 +194,25 @@ int main() {
         write(game / L"Options.ini", "Current_Keymap=..\\x.kmp\r\n");
         check(current_keymap(game).empty(), "a path is not accepted as a keymap name");
         fs::remove_all(game, ec);
+    }
+    {   // open_key_bindings: its own keys, else Ctrl+Shift+K when nothing else binds it
+        const int page = index_of(PageCommand);
+        check(page >= 0 && commands()[size_t(page)].category == UnknownCategory, "open_key_bindings is a runtime command");
+        Keymap none = parse("[GENERAL OPTIONS COMMANDS]\r\nj=open_journal\r\n");
+        check(page_keys(none) == std::vector<uint16_t>{DefaultPageHotkey}, "unbound: ctrl+shift+k");
+        Keymap own = parse("[GENERAL OPTIONS COMMANDS]\r\nctrl+F5=open_key_bindings\r\nctrl+shift+k=open_journal\r\n");
+        check(page_keys(own) == std::vector<uint16_t>{uint16_t(Ctrl | 0x74)}, "bound: its own key only");
+        Keymap taken = parse("[GENERAL OPTIONS COMMANDS]\r\nctrl+shift+k=open_journal\r\n");
+        check(page_keys(taken).empty(), "unbound and ctrl+shift+k taken: no key");
+        Keymap extra = parse("[GENERAL OPTIONS COMMANDS]\r\nctrl+shift+k=some_unknown_command\r\n");
+        check(page_keys(extra).empty(), "ctrl+shift+k kept for an unknown command: no key");
+        fill_page_default(none);
+        std::string out;
+        check(none.keys[size_t(page)] == std::vector<uint16_t>{DefaultPageHotkey} && serialize(none, out) &&
+              page_keys(parse(out)) == std::vector<uint16_t>{DefaultPageHotkey} && out.find("=open_key_bindings") != std::string::npos,
+              "the default is shown and saved");
+        fill_page_default(taken);
+        check(taken.keys[size_t(page)].empty(), "no default where the key is taken");
     }
     {   // LOCAL-ONLY, SKIPPED WHEN ASSETS ABSENT
         char* dir = nullptr; size_t n = 0;

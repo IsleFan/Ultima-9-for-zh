@@ -267,6 +267,10 @@ struct Engine {
     std::vector<cheat::Binding> map_bindings;
     std::atomic<uint64_t> map_key_presses{0};
     bool opens_map(UINT vk, UINT mods) noexcept;
+    // Keys of the runtime command open_key_bindings (keymap.h page_keys), as virtual key + cheat::Mod* bits.
+    // Ctrl+Shift+K until the keymap has been read.
+    std::vector<cheat::Binding> page_bindings{{uint32_t('K'), cheat::ModCtrl | cheat::ModShift, "open_key_bindings"}};
+    bool opens_key_page(UINT vk, UINT mods) noexcept;
     // FeatureClickSkip (user authorization 2026-11-18; docs/research/U9_CLICK_SKIP.md): the conversation's spoken
     // line (0x41C070 .. destructor 0x41C190) and the live choice menus (0x41C3D0 .. destructor 0x41C590).
     bool click_skip = false, skip_pending = false;

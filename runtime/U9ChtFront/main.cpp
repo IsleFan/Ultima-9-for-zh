@@ -242,8 +242,13 @@ void paint_keys(Painter& p) {
         status = L"作弊是遊戲內建的開發功能。標 ⚠ 的三項據報會把背包重置成開場狀態，使用前請先存檔。";
     else if (app.running) status = std::wstring(app.keys_dirty ? L"有變更尚未儲存。" : L"") +
                                    L"遊戲進行中：儲存後回到遊戲，放開所有按鍵約一秒內生效（不必重新啟動）。";
-    else status = L"按鍵檔：" + std::wstring(app.keys_file.begin(), app.keys_file.end()) + (app.keys_dirty ? L"（有變更尚未儲存）" : L"") +
-                  L"　點按鍵可移除，按＋新增。遊戲中按 Ctrl+Shift+K 可叫出這一頁。";
+    else {
+        const auto page_keys = keymap::page_keys(app.keys);
+        status = L"按鍵檔：" + std::wstring(app.keys_file.begin(), app.keys_file.end()) + (app.keys_dirty ? L"（有變更尚未儲存）" : L"") +
+                 L"　點按鍵可移除，按＋新增。" +
+                 (page_keys.empty() ? std::wstring(L"「一般」可設定遊戲中叫出這一頁的鍵。")
+                                    : L"遊戲中按 " + keymap::key_label(page_keys.front()) + L" 可叫出這一頁。");
+    }
     // Up to 24 rows of 24 from y 142 end at 718.
     p.text(40, 738, 820, 26, status, p.note, color, DT_CENTER);
     int x = 60;
@@ -451,6 +456,7 @@ void game_ended(DWORD code) {
 bool load_keys(const std::string& file) {
     keymap::Keymap k;
     if (!keymap::load(fs::path(app.s.game_dir) / file, k)) return false;
+    keymap::fill_page_default(k);   // shows the Ctrl+Shift+K the runtime uses when the file binds no key to the page
     app.keys = std::move(k); app.capture = -1; app.keys_leave_armed = false;
     return true;
 }
@@ -471,7 +477,6 @@ void capture_key(WPARAM vk, LPARAM lp) {
     if (!code) {
         if (error == keymap::KeyError::Reserved) set_message(L"F1～F12 由遊戲保留，請加上 Ctrl、Alt 或 Shift，或改用別的鍵。", true);
         else if (error == keymap::KeyError::Unsupported) set_message(L"遊戲不認得這個鍵，請改用別的鍵。", true);
-        else if (error == keymap::KeyError::Hotkey) set_message(L"Ctrl+Shift+K 保留給遊戲中叫出這一頁，請改用別的鍵。", true);
         return;   // a modifier alone: keep waiting for the key itself
     }
     const auto& commands = keymap::commands();
@@ -485,6 +490,9 @@ void capture_key(WPARAM vk, LPARAM lp) {
     for (size_t i = 0; i < app.keys.keys.size(); ++i)
         if (int(i) != command && std::find(app.keys.keys[i].begin(), app.keys.keys[i].end(), code) != app.keys.keys[i].end()) other = int(i);
     if (other < 0) set_message(L"", false);
+    else if (commands[size_t(command)].category == keymap::UnknownCategory || commands[size_t(other)].category == keymap::UnknownCategory)
+        // A runtime command acts on its key whatever the game does with it.
+        set_message(L"「" + keymap::key_label(code) + L"」也指定給「" + commands[size_t(other)].label + L"」。按下時兩個都會執行。", true);
     else set_message(L"「" + keymap::key_label(code) + L"」也指定給「" + commands[size_t(other)].label + L"」。遊戲只會執行「" +
                      commands[size_t(winner)].label + L"」。", true);
 }
@@ -745,7 +753,6 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     search_game(true);
 
     WNDCLASSEXW wc{sizeof(wc)};
-    static_assert((keymap::PageHotkey & 0xFF) == OpenKeyBindingsVk, "the hotkey the page refuses is the one the runtime sends");
     app.open_keys_message = RegisterWindowMessageW(OpenKeyBindingsMessage);
     wc.lpfnWndProc = proc; wc.hInstance = instance; wc.lpszClassName = FrontWindowClass;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);

@@ -13,7 +13,7 @@ puts the original files back.
 | 強化功能 | Hover names (with the delay), wheel paging, Ctrl+wheel zoom, movie subtitles, status numbers, floating numbers, enemy bars, and 跳躍鍵自動攀爬 (the jump key climbs when the game finds something to climb; off by default; `docs/research/U9_JUMP_CLIMB.md`). | `u9cht.ini` `[features]` |
 | 畫面與字型 | Chinese font, journal letter and line spacing, resolution (keep, 800×600 or 1600×1200). | `u9cht.ini` `[font]` and `[journal]`; `front.ini` `[display]` |
 | Buttons | 開始遊戲, 按鍵設定, 說明 (`說明.txt`), 回報問題 (GitHub Issues), 結束. | — |
-| 按鍵設定 (its own page) | Key bindings for 97 game commands in six tabs, cheats included. | `<game>\U9CHT.kmp`; `Options.ini` `Current_Keymap` |
+| 按鍵設定 (its own page) | Key bindings for 97 game commands and 3 runtime commands in six tabs, cheats included. | `<game>\U9CHT.kmp`; `Options.ini` `Current_Keymap` |
 
 How the files are handled:
 - Both INI files are written as UTF-16LE with a BOM, so font paths may hold Chinese.
@@ -74,14 +74,16 @@ Binding a cheat puts a line under `[CHEAT COMMANDS]`, which also turns on the ru
 
 When that game ends, the page points `Current_Keymap` at `U9CHT.kmp` again, in case the game wrote its own value back on the way out.
 
-**Ctrl+Shift+K in game** brings this page up:
+**In game, the key of 叫出按鍵設定頁** (tab 一般; default Ctrl+Shift+K) brings this page up:
 1. The runtime posts `OpenKeyBindingsMessage` (`protocol.h`) to the window of class `U9ChtFront`, with the game's window in `wParam`. First it calls `AllowSetForegroundWindow` for the page's process.
 2. The page restores itself, opens the key bindings page and comes to the front.
 3. 返回 becomes 回到遊戲, which hands the foreground back to the game and minimizes the page again.
 
 Details:
 - The page ignores the message unless it started the running game.
-- The game binds nothing to Ctrl+Shift+K, so the key does nothing else. The page refuses to bind it.
+- 叫出按鍵設定頁 is the runtime command `open_key_bindings` (2026-11-26; before that Ctrl+Shift+K was fixed and could not be bound). The game files it with no handler, like `show_takeable`.
+- With no key of its own it uses Ctrl+Shift+K, unless another command binds that key (`keymap.h` `page_keys`). The page shows that default in the row, so saving writes it to `U9CHT.kmp`.
+- The runtime reads its keys at start and on the live reload; the extended bit is not compared.
 - Without a front page (session tool), the runtime logs `key_bindings_hotkey` with `"front_page":false` once.
 - In game (2026-11-15, front page, full screen): the hotkey brought the page up every time. 回到遊戲 did nothing at first, because the full-screen game had minimized itself. It now restores the game window first and falls back to the Alt+Tab switch; with that it works (CONFIRMED). Saving during that run was not tried, so the live reload through the page itself is still untested (session 60 replaced the file directly).
 

@@ -26,8 +26,10 @@ extern const wchar_t* const PageNames[Pages];
 
 // Key code as u9.exe builds it (0x4D3C30 / 0x4D3430): low byte = virtual key.
 inline constexpr uint16_t Shift = 0x100, Alt = 0x200, Ctrl = 0x400, Extended = 0x800;
-// Ctrl+Shift+K brings up this page from the game (protocol.h OpenKeyBindingsVk); it cannot be bound.
-inline constexpr uint16_t PageHotkey = Ctrl | Shift | 0x4B;
+// open_key_bindings brings up this page from the game (protocol.h). It is a runtime command the game ignores,
+// like show_takeable; with no key of its own it uses Ctrl+Shift+K, unless another command already has that key.
+inline constexpr char PageCommand[] = "open_key_bindings";
+inline constexpr uint16_t DefaultPageHotkey = Ctrl | Shift | 0x4B;
 
 // The category u9.exe gives a command it does not know (0x4D25E0).
 inline constexpr int UnknownCategory = 0xFFFF;
@@ -51,7 +53,7 @@ std::string key_text(uint16_t code);
 // Code -> text for the page ("Ctrl+Shift+數字鍵 ←").
 std::wstring key_label(uint16_t code);
 
-enum class KeyError { None, Modifier, Reserved, Unsupported, Hotkey };
+enum class KeyError { None, Modifier, Reserved, Unsupported };
 // A key press on the page (WM_KEYDOWN virtual key and its extended bit, plus the modifier state) -> code.
 // 0 with *error set when it cannot be a binding.
 uint16_t code_from_press(unsigned vk, bool extended, bool shift, bool ctrl, bool alt, KeyError* error = nullptr);
@@ -70,6 +72,11 @@ bool serialize(const Keymap& k, std::string& out, std::wstring* error = nullptr)
 int owner(const Keymap& k, uint16_t code);
 // Number of bindings that lose to another command.
 int conflicts(const Keymap& k);
+// The keys that bring up the page: those of open_key_bindings, or DefaultPageHotkey when it has none and no other
+// command binds that key; empty when neither.
+std::vector<uint16_t> page_keys(const Keymap& k);
+// Gives open_key_bindings the default key when page_keys would fall back to it, so the page shows and saves it.
+void fill_page_default(Keymap& k);
 
 // Current_Keymap=<name> in <game>/Options.ini; "" when absent or not a plain file name.
 std::string current_keymap(const fs::path& game);

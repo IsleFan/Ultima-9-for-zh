@@ -29,12 +29,11 @@ inline constexpr uint32_t DefaultFeatures = FeatureHoverNames | FeatureWheelPage
                                             FeatureTargetBar | FeatureClickSkip | FeatureEscContents |
                                             FeatureTakeMarks;
 inline constexpr uint32_t MinHoverDelayMs = 100, MaxHoverDelayMs = 2000, DefaultHoverDelayMs = 250;
-// In-game hotkey Ctrl+Shift+K (2026-11-15): the runtime posts OpenKeyBindingsMessage (RegisterWindowMessageW) to the
-// front page's window, with the game's window in wParam; the front page opens its key bindings page. The game itself
-// binds nothing to Ctrl+Shift+K, and the front page does not let the player bind it.
+// In-game key of the runtime command open_key_bindings (2026-11-15; bindable since 2026-11-26, default Ctrl+Shift+K,
+// keymap.h page_keys): the runtime posts OpenKeyBindingsMessage (RegisterWindowMessageW) to the front page's window,
+// with the game's window in wParam; the front page opens its key bindings page.
 inline constexpr wchar_t FrontWindowClass[] = L"U9ChtFront";
 inline constexpr wchar_t OpenKeyBindingsMessage[] = L"U9ChtFront.OpenKeyBindings";
-inline constexpr unsigned OpenKeyBindingsVk = 'K';   // with Ctrl and Shift, no Alt
 // Only fixed-width integers and UTF-16 arrays cross the x86 process boundary.
 struct Config {
     uint32_t magic = ProtocolMagic;

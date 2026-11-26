@@ -982,6 +982,15 @@ size_t keymap_name_length(uintptr_t keymap) noexcept {
     __try { return strnlen(reinterpret_cast<const char*>(keymap+0x14), 64); }
     __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
 }
+// Keys of open_key_bindings in a keymap text, as the input hooks report presses (the extended bit is not compared).
+std::vector<cheat::Binding> page_bindings_of(std::string_view text) {
+    namespace km = front::keymap;
+    std::vector<cheat::Binding> out;
+    for (const auto code : km::page_keys(km::parse(text)))
+        out.push_back({uint32_t(code & 0xFF), ((code & km::Ctrl) ? cheat::ModCtrl : 0u) | ((code & km::Shift) ? cheat::ModShift : 0u) |
+                       ((code & km::Alt) ? cheat::ModAlt : 0u), km::PageCommand});
+    return out;
+}
 bool reload_keymap(uintptr_t keymap, const char* name) noexcept {
     using Remove = void(__thiscall*)(uintptr_t,uintptr_t);
     using Destroy = void(__thiscall*)(uintptr_t,uint32_t);
@@ -1193,7 +1202,8 @@ void Engine::poll_keymap() noexcept {
         {
             auto maps = cheat::command_bindings(text,"open_world_map");
             auto takes = cheat::take_keys(text);
-            Exclusive lock(mutex); map_bindings = std::move(maps); take_bindings = std::move(takes);
+            auto pages = page_bindings_of(text);
+            Exclusive lock(mutex); map_bindings = std::move(maps); take_bindings = std::move(takes); page_bindings = std::move(pages);
         }
         if (cheat_notices_on) {
             auto updated = cheat::parse_bindings(text);
@@ -2016,7 +2026,7 @@ bool wheel_scroll_request(int notches) {
 }
 void key_press(UINT vk, UINT mods) {
     if (!engine) return;
-    if (vk == OpenKeyBindingsVk && mods == (cheat::ModCtrl | cheat::ModShift)) { engine->open_key_bindings(); return; }
+    if (engine->opens_key_page(vk,mods)) { engine->open_key_bindings(); return; }
     if (engine->opens_map(vk,mods)) input_hooks::block_hover();
     if (vk == VK_ESCAPE && mods == 0) engine->on_escape();
     engine->on_cheat_key(vk,mods);
@@ -2156,6 +2166,11 @@ void Engine::on_escape() noexcept {
     std::rotate(esc_reasons.begin(),esc_reasons.begin()+1,esc_reasons.end()); esc_reasons.back() = reason;
     if (reason) { ++contents_refused; return; }
     contents_pending = true; contents_pending_tick = GetTickCount64(); ++contents_requested;
+}
+bool Engine::opens_key_page(UINT vk, UINT mods) noexcept {
+    Exclusive lock(mutex);
+    for (const auto& b : page_bindings) if (b.vk == vk && b.mods == mods) return true;
+    return false;
 }
 bool Engine::opens_map(UINT vk, UINT mods) noexcept {
     Exclusive lock(mutex);
@@ -2947,8 +2962,14 @@ void Engine::install(const Config& config, Logger& logger) {
                     map_bindings = cheat::command_bindings(keymap_text,"open_world_map");
                     log->event("map_bindings","\"count\":"+std::to_string(map_bindings.size()));
                     take_bindings = cheat::take_keys(keymap_text);
-                } else take_bindings = cheat::take_keys(read_all(game / L"Default.kmp"));
+                    page_bindings = page_bindings_of(keymap_text);
+                } else {
+                    const auto shipped = read_all(game / L"Default.kmp");
+                    take_bindings = cheat::take_keys(shipped);
+                    page_bindings = page_bindings_of(shipped);
+                }
                 log->event("take_keys","\"count\":"+std::to_string(take_bindings.size()));
+                log->event("page_keys","\"count\":"+std::to_string(page_bindings.size()));
                 if (!cheat_bindings.empty()) {
                     std::wstring chars = cheat::all_notice_characters() + L"聖者施展法術#0123456789";
                     for (uint32_t entry = 0x66; entry <= 0x71+45; ++entry) if (const int plan = plan_for_entry(MiscEntryBase+entry); plan >= 0)
