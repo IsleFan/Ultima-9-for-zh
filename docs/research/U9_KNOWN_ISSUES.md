@@ -126,3 +126,24 @@ Neither grows steadily.
 
 **Next steps (not started):** more original sessions of the same length to get its crash rate; if the original
 stays clean, turn features off in halves, or compare with the session tool and the older injection path.
+
+## 5. The game window cannot be moved in windowed mode (2026-11-26, not fixed)
+
+**Seen:** in windowed mode the cursor turns into the game's cursor as soon as it enters the window and cannot reach
+the title bar, so the window cannot be dragged. Win+arrow keys and Alt+Space (window menu) did nothing.
+
+**Measured (read-only probe from outside, `GetClipCursor`/`GetCursorInfo` every 250 ms, local log
+`p10-misc/vanilla-mem/cursor-20261126-230741.csv`):** while the game is in front, the system cursor is clipped to
+exactly the game's client area and hidden; when another window is in front the clip is released, and it returns
+when the game is in front again (CONFIRMED).
+
+**Who clips:** the game's own clip routine `0x49E110` (it calls `ClipCursor` with the client rectangle at `0x49E1F5`)
+starts with `ret` (`C3`) in the GOG/Steam executable, so it never runs (CONFIRMED). The bundled GOG ddraw wrapper
+imports `ClipCursor`, `ShowCursor` and `SetCursorPos`, so it most likely does the clipping in windowed mode
+(STRONG EVIDENCE). The original game uses the same wrapper; the localization is not involved.
+
+**Possible fixes (not started; the user chose to only record it):**
+- The front page moves the game window from outside while it runs (centre / left / right / nudge) and remembers
+  the place for the next start. No hook.
+- Holding a key releases the clip so the title bar can be dragged. Needs a hook on the wrapper's `ClipCursor`
+  (new hook: explicit authorization required), and may fight a wrapper that clips again every frame.
