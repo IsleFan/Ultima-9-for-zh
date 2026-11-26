@@ -518,6 +518,12 @@
 
 **2026-11-25 夥伴回報（使用者轉述）**：初步跑得起來，沒有太大的問題；效能不佳，但直接跑英文版也一樣，不是中文化的問題。環境是 Mac M1、macOS 27、用 Wine 執行（不是 CrossOver）。Wine 版本、逐項結果和記錄檔還沒取得。
 
+**2026-11-26 合併夥伴的 PR #1**（`f4b73ec`，細節見 `docs/research/U9_WINE_MAC.md` 問題 4～6）：
+- macOS 的 Wine 下，字幕開啟時影片只有聲音：播放器改用遊戲視窗擁有的彈出視窗，只在偵測到 macOS 上的 Wine 時才這樣做。
+- 舊版 Wine 沒有 `CopyFile2`，首頁按「開始遊戲」會中止：`copy_verified` 改用 `CopyFileW`。這個改動在 Windows 上也生效，還沒在 Windows 進遊戲驗證。
+- Apple Silicon 上官方 Wine 約半數隨機當機（原版也會，WineHQ bug 60494）；Sikarugir Wine 10.0 沒有。Mac 說明要改成推薦 Sikarugir（`MAC_TEST_GUIDE.md` 還沒改）。
+- 同日：首頁加了安卡圖示（`scripts/make_icon.py`）；Windows 解壓 0.1.1 zip 進遊戲驗證三輪，正常結束、檔案還原。
+
 2026-11-20 曾暫停，2026-11-23 恢復。
 
 2026-11-23 恢復討論：
