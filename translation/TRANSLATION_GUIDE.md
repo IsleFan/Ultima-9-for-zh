@@ -109,7 +109,7 @@ python scripts/update_terms.py --game-dir <U9 遊戲目錄> --u8-authority <U8 a
 | Avatar | 聖者 | U8 approved（U7 相同） |
 | Guardian | 守護者 | U8 approved（U7 相同） |
 | Lord British | 不列顛王 | U8 approved |
-| Britannia | 不列塔尼亞 | 台灣中文手冊（2026-11-11 由「不列顛尼亞」改定） |
+| Britannia | 不列顛尼亞 | 與其他創世紀中文化專案一致（2026-11-27 改回；台灣中文手冊作「不列塔尼亞」，不採用） |
 | Moongate | 月之門 | U8 approved（U7 相同；手冊相同） |
 | Blackrock | 黑石 | U8 approved（U7 相同；手冊相同） |
 | Empath Abbey | 共情修道院 | U7 權威檔對齊（手冊作「愛的根源大修道院」，負責人決定維持） |
@@ -182,7 +182,7 @@ python scripts/update_terms.py --game-dir <U9 遊戲目錄> --u8-authority <U8 a
 
 ### 4.7 專有名詞加註英文（負責人決定，2026-11-08）
 
-格式：中文譯名後緊接**半形**括號與英文，不留空白，例如 `艾蓮娜(Elaina)`、`不列塔尼亞(Britannia)`。
+格式：中文譯名後緊接**半形**括號與英文，不留空白，例如 `艾蓮娜(Elaina)`、`不列顛尼亞(Britannia)`。
 
 | `annotate` | 何時加註 | 分類預設 |
 | --- | --- | --- |

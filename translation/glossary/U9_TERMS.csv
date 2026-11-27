@@ -170,7 +170,7 @@ Ambrosia,安布羅西亞,place,approved,recommended,13,text.flx:15,P8-A candidat
 Bastion,堡壘,place,approved,recommended,8,text.flx:6483,P8-A candidate scan,要塞要衝,first
 Blackrock Mines,黑石礦坑,place,approved,recommended,4,text.flx:2965,P8-A candidate scan,米諾克附近的黑石礦場,first
 Britain,不列顛城,place,approved,recommended,118,text.flx:247,P8-A candidate scan,不列顛尼亞之首善之都、慈悲之城，區別於國家不列顛尼亞,first
-Britannia,不列塔尼亞,place,approved,informational,201,text.flx:306,台灣中文手冊 Journal p.3 起全書,官方譯名：台灣中文手冊 Journal p.3 起全書；2026-11-11 由「不列顛尼亞」改為手冊譯名（手冊為第 1 順位權威）; U8 approved (approved),first
+Britannia,不列顛尼亞,place,approved,informational,201,text.flx:306,台灣中文手冊 Journal p.3 起全書,官方譯名：台灣中文手冊 Journal p.3 起全書；2026-11-11 由「不列顛尼亞」改為手冊譯名（手冊為第 1 順位權威）; U8 approved (approved); 2026-11-27 使用者決定改回「不列顛尼亞」，與其他創世紀中文化專案一致（不採手冊的「不列塔尼亞」）,first
 Buc's Den,海盜窩,place,approved,recommended,7,text.flx:2404,P8-A candidate scan,Buccaneer's Den 簡稱; variant of Buccaneer's Den,first
 Buccaneer's Den,海盜窩,place,approved,recommended,24,text.flx:593,P8-A candidate scan,海盜與不法之徒聚集的走私巢穴島嶼,first
 Cathedral,大教堂,place,approved,recommended,4,text.flx:1268,P8-A candidate scan,不列顛城大教堂,first
@@ -214,7 +214,7 @@ Trinsic,特林希克,place,approved,recommended,70,text.flx:933,台灣中文手�
 Valoria,瓦羅尼亞,place,approved,recommended,29,text.flx:914,台灣中文手冊 Journal p.23,官方譯名：台灣中文手冊 Journal p.23；2026-11-11 由「瓦洛利亞」改為手冊譯名（手冊為第 1 順位權威）; 英勇之城，由英勇騎士在Jhelom沉沒後建立,first
 Wrong,錯誤地城,place,approved,recommended,8,text.flx:3768,"台灣中文手冊 Journal p.24,28","官方譯名：台灣中文手冊 Journal p.24,28；2026-11-11 由「冤屈地城」改為手冊譯名（手冊為第 1 順位權威）；手冊名稱「錯誤」，保留「地城」字尾（負責人決定）; 對應正義美德之反美德地城",first
 Yew,紫杉城,place,approved,recommended,52,text.flx:564,P8-A candidate scan,正義之城，正義高等法院所在地,first
-Britannian,不列塔尼亞人,organization,approved,recommended,5,text.flx:4346,U8 authority.tsv (proposed),2026-11-11 依手冊譯名連動：「不列顛尼亞人」→「不列塔尼亞人」; 不列顛尼亞臣民,first
+Britannian,不列顛尼亞人,organization,approved,recommended,5,text.flx:4346,U8 authority.tsv (proposed),2026-11-11 依手冊譯名連動：「不列顛尼亞人」→「不列塔尼亞人」; 不列顛尼亞臣民; 2026-11-27 使用者決定改回「不列顛尼亞人」，與其他創世紀中文化專案一致（不採手冊的「不列塔尼亞人」）,first
 Guild,公會,organization,approved,recommended,9,text.flx:1700,P8-A candidate scan,盜賊公會或商行,first
 Gypsies,吉普賽人,organization,approved,recommended,6,text.flx:3192,P8-A candidate scan,不列顛尼亞的流浪吉普賽族群,first
 Paladins,聖騎士,organization,approved,recommended,6,text.flx:6564,P8-A candidate scan,特林錫克聖騎士軍團,first
@@ -234,7 +234,7 @@ Emperor,皇帝,title,approved,recommended,3,BOOKS-EN.FLX:69,P8-A candidate scan,
 False Prophet,偽善者,title,approved,recommended,16,text.flx:4,P8-A candidate scan,U6石像鬼預言中摧毀石像鬼世界的「偽善者/假先知」聖者,first
 First Citizen,第一公民,title,approved,recommended,22,text.flx:1713,P8-A candidate scan,米諾克城邦領袖官方頭銜,first
 Great Leader,偉大領袖,title,approved,recommended,7,text.flx:3062,P8-A candidate scan,石像鬼族人或守護者尊稱,first
-Hero of Britannia,不列塔尼亞英雄,title,approved,recommended,3,text.flx:3468,P8-A candidate scan,2026-11-11 依手冊譯名連動：「不列顛尼亞英雄」→「不列塔尼亞英雄」; 不列顛尼亞人民對救世英雄的尊稱,first
+Hero of Britannia,不列顛尼亞英雄,title,approved,recommended,3,text.flx:3468,P8-A candidate scan,2026-11-11 依手冊譯名連動：「不列顛尼亞英雄」→「不列塔尼亞英雄」; 不列顛尼亞人民對救世英雄的尊稱; 2026-11-27 使用者決定改回「不列顛尼亞英雄」，與其他創世紀中文化專案一致（不採手冊的「不列塔尼亞英雄」）,first
 Knight,騎士,title,approved,recommended,3,text.flx:4133,P8-A candidate scan,英勇或榮譽騎士,first
 Mayor,市長,title,approved,recommended,4,text.flx:1246,P8-A candidate scan,城鎮市長,first
 Paladin,聖騎士,title,approved,recommended,3,text.flx:6413,P8-A candidate scan,特林錫克美德騎士頭銜; variant of Paladins,first
@@ -425,7 +425,7 @@ Bread Pan,麵包烤盤,item,approved,recommended,7,BOOKS-EN.FLX:196,P8-A candida
 Bread pan,麵包烤盤,item,approved,recommended,1,TYPENAME.FLX:4727,P8-A candidate scan,variant of Bread Pan,never
 Breadmaker,麵包機,item,approved,recommended,1,TYPENAME.FLX:4614,P8-A candidate scan,,never
 Bridge,橋樑,item,approved,recommended,1,TYPENAME.FLX:4176,P8-A candidate scan,,never
-Britannian Star,不列塔尼亞之星,item,approved,recommended,6,text.flx:3562,P8-A candidate scan,2026-11-11 依手冊譯名連動：「不列顛尼亞之星」→「不列塔尼亞之星」,never
+Britannian Star,不列顛尼亞之星,item,approved,recommended,6,text.flx:3562,P8-A candidate scan,2026-11-11 依手冊譯名連動：「不列顛尼亞之星」→「不列塔尼亞之星」; 2026-11-27 使用者決定改回「不列顛尼亞之星」，與其他創世紀中文化專案一致（不採手冊的「不列塔尼亞之星」）,never
 Broadsword,闊劍,item,approved,recommended,10,BOOKS-EN.FLX:189,P8-A candidate scan,,never
 Broken  Egg,,item,todo,recommended,1,TYPENAME.FLX:5447,P8-A candidate scan,,
 Broken barrel,,item,todo,recommended,4,TYPENAME.FLX:3310,P8-A candidate scan,,
@@ -511,7 +511,7 @@ Chalice of Honor,榮譽之杯,item,approved,recommended,20,text.flx:6352,台灣�
 Chalice of Honor pieces,榮譽之杯碎片,item,approved,recommended,1,TYPENAME.FLX:5533,P8-A candidate scan,2026-11-11 依手冊譯名連動：「榮譽聖杯碎片」→「榮譽之杯碎片」,never
 Chandelier,,item,todo,recommended,3,TYPENAME.FLX:3062,P8-A candidate scan,,
 Charm Scroll,媚惑術卷軸,item,approved,recommended,4,BOOKS-EN.FLX:194,U7 Translation_Guide.md: Charm 迷惑術,2026-11-11 依手冊譯名連動：「迷惑術捲軸」→「媚惑術卷軸」,never
-Charts of Britannia,不列塔尼亞海圖,item,approved,recommended,1,TYPENAME.FLX:5507,P8-A candidate scan,2026-11-11 依手冊譯名連動：「不列顛尼亞海圖」→「不列塔尼亞海圖」,never
+Charts of Britannia,不列顛尼亞海圖,item,approved,recommended,1,TYPENAME.FLX:5507,P8-A candidate scan,2026-11-11 依手冊譯名連動：「不列顛尼亞海圖」→「不列塔尼亞海圖」; 2026-11-27 使用者決定改回「不列顛尼亞海圖」，與其他創世紀中文化專案一致（不採手冊的「不列塔尼亞海圖」）,never
 Checker board,,item,todo,recommended,1,TYPENAME.FLX:587,P8-A candidate scan,,
 Cheese,乳酪,item,approved,recommended,8,BOOKS-EN.FLX:196,P8-A candidate scan,,never
 Chest,箱子,item,approved,recommended,4,TYPENAME.FLX:186,P8-A candidate scan,,never
