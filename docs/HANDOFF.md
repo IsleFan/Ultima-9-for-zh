@@ -576,7 +576,7 @@
       - 中文化：`WINEDLLOVERRIDES="mscoree,mshtml=;ddraw=n;dsound=n,b"`；
       - 原版：`dsound=b`。
     - 記錄等級：`WINEDEBUG=err+all,fixme-all,+loaddll`，輸出導到 `.local/wine-logs/<標籤>.log`。
-    - 中文化：在 `/mnt/d/git/Ultima 9 for ZH/.local/wine-front` 執行 `wine explorer /desktop=u9front,1280x1024 U9Cht.exe`，結束後執行 `wineserver -w`。
+    - 中文化：在 repo 的 `.local/wine-front`（WSL 裡是 `/mnt/<磁碟>/…/.local/wine-front`）執行 `wine explorer /desktop=u9front,1280x1024 U9Cht.exe`，結束後執行 `wineserver -w`。
     - 原版：在 `.local/wine-game` 執行 `wine explorer /desktop=u9,1280x1024 u9.exe`。
     - 用背景執行，等它結束。啟動前一樣要等使用者說「準備好了」。
     - 已跑過 w01～w06，下一輪從 **w07** 開始；記錄在 `.local/wine-logs/`，首頁記錄在 `.local/wine-front/logs/`。
