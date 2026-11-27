@@ -4,7 +4,11 @@
 開工前仍須依 `AGENTS.md` 讀取 `AGENTS.md` 與 `ULTIMA_IX_CHT_MASTER_PLAN.md`。
 
 **2026-11-27：1.0.0 已在 GitHub Releases 正式發布**（https://github.com/pmanyeh/Ultima-9-for-zh/releases/tag/v1.0.0）。
-標籤 `v1.0.0` → `4fd09e2`；附件是 `U9CHT-1.0.0.zip` 和 8 張截圖。使用者的發布方針見第 2 節最後。
+標籤 `v1.0.0` → `cce734e`；附件是 `U9CHT-1.0.0.zip` 和 8 張截圖。使用者的發布方針見第 2 節最後。
+
+**同日稍晚：1.0.0 重做附件（還沒公開宣傳，所以不升版號）**。使用者決定 Britannia 改回「不列顛尼亞」，與其他創世紀中文化專案（如 Ultima7-zh-TW）一致，不採台灣手冊的「不列塔尼亞」（`cce734e`，233 處譯文＋譯名表 5 條＋翻譯規範）。重建 `out-m32`、重新打包（多了 `LICENSE.txt`，程式檔和舊包相同）、使用者實測並重拍 01、05 截圖；7 張遊戲截圖切掉標題列上方 2～3 px（05 露出檔案總管的本機路徑）。zip、截圖以 `--clobber` 覆蓋，標籤從 `4fd09e2` 強制移到 `cce734e`。zip SHA-256 `88a80a76b192401ae1fc7f1d709f660e8b4208edfecd414f94e7fd768d056e48`。舊包備份 `.local/release/superseded-1.0.0-4fd09e2/`，未裁切截圖 `.local/release/screens-1.0.0-uncropped/`。
+
+**宣傳稿**：`.local/release/promo-1.0.0/`（`PROMO.md`：兩篇 FB 貼文、YouTube 標題／說明欄／分鏡；`cues.txt` → `U9CHT-1.0.0-字幕.srt`，65 句、10 分鐘、無旁白）。使用者還沒發文、還沒錄影片。
 
 **這一波（2026-11-24～27）做完的事**，細節見第 3k 節：
 - Mac：夥伴范綱維用 Wine 實測可以跑；合併他的 PR #1（macOS Wine 影片黑畫面、舊版 Wine 的 `CopyFile2`）；Mac 說明改推薦 Sikarugir Wine 10.0。
@@ -33,7 +37,7 @@
 3. Python 測試：`python -m unittest discover -s tests`。
 4. 進遊戲測試用 Steam 私人副本，使用者說「準備好了」之後才執行。最近都用**首頁**測（第 5 點）；session 工具仍可用：
    ```sh
-   python scripts/run_p8_0_session.py start --session .local/p10-misc/session-NN --label "..."      --game-dir .local/steam-game --build .local/p10-misc/out-m31 --runtime .local/p10-misc/build/Release      --config .local/p9-2/u9cht.ini --preserve-saves --seed-saves .local/p10-misc/session-29/final-savegame      --load proxy --keymap .local/p10-misc/keymap/U9CHT-TEST.kmp
+   python scripts/run_p8_0_session.py start --session .local/p10-misc/session-NN --label "..."      --game-dir .local/steam-game --build .local/p10-misc/out-m32 --runtime .local/p10-misc/build/Release      --config .local/p9-2/u9cht.ini --preserve-saves --seed-saves .local/p10-misc/session-29/final-savegame      --load proxy --keymap .local/p10-misc/keymap/U9CHT-TEST.kmp
    python scripts/run_p8_0_session.py finish --session .local/p10-misc/session-NN
    ```
    - 下一個 session 編號從 **66** 開始。
@@ -50,14 +54,12 @@
 
 ## 1. 目前狀態一覽
 
-- 分支：`p7-localization-pipeline`。`origin` 上它和 `main` 都在 `4785571`（README、LICENSE）。
-  - 本機還有一筆沒推送：`5e6d29d`（打包時附上 `LICENSE.txt`），只影響下一次打包。
+- 分支：`p7-localization-pipeline`。`origin/main` 在 `cce734e`（不列顛尼亞）。
   - 本機備份分支 `backup/p7-before-gargish-rewrite` **不可推送**。這是 2026-11-11 改寫歷史前的備份。
 - 工作樹：只有不可加入的未追蹤檔：`.vscode/`、`83e7052b…png`、`tools/u9xsb6bt2a*`、`tools/uixtools.zip`、**`截圖/`**（使用者的遊戲截圖）。
   - `tools/u9xsb6bt2a/` 是第三方工具 Extended Setup（著作權屬原作者），不在 `.gitignore` 裡，**不可加入**。
 - 發布：
-  - **1.0.0**：`.local/release/U9CHT-1.0.0.zip`（`4fd09e2`，`out-m31`），已上傳 GitHub Releases。說明草稿 `.local/release/RELEASE_NOTES-1.0.0.md`，截圖 `.local/release/screens-1.0.0/`。
-  - 1.0.0 zip 沒有 `LICENSE.txt`（下一版會有）。
+  - **1.0.0**：`.local/release/U9CHT-1.0.0.zip`（`cce734e`，`out-m32`，2026-11-27 重做），已上傳 GitHub Releases。說明草稿 `.local/release/RELEASE_NOTES-1.0.0.md`，截圖 `.local/release/screens-1.0.0/`。
   - 舊的內部測試包 0.1.0～0.1.4 都在 `.local/release/`，不再使用。
 - 私人遊戲副本，沒有進行中的遊戲：
   - Steam：`.local/steam-game`。資源檔（含 `bitmap16.flx`，`3ec4ece8…`）是原版，沒有殘留的 `dsound.dll`。
@@ -66,7 +68,8 @@
   - Wine 用的副本：`.local/wine-game`（見第 7 節）。
 - 測試（2026-11-27）：C++ 18/18；Python 全部通過（略過 4 項需要遊戲檔的本機測試）。
 - Runtime：`U9ChtRuntime/1.0.0`，建置在 `.local/p10-misc/build/Release`。
-- 中文化資料最新建置：`.local/p10-misc/out-m31`（`7fb5443`，乾淨工作樹）。文字檔和 runtime pack 都和 `out-m30` 相同，只有合約雜湊跟著版號變。
+- 中文化資料最新建置：`.local/p10-misc/out-m32`（`cce734e`，乾淨工作樹）。和 `out-m31` 只差「不列塔尼亞」→「不列顛尼亞」。
+  - 建置用的字型是 `.local/p5-highres/font/NotoSansCJKtc-Regular.otf`（`dce08bd4…`，`--font`），不是發布包的粉圓；給錯會報 `font file hash mismatch`。
 - 測試資料夾：`.local/release-test/U9CHT-1.0.0`（1.0.0 解壓＋`front.ini`，已有 `data\static` 和 `data\redirect`）。其他 `release-test/U9CHT-0.1.x` 是舊的。
 - Microsoft Defender：`.local/p10-misc` 的排除已拿掉（2026-11-16）。代理載入沒被攔截。
 
