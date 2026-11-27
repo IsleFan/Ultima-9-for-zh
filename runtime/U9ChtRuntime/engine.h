@@ -273,6 +273,12 @@ struct Engine {
     // Ctrl+Shift+K until the keymap has been read.
     std::vector<cheat::Binding> page_bindings{{uint32_t('K'), cheat::ModCtrl | cheat::ModShift, "open_key_bindings"}};
     bool opens_key_page(UINT vk, UINT mods) noexcept;
+    // flag_translation (default Ctrl+Shift+T): the next flip logs the translations on screen (translation_flag).
+    std::vector<cheat::Binding> flag_bindings{{uint32_t('T'), cheat::ModCtrl | cheat::ModShift, "flag_translation"}};
+    bool flag_pending = false;
+    uint64_t flags_taken = 0;
+    bool opens_flag(UINT vk, UINT mods) noexcept;
+    void take_flag() noexcept;
     // FeatureClickSkip (user authorization 2026-11-18; docs/research/U9_CLICK_SKIP.md): the conversation's spoken
     // line (0x41C070 .. destructor 0x41C190) and the live choice menus (0x41C3D0 .. destructor 0x41C590).
     bool click_skip = false, skip_pending = false;

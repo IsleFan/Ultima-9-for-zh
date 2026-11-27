@@ -1,0 +1,35 @@
+name: 閃退或錯誤
+description: 遊戲閃退、當住，或中文化程式出錯
+title: "[閃退] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        謝謝回報！遊戲異常結束後，中文化首頁會詢問是否建立回報檔（`logs` 資料夾裡的 `回報-….zip`）。
+        請把回報檔**拖進下方「回報檔」欄位**。回報檔只有中文化的記錄、設定和系統版本，不含個人資料。
+  - type: textarea
+    id: what
+    attributes:
+      label: 當時在做什麼
+      description: 例如：在不列顛城和人對話、戰鬥中、剛切換視窗、讀檔時……越具體越好。
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: 回報檔
+      description: 把 `回報-….zip` 拖進這裡。沒有回報檔的話，也可以把 `logs` 資料夾壓縮後附上。
+  - type: dropdown
+    id: again
+    attributes:
+      label: 能重現嗎
+      options:
+        - 只發生一次
+        - 偶爾發生
+        - 每次照同樣步驟都會發生
+  - type: input
+    id: platform
+    attributes:
+      label: 平台
+      description: 例如：Windows 11、GOG 版；或 Mac M1、Sikarugir Wine 10.0

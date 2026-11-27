@@ -987,13 +987,37 @@ size_t keymap_name_length(uintptr_t keymap) noexcept {
     __try { return strnlen(reinterpret_cast<const char*>(keymap+0x14), 64); }
     __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
 }
-// Keys of open_key_bindings in a keymap text, as the input hooks report presses (the extended bit is not compared).
-std::vector<cheat::Binding> page_bindings_of(std::string_view text) {
+// Keys of a runtime command in a keymap text, as the input hooks report presses (the extended bit is not compared).
+std::vector<cheat::Binding> bindings_of(const std::vector<uint16_t>& codes, const char* command) {
     namespace km = front::keymap;
     std::vector<cheat::Binding> out;
-    for (const auto code : km::page_keys(km::parse(text)))
+    for (const auto code : codes)
         out.push_back({uint32_t(code & 0xFF), ((code & km::Ctrl) ? cheat::ModCtrl : 0u) | ((code & km::Shift) ? cheat::ModShift : 0u) |
-                       ((code & km::Alt) ? cheat::ModAlt : 0u), km::PageCommand});
+                       ((code & km::Alt) ? cheat::ModAlt : 0u), command});
+    return out;
+}
+std::vector<cheat::Binding> page_bindings_of(std::string_view text) {
+    return bindings_of(front::keymap::page_keys(front::keymap::parse(text)), front::keymap::PageCommand);
+}
+std::vector<cheat::Binding> flag_bindings_of(std::string_view text) {
+    return bindings_of(front::keymap::flag_keys(front::keymap::parse(text)), front::keymap::FlagCommand);
+}
+// The store key of a plan entry (u9cht/l10n/runtime_pack.py plan_entry, reversed). Entries with the same target
+// share one plan, so the key is the lowest of them.
+std::string plan_key(uint32_t entry) {
+    if ((entry & 0xF0000000) == NameDomain) return "TYPENAME.FLX:" + std::to_string(entry & 0x0FFFFFFF);
+    if ((entry & 0xF0000000) == BookDomain) return "BOOKS-EN.FLX:" + std::to_string(entry & 0x0FFFFFFF);
+    if (entry >= MiscEntryBase) return "misctext.flx:" + std::to_string(entry - MiscEntryBase);
+    return "text.flx:" + std::to_string(entry);
+}
+std::string json_text(std::u16string_view text) {
+    std::wstring wide(text.begin(), text.end());
+    std::string out;
+    for (const unsigned char c : utf8(wide)) {
+        if (c == '"' || c == '\\') { out += '\\'; out += char(c); }
+        else if (c < 0x20) { char hex[8]; std::snprintf(hex, sizeof hex, "\\u%04x", c); out += hex; }
+        else out += char(c);
+    }
     return out;
 }
 bool reload_keymap(uintptr_t keymap, const char* name) noexcept {
@@ -1208,7 +1232,9 @@ void Engine::poll_keymap() noexcept {
             auto maps = cheat::command_bindings(text,"open_world_map");
             auto takes = cheat::take_keys(text);
             auto pages = page_bindings_of(text);
+            auto flags = flag_bindings_of(text);
             Exclusive lock(mutex); map_bindings = std::move(maps); take_bindings = std::move(takes); page_bindings = std::move(pages);
+            flag_bindings = std::move(flags);
         }
         if (cheat_notices_on) {
             auto updated = cheat::parse_bindings(text);
@@ -1276,10 +1302,11 @@ uintptr_t __fastcall flip_hook(uintptr_t self, void*) {
         if (e.render_thread.load() != GetCurrentThreadId()) e.fail(15);
         ++e.flips;
         if (e.render) { if (e.take_marks) e.update_marks(self);
-            if (e.status_numbers || e.floating_numbers || e.target_bar) e.update_status(self); if (!e.cheat_bindings.empty()) e.update_notice(self); e.compose(self); }
+            if (e.status_numbers || e.floating_numbers || e.target_bar) e.update_status(self); if (!e.cheat_bindings.empty() || !e.notice.empty()) e.update_notice(self); e.compose(self); }
         for (const auto& q : e.queues) if (q.address && q.last_frame == e.frame)
             if (const auto* r = e.raster(q.raster)) for (uint32_t i = 0; i < r->runs.size(); ++i)
                 if (r->runs.first_plan(i)) ++e.stats[r->runs.at(i).plan].presentations;
+        if (e.flag_pending && e.render) e.take_flag();
     }
     const auto result = reinterpret_cast<uintptr_t(__thiscall*)(uintptr_t)>(flip_gateway)(self);
     if (guard.state) {
@@ -2059,6 +2086,7 @@ bool wheel_scroll_request(int notches) {
 void key_press(UINT vk, UINT mods) {
     if (!engine) return;
     if (engine->opens_key_page(vk,mods)) { engine->open_key_bindings(); return; }
+    if (engine->opens_flag(vk,mods)) return;
     if (engine->opens_map(vk,mods)) input_hooks::block_hover();
     if (vk == VK_ESCAPE && mods == 0) engine->on_escape();
     engine->on_cheat_key(vk,mods);
@@ -2198,6 +2226,34 @@ void Engine::on_escape() noexcept {
     std::rotate(esc_reasons.begin(),esc_reasons.begin()+1,esc_reasons.end()); esc_reasons.back() = reason;
     if (reason) { ++contents_refused; return; }
     contents_pending = true; contents_pending_tick = GetTickCount64(); ++contents_requested;
+}
+bool Engine::opens_flag(UINT vk, UINT mods) noexcept {
+    Exclusive lock(mutex);
+    for (const auto& b : flag_bindings) if (b.vk == vk && b.mods == mods) { flag_pending = true; return true; }
+    return false;
+}
+// At a flip with a flag pending: every plan presented in this frame, logged with its key and text for a report.
+void Engine::take_flag() noexcept {
+    flag_pending = false;
+    try {
+        std::vector<uint32_t> seen;
+        for (const auto& q : queues) if (q.address && q.last_frame == frame)
+            if (const auto* r = raster(q.raster)) for (uint32_t i = 0; i < r->runs.size(); ++i)
+                if (r->runs.first_plan(i)) {
+                    const uint32_t plan = r->runs.at(i).plan;
+                    if (plan < pack.plans.size() && std::find(seen.begin(), seen.end(), plan) == seen.end() && seen.size() < 32) seen.push_back(plan);
+                }
+        std::string items;
+        for (const auto plan : seen) {
+            const auto& p = pack.plans[plan];
+            if (!items.empty()) items += ',';
+            items += "{\"key\":\"" + plan_key(p.entry) + "\",\"text\":\"" + json_text(std::u16string_view(p.wide.data(), p.length)) + "\"}";
+        }
+        ++flags_taken;
+        log->event("translation_flag", "\"number\":" + std::to_string(flags_taken) + ",\"count\":" + std::to_string(seen.size()) +
+                   ",\"items\":[" + items + "]");
+        show_notice(seen.empty() ? L"畫面上沒有可標記的翻譯" : L"已標記畫面上的翻譯");
+    } catch (...) {}
 }
 bool Engine::opens_key_page(UINT vk, UINT mods) noexcept {
     Exclusive lock(mutex);
@@ -2995,13 +3051,20 @@ void Engine::install(const Config& config, Logger& logger) {
                     log->event("map_bindings","\"count\":"+std::to_string(map_bindings.size()));
                     take_bindings = cheat::take_keys(keymap_text);
                     page_bindings = page_bindings_of(keymap_text);
+                    flag_bindings = flag_bindings_of(keymap_text);
                 } else {
                     const auto shipped = read_all(game / L"Default.kmp");
                     take_bindings = cheat::take_keys(shipped);
                     page_bindings = page_bindings_of(shipped);
+                    flag_bindings = flag_bindings_of(shipped);
+                }
+                // The flag notices must show for every player, not only with the developer's cheat keymap.
+                for (const auto c : std::wstring(L"已標記畫面上的翻譯沒有可")) for (const uint32_t em : screen_ems) {
+                    try { glyphs.warm(uint32_t(c),em,false); } catch (const std::exception&) {}
                 }
                 log->event("take_keys","\"count\":"+std::to_string(take_bindings.size()));
                 log->event("page_keys","\"count\":"+std::to_string(page_bindings.size()));
+                log->event("flag_keys","\"count\":"+std::to_string(flag_bindings.size()));
                 if (!cheat_bindings.empty()) {
                     std::wstring chars = cheat::all_notice_characters() + L"聖者施展法術#0123456789";
                     for (uint32_t entry = 0x66; entry <= 0x71+45; ++entry) if (const int plan = plan_for_entry(MiscEntryBase+entry); plan >= 0)

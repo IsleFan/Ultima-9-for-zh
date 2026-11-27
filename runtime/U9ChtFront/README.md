@@ -43,6 +43,20 @@ text). `prepare_static` (called by `install`) builds each missing or wrong file 
 from the game folder or, while an install is in place, from `backup/`, and checks it against the manifest. See
 `docs/release/PATCH_FORMAT.md`.
 
+## Player reports
+
+`report.h` (2026-11-27). After a game the page reads that session's runtime log:
+- a crash (an `exception` event, or an exit code other than 0), or
+- translations the player flagged in game with 標記畫面上的翻譯問題 (runtime command `flag_translation`, tab 一般,
+  default Ctrl+Shift+T): the runtime logs every plan on screen at the next flip as `translation_flag` (store key and
+  Chinese text) and shows 已標記畫面上的翻譯 at the top.
+
+Then it asks whether to pack `logs\回報-<session>.zip` and opens the GitHub issue form (`.github/ISSUE_TEMPLATE`
+`crash.yml` or `translation.yml`) with Explorer on the zip. The zip holds `環境.txt` (versions, resolution, system,
+the `[features]` of `u9cht.ini`), `記錄.jsonl` (the log without `glyph_cache_warm` lines and with the English text
+fields of `flow_text`, `book_flow` and `file_probe` emptied), `啟動器.txt` and, when flagged, `翻譯標記.txt`. Folder
+names are replaced by `<folder>`. The 回報問題 button offers the same for the latest session.
+
 ## Signposts: bitmap16.flx copy
 
 With `data/patches/bitmap16.u9cs`, `install` first calls `prepare_redirect`: it makes `data\redirect\bitmap16.flx`

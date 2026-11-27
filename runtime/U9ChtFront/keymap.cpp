@@ -134,6 +134,8 @@ const std::vector<Command>& commands() {
         {"show_takeable", UnknownCategory, 1, L"按住標出可拿物品（中文化）"},
         // Not a game command: the runtime asks the front page to open this page (default Ctrl+Shift+K).
         {PageCommand, UnknownCategory, 3, L"叫出按鍵設定頁（中文化）"},
+        // Not a game command: the runtime records the translations on screen for a report (default Ctrl+Shift+T).
+        {FlagCommand, UnknownCategory, 3, L"標記畫面上的翻譯問題（中文化）"},
     };
     return table;
 }
@@ -305,18 +307,27 @@ int conflicts(const Keymap& k) {
     return n;
 }
 
-std::vector<uint16_t> page_keys(const Keymap& k) {
-    const int page = find_command(PageCommand);
-    if (page < 0 || size_t(page) >= k.keys.size()) return {};
-    if (!k.keys[size_t(page)].empty()) return k.keys[size_t(page)];
-    for (const auto& [name, code] : k.extra) if (code == DefaultPageHotkey) return {};
-    if (owner(k, DefaultPageHotkey) >= 0) return {};
-    return {DefaultPageHotkey};
+namespace {
+std::vector<uint16_t> runtime_keys(const Keymap& k, const char* command, uint16_t fallback) {
+    const int index = find_command(command);
+    if (index < 0 || size_t(index) >= k.keys.size()) return {};
+    if (!k.keys[size_t(index)].empty()) return k.keys[size_t(index)];
+    for (const auto& [name, code] : k.extra) if (code == fallback) return {};
+    if (owner(k, fallback) >= 0) return {};
+    return {fallback};
+}
+void fill_default(Keymap& k, const char* command, uint16_t fallback) {
+    const int index = find_command(command);
+    if (index >= 0 && size_t(index) < k.keys.size() && k.keys[size_t(index)].empty()) k.keys[size_t(index)] = runtime_keys(k, command, fallback);
+}
 }
 
-void fill_page_default(Keymap& k) {
-    const int page = find_command(PageCommand);
-    if (page >= 0 && size_t(page) < k.keys.size() && k.keys[size_t(page)].empty()) k.keys[size_t(page)] = page_keys(k);
+std::vector<uint16_t> page_keys(const Keymap& k) { return runtime_keys(k, PageCommand, DefaultPageHotkey); }
+std::vector<uint16_t> flag_keys(const Keymap& k) { return runtime_keys(k, FlagCommand, DefaultFlagHotkey); }
+
+void fill_runtime_defaults(Keymap& k) {
+    fill_default(k, PageCommand, DefaultPageHotkey);
+    fill_default(k, FlagCommand, DefaultFlagHotkey);
 }
 
 namespace {

@@ -34,7 +34,7 @@ int main() {
             check(names.insert(c.name).second, "command names are unique");
             check(std::string(c.name).size() < 32 && c.page >= 0 && c.page < Pages && c.label && *c.label, "command entry sane");
         }
-        check(commands().size() == 100, "100 bindable commands (97 of the game; add_gold, show_takeable and open_key_bindings of the runtime)");
+        check(commands().size() == 101, "101 bindable commands (97 of the game; add_gold, show_takeable, open_key_bindings, flag_translation of the runtime)");
         check(index_of("abort_targeting") < 0 && index_of("toggle_movement_speed") >= 0, "only commands the game registers");
         int rows[Pages]{};
         for (const auto& c : commands()) ++rows[c.page];
@@ -206,12 +206,14 @@ int main() {
         check(page_keys(taken).empty(), "unbound and ctrl+shift+k taken: no key");
         Keymap extra = parse("[GENERAL OPTIONS COMMANDS]\r\nctrl+shift+k=some_unknown_command\r\n");
         check(page_keys(extra).empty(), "ctrl+shift+k kept for an unknown command: no key");
-        fill_page_default(none);
+        fill_runtime_defaults(none);
         std::string out;
         check(none.keys[size_t(page)] == std::vector<uint16_t>{DefaultPageHotkey} && serialize(none, out) &&
               page_keys(parse(out)) == std::vector<uint16_t>{DefaultPageHotkey} && out.find("=open_key_bindings") != std::string::npos,
               "the default is shown and saved");
-        fill_page_default(taken);
+        fill_runtime_defaults(taken);
+        check(flag_keys(parse("")) == std::vector<uint16_t>{DefaultFlagHotkey}, "flag: ctrl+shift+t by default");
+        check(flag_keys(parse("[GENERAL OPTIONS COMMANDS]\r\nctrl+shift+t=open_journal\r\n")).empty(), "flag: default taken");
         check(taken.keys[size_t(page)].empty(), "no default where the key is taken");
     }
     {   // LOCAL-ONLY, SKIPPED WHEN ASSETS ABSENT

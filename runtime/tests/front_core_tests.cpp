@@ -1,6 +1,7 @@
 // Front page core (U9ChtFront/front_core.h) on synthetic files only: no game asset is read.
 #include "front_core.h"
 #include "sign_patch.h"
+#include "report.h"
 #include "platform.h"
 #include "protocol.h"
 #include "version_manifest.h"
@@ -305,6 +306,34 @@ int main() {
         check(prepare_redirect(game, data).message.find(L"版本不符") != std::wstring::npos, "other game file: English");
         fs::remove(data / L"patches" / L"bitmap16.u9cs", ec);
         check(prepare_redirect(game, data).ok && prepare_redirect(game, data).message.empty(), "no patch: nothing to do");
+    }
+    {   // Player reports (report.h), on synthetic log lines.
+        namespace rp = u9cht::front::report;
+        const std::string log =
+            "{\"event\":\"runtime_ready\",\"pid\":1}\r\n"
+            "{\"event\":\"glyph_cache_warm\",\"pid\":1,\"scalar\":20013}\r\n"
+            "{\"event\":\"flow_text\",\"pid\":1,\"length\":5,\"head\":\"Hello \\\"x\\\"\"}\r\n"
+            "{\"event\":\"translation_flag\",\"pid\":1,\"number\":1,\"count\":2,\"items\":[{\"key\":\"text.flx:12\",\"text\":\"\xE4\xBD\xA0\xE5\xA5\xBD\\\"\"},{\"key\":\"TYPENAME.FLX:5\",\"text\":\"\xE5\x8A\x8D\"}]}\r\n"
+            "{\"event\":\"translation_flag\",\"pid\":1,\"number\":2,\"count\":1,\"items\":[{\"key\":\"text.flx:12\",\"text\":\"\xE4\xBD\xA0\xE5\xA5\xBD\\\"\"}]}\r\n"
+            "{\"event\":\"exception\",\"pid\":1,\"code\":3221225477,\"module\":\"u9.exe+0x19CEAC\"}\r\n"
+            "{\"event\":\"game_exited\",\"pid\":2,\"exit_code\":3221226525}\r\n";
+        const auto s = rp::summarize(log);
+        check(s.crashed && s.where == "u9.exe+0x19CEAC" && s.exit_code == 3221226525LL, "crash found");
+        check(s.flag_presses == 2 && s.flags.size() == 2 && s.flags[0].key == "text.flx:12" &&
+              s.flags[0].text == "\xE4\xBD\xA0\xE5\xA5\xBD\"" && s.flags[1].key == "TYPENAME.FLX:5", "flags found, unique");
+        check(!rp::summarize("{\"event\":\"game_exited\",\"exit_code\":0}\r\n").crashed, "clean exit");
+        const auto t = rp::trimmed_log(log);
+        check(t.find("glyph_cache_warm") == std::string::npos && t.find("Hello") == std::string::npos &&
+              t.find("\"head\":\"\"") != std::string::npos && t.find("translation_flag") != std::string::npos, "trimmed log");
+        check(rp::scrub("a C:\\\\Games\\\\U9\\\\static b C:\\Games\\U9 c", {fs::path(L"C:\\Games\\U9")}) == "a <folder>\\\\static b <folder> c", "scrub");
+        check(rp::flags_text(s).find("text.flx:12\t") != std::string::npos, "flags text");
+        const auto zip = root / L"report.zip";
+        check(rp::write_zip(zip, {{"記錄.jsonl", t}, {"a.txt", "abc"}}), "zip written");
+        const auto z = read(zip);
+        check(z.size() > 30 && z.compare(0, 4, "PK\x03\x04") == 0 && z.find("abc") != std::string::npos &&
+              z.compare(z.size() - 22, 4, "PK\x05\x06") == 0 && uint8_t(z[z.size() - 12]) == 2, "zip structure");
+        // CRC-32 of "abc" is 0x352441C2; it sits in the second local header.
+        check(z.find(std::string("\xC2\x41\x24\x35", 4)) != std::string::npos, "zip crc");
     }
     fs::remove_all(root, ec);
     if (failures) { std::cerr << failures << " failure(s)\n"; return 1; }

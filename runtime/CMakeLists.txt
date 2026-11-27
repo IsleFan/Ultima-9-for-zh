@@ -43,7 +43,7 @@ set_source_files_properties(U9ChtMovie/pl_mpeg_impl.c PROPERTIES COMPILE_OPTIONS
 target_include_directories(U9ChtMovie PUBLIC U9ChtMovie third_party/pl_mpeg)
 target_link_libraries(U9ChtMovie PUBLIC winmm gdi32 user32 msimg32)
 # The release's front page (U9Cht.exe): settings, finding the game, per-session install and restore.
-add_library(U9ChtFrontCore STATIC U9ChtFront/front_core.cpp U9ChtFront/keymap.cpp)
+add_library(U9ChtFrontCore STATIC U9ChtFront/front_core.cpp U9ChtFront/keymap.cpp U9ChtFront/report.cpp)
 target_include_directories(U9ChtFrontCore PUBLIC U9ChtFront)
 target_link_libraries(U9ChtFrontCore PUBLIC U9ChtCommon advapi32)
 add_executable(U9ChtFront WIN32 U9ChtFront/main.cpp U9ChtFront/front.rc)

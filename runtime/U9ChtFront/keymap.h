@@ -30,6 +30,9 @@ inline constexpr uint16_t Shift = 0x100, Alt = 0x200, Ctrl = 0x400, Extended = 0
 // like show_takeable; with no key of its own it uses Ctrl+Shift+K, unless another command already has that key.
 inline constexpr char PageCommand[] = "open_key_bindings";
 inline constexpr uint16_t DefaultPageHotkey = Ctrl | Shift | 0x4B;
+// flag_translation marks the translations on screen for a report (2026-11-27); a runtime command too, default Ctrl+Shift+T.
+inline constexpr char FlagCommand[] = "flag_translation";
+inline constexpr uint16_t DefaultFlagHotkey = Ctrl | Shift | 0x54;
 
 // The category u9.exe gives a command it does not know (0x4D25E0).
 inline constexpr int UnknownCategory = 0xFFFF;
@@ -75,8 +78,11 @@ int conflicts(const Keymap& k);
 // The keys that bring up the page: those of open_key_bindings, or DefaultPageHotkey when it has none and no other
 // command binds that key; empty when neither.
 std::vector<uint16_t> page_keys(const Keymap& k);
-// Gives open_key_bindings the default key when page_keys would fall back to it, so the page shows and saves it.
-void fill_page_default(Keymap& k);
+// The same rule for flag_translation and DefaultFlagHotkey.
+std::vector<uint16_t> flag_keys(const Keymap& k);
+// Gives open_key_bindings and flag_translation their default keys when they would fall back to them, so the page
+// shows and saves them.
+void fill_runtime_defaults(Keymap& k);
 
 // Current_Keymap=<name> in <game>/Options.ini; "" when absent or not a plain file name.
 std::string current_keymap(const fs::path& game);

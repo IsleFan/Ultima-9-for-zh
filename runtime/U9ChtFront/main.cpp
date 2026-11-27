@@ -11,6 +11,7 @@
 #include "front_core.h"
 #include "glyph_cache.h"   // font_family_from_sfnt: the page's fallback face
 #include "keymap.h"
+#include "report.h"
 #include "platform.h"
 #include "protocol.h"
 #include "version_manifest.h"
@@ -65,6 +66,7 @@ struct App {
     int tab = 0, capture = -1;          // capture: the command waiting for a key press, or -1
     keymap::Keymap keys;
     std::string keys_file;              // the keymap the page was loaded from
+    fs::path session_log, session_err;  // logs of the game started last (report.h)
     fs::path launcher_ini() const { return base / L"u9cht.ini"; }
     fs::path front_ini() const { return base / L"front.ini"; }
     fs::path backup() const { return base / L"backup"; }
@@ -430,6 +432,7 @@ void start_game() {
     const auto name = stamp();
     const auto log = app.base / L"logs" / (name + L".jsonl");
     const auto err = app.base / L"logs" / (name + L"-launcher.txt");
+    app.session_log = log; app.session_err = err;
     std::wstring command = L"\"" + launcher.wstring() + L"\" --game-dir \"" + app.s.game_dir + L"\" --runtime \"" + dll.wstring() +
         L"\" --log \"" + log.wstring() + L"\" --mode render --allowlist \"" + pack.wstring() + L"\" --config \"" +
         app.launcher_ini().wstring() + L"\" --restore-backup \"" + app.backup().wstring() + L"\" --load " + app.load;
@@ -454,6 +457,94 @@ void start_game() {
         PostMessageW(window, WM_GAME_ENDED, code, 0);
     }).detach();
 }
+// ---- player reports (report.h) ----
+std::wstring system_text() {
+    std::wstring out;
+    if (const auto ntdll = GetModuleHandleW(L"ntdll.dll")) {
+        using Version = LONG(WINAPI*)(OSVERSIONINFOW*);
+        if (const auto get = reinterpret_cast<Version>(reinterpret_cast<void*>(GetProcAddress(ntdll, "RtlGetVersion")))) {
+            OSVERSIONINFOW v{sizeof(v)};
+            if (get(&v) == 0) out = L"Windows " + std::to_wstring(v.dwMajorVersion) + L"." + std::to_wstring(v.dwMinorVersion) +
+                                    L" build " + std::to_wstring(v.dwBuildNumber);
+        }
+        using Wine = const char*(__cdecl*)();
+        using Host = void(__cdecl*)(const char**, const char**);
+        if (const auto wine = reinterpret_cast<Wine>(reinterpret_cast<void*>(GetProcAddress(ntdll, "wine_get_version")))) {
+            const char* sys = nullptr; const char* rel = nullptr;
+            if (const auto host = reinterpret_cast<Host>(reinterpret_cast<void*>(GetProcAddress(ntdll, "wine_get_host_version")))) host(&sys, &rel);
+            const std::string w = wine(), s = sys ? sys : "";
+            out += L"，Wine " + std::wstring(w.begin(), w.end()) + (s.empty() ? L"" : L"（" + std::wstring(s.begin(), s.end()) + L"）");
+        }
+    }
+    return out;
+}
+std::string read_text(const fs::path& p) { std::string s; read_bytes(p, s); return s; }
+fs::path profile_folder() {
+    wchar_t buf[MAX_PATH]{};
+    const DWORD n = GetEnvironmentVariableW(L"USERPROFILE", buf, MAX_PATH);
+    return n && n < MAX_PATH ? fs::path(buf) : fs::path();
+}
+// Packs the session behind `log` into logs\回報-<stamp>.zip; returns the zip, or an empty path.
+fs::path make_report(const fs::path& log, const fs::path& err, const report::Session& s) {
+    std::error_code ec;
+    const std::vector<fs::path> folders{app.s.game_dir, app.base, app.data, app.runtime, profile_folder()};
+    std::wstring env = L"中文化版本：" + version_text() + L"\r\n遊戲版本：" + (app.edition.empty() ? L"不明" : app.edition) +
+        L"\r\n解析度：" + (app.s.width ? std::to_wstring(app.s.width) + L"×" + std::to_wstring(app.s.height) : std::wstring(L"沿用遊戲設定")) +
+        (app.s.windowed ? L"，視窗化" : L"，全螢幕") + L"\r\n系統：" + system_text() + L"\r\n";
+    if (s.crashed) env += L"這次遊戲：異常結束，結束代碼 " + std::to_wstring(s.exit_code) +
+                          (s.where.empty() ? L"" : L"，位置 " + std::wstring(s.where.begin(), s.where.end())) + L"\r\n";
+    std::string features;
+    {   // the [features] section of u9cht.ini, as written by this page (UTF-16LE)
+        std::string raw = read_text(app.launcher_ini());
+        std::wstring text;
+        for (size_t i = (raw.size() >= 2 && uint8_t(raw[0]) == 0xFF) ? 2 : 0; i + 1 < raw.size(); i += 2)
+            text += wchar_t(uint8_t(raw[i]) | uint8_t(raw[i + 1]) << 8);
+        const auto at = text.find(L"[features]");
+        if (at != std::wstring::npos) features = utf8(text.substr(at, text.find(L"[", at + 1) - at));
+    }
+    std::vector<std::pair<std::string, std::string>> files{
+        {"環境.txt", report::scrub(utf8(env) + "\r\n" + features, folders)},
+        {"記錄.jsonl", report::scrub(report::trimmed_log(read_text(log)), folders)},
+        {"啟動器.txt", report::scrub(read_text(err), folders)}};
+    if (!s.flags.empty()) files.push_back({"翻譯標記.txt", report::flags_text(s)});
+    const auto zip = app.base / L"logs" / (L"回報-" + log.stem().wstring() + L".zip");
+    return report::write_zip(zip, files) ? zip : fs::path();
+}
+void open_report(const fs::path& zip, const wchar_t* issue_template) {
+    const std::wstring select = L"/select,\"" + zip.wstring() + L"\"";
+    ShellExecuteW(app.window, L"open", L"explorer.exe", select.c_str(), nullptr, SW_SHOWNORMAL);
+    const std::wstring url = std::wstring(IssuesUrl) + L"/new" + (issue_template ? std::wstring(L"?template=") + issue_template : L"/choose");
+    ShellExecuteW(app.window, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+}
+// After a game: offers a report when it crashed or the player flagged translations.
+void offer_report() {
+    if (app.session_log.empty()) return;
+    const auto s = report::summarize(read_text(app.session_log));
+    if (!s.crashed && s.flags.empty()) return;
+    std::wstring ask = s.crashed ? L"遊戲異常結束了（閃退）。\n\n" : L"";
+    if (!s.flags.empty()) ask += L"這次在遊戲中標記了 " + std::to_wstring(s.flags.size()) + L" 筆翻譯。\n\n";
+    ask += L"要整理成回報檔，並開啟 GitHub 的回報頁面嗎？\n回報檔只有中文化的記錄、設定和系統版本，不含個人資料。\n請把回報檔拖進回報頁面的說明欄。";
+    if (MessageBoxW(app.window, ask.c_str(), L"回報問題", MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+    const auto zip = make_report(app.session_log, app.session_err, s);
+    if (zip.empty()) { set_message(L"無法建立回報檔。", true); return; }
+    set_message(L"回報檔：logs\\" + zip.filename().wstring(), false);
+    open_report(zip, s.crashed ? L"crash.yml" : L"translation.yml");
+}
+// The 回報問題 button: packs the latest session if there is one, then opens the issue page.
+void report_button() {
+    std::error_code ec;
+    fs::path latest;
+    for (const auto& e : fs::directory_iterator(app.base / L"logs", ec))
+        if (e.path().extension() == L".jsonl" && (latest.empty() || e.path().filename() > latest.filename())) latest = e.path();
+    if (!latest.empty() && MessageBoxW(app.window, L"要把最近一次遊戲的記錄整理成回報檔嗎？\n回報檔只有中文化的記錄、設定和系統版本，不含個人資料。",
+                                       L"回報問題", MB_YESNO | MB_ICONQUESTION) == IDYES) {
+        const auto err = latest.parent_path() / (latest.stem().wstring() + L"-launcher.txt");
+        const auto zip = make_report(latest, err, report::summarize(read_text(latest)));
+        if (!zip.empty()) { set_message(L"回報檔：logs\\" + zip.filename().wstring(), false); open_report(zip, nullptr); return; }
+        set_message(L"無法建立回報檔。", true);
+    }
+    ShellExecuteW(app.window, L"open", IssuesUrl, nullptr, nullptr, SW_SHOWNORMAL);
+}
 void game_ended(DWORD code) {
     app.running = false; app.game_window = nullptr;
     if (app.keys_saved_while_running) { keymap::select(app.s.game_dir); app.keys_saved_while_running = false; }
@@ -464,12 +555,13 @@ void game_ended(DWORD code) {
     else if (code == 2) set_message(L"中文化程式沒有成功啟動遊戲，遊戲檔案已還原。詳細原因在 logs 資料夾。", true);
     else set_message(L"遊戲已結束，已還原遊戲原本的檔案。", false);
     ShowWindow(app.window, SW_RESTORE); SetForegroundWindow(app.window);
+    offer_report();
 }
 // ---- key bindings page ----
 bool load_keys(const std::string& file) {
     keymap::Keymap k;
     if (!keymap::load(fs::path(app.s.game_dir) / file, k)) return false;
-    keymap::fill_page_default(k);   // shows the Ctrl+Shift+K the runtime uses when the file binds no key to the page
+    keymap::fill_runtime_defaults(k);   // shows the default keys the runtime uses when the file binds none
     app.keys = std::move(k); app.capture = -1; app.keys_leave_armed = false;
     return true;
 }
@@ -625,7 +717,7 @@ void act(Id id, int arg = 0) {
         else set_message(L"找不到說明檔：" + help.wstring(), true);
         return;
     }
-    case Report: ShellExecuteW(app.window, L"open", IssuesUrl, nullptr, nullptr, SW_SHOWNORMAL); return;
+    case Report: report_button(); return;
     case Quit: DestroyWindow(app.window); return;
     default: return;
     }
