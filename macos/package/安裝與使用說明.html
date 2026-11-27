@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>U9 中文版 Mac 安裝說明</title>
+<style>
+:root {
+  --bg: #faf8f4; --fg: #1f1d1a; --muted: #6b655c; --card: #ffffff;
+  --line: #e4ded3; --accent: #8a5a12; --code-bg: #f1ece3; --warn-bg: #fff4e0; --warn-line: #e0b35c;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #171512; --fg: #ece7de; --muted: #a49c8f; --card: #201d19;
+    --line: #36312a; --accent: #e0b35c; --code-bg: #2a2621; --warn-bg: #2d2416; --warn-line: #8a6a2c;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg);
+  font: 16px/1.75 -apple-system, "PingFang TC", "Heiti TC", sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+h1 { font-size: 1.7rem; margin: 0 0 4px; color: var(--accent); }
+.sub { color: var(--muted); margin: 0 0 28px; }
+h2 { font-size: 1.2rem; margin: 40px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+h3 { font-size: 1.02rem; margin: 22px 0 6px; }
+ol, ul { padding-left: 1.4em; }
+li { margin: 4px 0; }
+code, pre { font-family: ui-monospace, Menlo, monospace; font-size: .9em; background: var(--code-bg); border-radius: 6px; }
+code { padding: 1px 6px; }
+pre { padding: 12px 14px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; margin: 14px 0; }
+.warn { background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: 10px; padding: 10px 18px; margin: 14px 0; }
+table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: .95em; }
+th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+th { background: var(--code-bg); }
+kbd { font-family: inherit; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--card); }
+.muted { color: var(--muted); font-size: .92em; }
+</style>
+</head>
+<body>
+<main>
+<h1>創世紀 IX：羽化昇天　繁體中文版</h1>
+<p class="sub">Mac 安裝包 @VERSION@ · 中文化 @VERSION@ · Wine 10（Sikarugir 開源版）</p>
+
+<div class="card">
+  <h3>這個版本</h3>
+  <ul>
+    <li>內含原作者發佈的正式版中文化 <b>@VERSION@</b>，未修改。影片中文字幕在 Mac 上可以正常顯示（預設開啟）。</li>
+    <li>Mac 安裝包只是把中文化、Wine 執行環境與安裝程式打包在一起；中文化本身的說明見 <code>runtime/U9CHT/說明.txt</code>。</li>
+  </ul>
+</div>
+
+<div class="warn">
+  <strong>本安裝包不含遊戲。</strong>請自備正版 <em>Ultima IX: Ascension</em>（GOG 版或 Steam 版，遊戲版本 1.19f）。
+  中文化目前是內部測試版，譯文為初稿。
+</div>
+
+<h2>一、需要什麼</h2>
+<table>
+  <tr><th>項目</th><th>需求</th></tr>
+  <tr><td>Mac</td><td>Apple Silicon（M1 以後）或 Intel 處理器皆可</td></tr>
+  <tr><td>系統</td><td>macOS 14 Sonoma 以上</td></tr>
+  <tr><td>Apple Silicon 額外需要</td><td>Rosetta 2（安裝程式會自動檢查，沒有會詢問是否安裝）</td></tr>
+  <tr><td>網路連線</td><td><b>安裝時需要</b>：安裝程式會自動下載 Wine 引擎（約 166 MB）。沒有網路時可先手動下載，見第三節。</td></tr>
+  <tr><td>硬碟空間</td><td>約 2.5 GB（Wine 引擎與函式庫約 0.6 GB＋遊戲約 1.6 GB＋Wine 環境）</td></tr>
+  <tr><td>遊戲來源（二選一）</td><td>
+    <b>GOG 離線安裝檔</b>：<code>setup_ultima_ix_-_ascension_1.19f_gog_….exe</code>，
+    <u>同一個資料夾裡要有對應的 <code>.bin</code> 檔</u>（在 GOG 網站「離線備份安裝檔」下載 Windows 版）<br>
+    <b>已安裝好的遊戲資料夾</b>：從 Windows 電腦複製過來、裡面有 <code>u9.exe</code> 的資料夾（GOG 或 Steam 版）
+  </td></tr>
+</table>
+
+<h2>二、第一次打開前：解除 Mac 安全限制</h2>
+<p>從網路下載的程式沒有經過 Apple 公證，第一次雙擊時 macOS 會擋下來。請用下面<b>其中一種</b>方法：</p>
+<div class="card">
+<h3>方法 A：用「終端機」一次解除（推薦）</h3>
+<ol>
+  <li>打開「應用程式 → 工具程式 → 終端機」。</li>
+  <li>輸入下面這段文字，<b>最後空一格</b>（先不要按 Return）：
+    <pre>xattr -dr com.apple.quarantine </pre></li>
+  <li>把整個 <code>U9CHT-@VERSION@-macOS</code> 資料夾從 Finder 拖進終端機視窗，路徑會自動填上。</li>
+  <li>按 <kbd>Return</kbd>。沒有任何訊息就代表成功。</li>
+</ol>
+</div>
+<div class="card">
+<h3>方法 B：用系統設定放行</h3>
+<ol>
+  <li>雙擊 <code>1_安裝.command</code>，出現「無法打開」的警告時按「完成」或「好」。</li>
+  <li>打開「系統設定 → 隱私權與安全性」，捲到最下方，在「已阻擋 1_安裝.command」旁按「<b>仍要打開</b>」，輸入密碼後再按一次「打開」。</li>
+  <li>安裝程式啟動後會自動解除整個資料夾的限制，之後就不用再做。</li>
+</ol>
+</div>
+
+<h2>三、安裝</h2>
+<ol>
+  <li>把 <code>U9CHT-@VERSION@-macOS</code> 資料夾放到你想放的地方，例如「文件」或「遊戲」資料夾。<br>
+    <span class="muted">安裝後遊戲和存檔都會放在這個資料夾裡，之後請不要再搬動或改名（要搬就整個資料夾一起搬）。</span></li>
+  <li>雙擊 <b><code>1_安裝.command</code></b>。會開一個終端機視窗顯示進度。</li>
+  <li>選擇遊戲來源：
+    <ul>
+      <li>「GOG 安裝檔」→ 選 <code>setup_ultima_ix_….exe</code></li>
+      <li>「遊戲資料夾」→ 選有 <code>u9.exe</code> 的資料夾</li>
+    </ul></li>
+  <li>等待約 2～5 分鐘（含下載 Wine 引擎，視網路速度而定），看到「安裝完成」就好了。原本的安裝檔或遊戲資料夾不會被修改。</li>
+</ol>
+<p class="muted">重新執行 <code>1_安裝.command</code> 可以重新安裝；既有存檔會自動備份並還原，已下載過的 Wine 引擎不會重新下載。</p>
+
+<h3>關於 Wine 引擎的下載</h3>
+<p>為了縮小安裝包，Wine 引擎沒有附在裡面。安裝程式會依下面的順序處理：</p>
+<ol>
+  <li>已經安裝過引擎 → 直接使用。</li>
+  <li>找到已下載的檔案 <code>WS12WineSikarugir10.0_8.tar.xz</code>（放在本資料夾、<code>runtime</code> 資料夾或「下載項目」）→ 驗證檢查碼後直接使用，不需要網路。</li>
+  <li>都沒有 → <b>自動從網路下載</b>（約 166 MB），驗證檢查碼後安裝。</li>
+</ol>
+<p><b>沒有網路或自動下載失敗時</b>：在可以上網的地方用瀏覽器下載下面這個檔案，放進 <code>U9CHT-@VERSION@-macOS</code> 資料夾（或「下載項目」），再執行 <code>1_安裝.command</code>：</p>
+<pre>https://github.com/Sikarugir-App/Engines/releases/download/v1.0/WS12WineSikarugir10.0_8.tar.xz</pre>
+<p class="muted">SHA-256：<code>2a6bcf2a3bf13cddf825599b6bc1e3659cbf71e1282c6d77141a92f6ac8d4c68</code>。檢查碼不符的檔案不會被使用。</p>
+
+<h2>四、開始遊戲</h2>
+<ol>
+  <li>雙擊 <b><code>2_啟動 U9 中文版.command</code></b>。</li>
+  <li>有接多個螢幕時，會先問你要在哪個螢幕玩（見下一節）。</li>
+  <li>中文化首頁出現後，按「<b>開始遊戲</b>」。第一次會先產生中文化資料，請稍等。</li>
+  <li>遊戲期間會留著一個終端機視窗，<b>請不要關掉</b>。玩完關掉首頁後，終端機顯示「已結束」才可以關。</li>
+</ol>
+<div class="warn">
+  <strong>首頁的「視窗化」在 Mac 上沒有作用</strong>：勾了仍是全螢幕，用預設即可。<br>
+  首頁的其他功能（字型、字距、滑鼠滾輪翻頁、敵人血條、按鍵設定等）都可以照常使用，說明見 <code>runtime/U9CHT/說明.txt</code>。
+</div>
+
+<h3>多螢幕</h3>
+<ul>
+  <li>Wine 只會把遊戲開在 macOS 的「主要顯示器」上，所以啟動時選的螢幕會<b>暫時被設成主要顯示器</b>。</li>
+  <li>一離開遊戲就會自動還原成原本的螢幕排列。在首頁再按一次「開始遊戲」的話，會開在原本的主螢幕；要換螢幕請關掉首頁、重新雙擊啟動。</li>
+  <li>萬一程式異常中斷、螢幕排列沒有還原，下次啟動時會先自動還原。</li>
+</ul>
+
+<h3>首頁太大</h3>
+<p>首頁會依螢幕高度自動縮小（例如 MacBook 內建螢幕），所以字可能小一點，這是正常的。</p>
+
+<h3>常用按鍵</h3>
+<table>
+  <tr><th>按鍵</th><th>功能</th><th>按鍵</th><th>功能</th></tr>
+  <tr><td>方向鍵</td><td>移動</td><td>空白鍵</td><td>跳躍</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd> / <kbd>Ctrl</kbd>+<kbd>L</kbd></td><td>存檔／讀檔</td><td><kbd>Esc</kbd></td><td>日誌目錄</td></tr>
+  <tr><td><kbd>B</kbd></td><td>背包</td><td><kbd>J</kbd></td><td>日誌</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>X</kbd></td><td>離開遊戲</td><td><kbd>Tab</kbd></td><td>進入／離開戰鬥</td></tr>
+</table>
+<p class="muted">Mac 鍵盤上請用 <kbd>control</kbd> 鍵當作 Ctrl。</p>
+
+<h2>五、已知問題</h2>
+<div class="card">
+<h3>關於穩定性與 Wine 版本</h3>
+<p>WineHQ 官方的 Wine 10／11 在 Apple Silicon 上執行 32 位元遊戲時會隨機當機（WineHQ bug 60494，Rosetta 相關，官方沒有修正計畫）。
+  本安裝包因此改用開源專案 <b>Sikarugir 編譯的 Wine 10.0</b>（安裝時自動下載），在製作者的 Mac（Apple Silicon、macOS 27）上測試不再出現這個當機。</p>
+<p><b>這個 Wine 是免費的。</b>Wine 是依 LGPL 授權的開放原始碼軟體，Sikarugir 是社群維護的開源專案，
+  可以免費使用與散布，不需要購買 CrossOver 或任何其他商業軟體。它與 CodeWeavers（CrossOver）、WineHQ 官方都沒有關係，也不受其支援。</p>
+<p>即使如此，仍建議<b>常按 <kbd>Ctrl</kbd>+<kbd>S</kbd> 存檔</b>。若跳出 Wine 錯誤視窗，關掉它、回到首頁再按「開始遊戲」即可。</p>
+</div>
+<ul>
+  <li>已經有進行中的遊戲時，啟動會直接回到上次的場景，不會再播 ORIGIN 標頭與開場影片。</li>
+  <li><b>Intel Mac</b>：<b>尚未實際測試</b>。</li>
+  <li>「視窗化」無效：勾選後遊戲仍會佔滿整個螢幕。</li>
+  <li>原版遊戲本身的問題（中文化說明也有提到）：讀取存檔後再「開新遊戲」世界不會重置，要開新遊戲請先完全離開再重新進入。</li>
+  <li>全螢幕時理論上可以用 <kbd>⌘</kbd>+<kbd>Tab</kbd> 切到其他程式，但尚未確認切回來是否正常，切換前請先存檔。</li>
+</ul>
+
+<h2>六、存檔與資料位置</h2>
+<table>
+  <tr><th>內容</th><th>位置（都在 U9CHT-@VERSION@-macOS 資料夾內）</th></tr>
+  <tr><td>存檔</td><td><code>prefix/drive_c/GOG Games/Ultima 9/savegame/</code></td></tr>
+  <tr><td>遊戲檔案</td><td><code>prefix/drive_c/GOG Games/Ultima 9/</code></td></tr>
+  <tr><td>中文化（含設定與記錄）</td><td><code>prefix/drive_c/U9CHT/</code></td></tr>
+  <tr><td>Wine 執行記錄</td><td><code>logs/wine-last.log</code></td></tr>
+</table>
+<p>存檔和 Windows 版通用，可以直接把 <code>u9game*.sav</code> 複製進出。</p>
+
+<h2>七、移除</h2>
+<p>先把 <code>savegame</code> 資料夾備份出來（如果還想保留存檔），再把整個 <code>U9CHT-@VERSION@-macOS</code> 資料夾丟到垃圾桶即可。本安裝包不會在其他地方留下檔案。</p>
+
+<h2>八、疑難排解</h2>
+<table>
+  <tr><th>狀況</th><th>處理方式</th></tr>
+  <tr><td>雙擊 .command 顯示「無法打開」</td><td>依第二節解除安全限制。</td></tr>
+  <tr><td>安裝時「下載 Wine 引擎失敗」</td><td>確認網路連線後重新執行；或依第三節手動下載後再安裝。</td></tr>
+  <tr><td>安裝時「解開安裝檔失敗」</td><td>確認 <code>.exe</code> 和 <code>.bin</code> 在同一個資料夾，而且檔案完整下載（可在 GOG 網站重新下載）。</td></tr>
+  <tr><td>首頁顯示找不到遊戲或版本不符</td><td>按「自動搜尋」，或「選擇資料夾」指到 <code>C:\GOG Games\Ultima 9</code>。必須是 1.19f 版。</td></tr>
+  <tr><td>首頁顯示「ddraw.dll 不是 GOG 版附的版本」</td><td>遊戲資料夾裡的 ddraw.dll 被改過。請重新執行 <code>1_安裝.command</code>。</td></tr>
+  <tr><td>螢幕排列沒有還原</td><td>重新雙擊啟動（會先自動還原），或到「系統設定 → 顯示器」手動調整。</td></tr>
+  <tr><td>回報問題</td><td>首頁「回報問題」按鈕。請附上 <code>prefix/drive_c/U9CHT/logs/</code> 裡最新的記錄檔與 <code>logs/wine-last.log</code>。</td></tr>
+</table>
+
+<h2>九、授權與致謝</h2>
+<p><b>中文化的來源</b>：原作者 <a href="https://github.com/pmanyeh/Ultima-9-for-zh">pmanyeh/Ultima-9-for-zh</a> 發佈的
+<a href="https://github.com/pmanyeh/Ultima-9-for-zh/releases/tag/v@VERSION@">v@VERSION@</a>，MIT 授權（見 <code>runtime/U9CHT/LICENSE.txt</code>）。
+Mac 安裝包的原始碼在同一個專案的 <code>macos/</code> 資料夾。</p>
+<p>中文化、Wine、innoextract、字型等元件的授權資訊見 <code>runtime/licenses/README.txt</code>。
+本中文化與 Mac 執行環境為玩家自製，與 Electronic Arts、Origin Systems、GOG、Valve、Apple 無關。Ultima 為 Electronic Arts 的商標。</p>
+</main>
+</body>
+</html>
