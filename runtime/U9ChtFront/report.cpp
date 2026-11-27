@@ -61,7 +61,11 @@ void omit_big_values(std::string& line, size_t limit) {
             else if ((line[j] == ']' || line[j] == '}') && --depth == 0) break;
         }
         if (j >= line.size()) return;
-        if (j - i + 1 > limit) line.replace(i, j - i + 1, "\"<omitted>\"");
+        if (j - i + 1 > limit) {
+            static constexpr char omitted[] = "\"<omitted>\"";
+            line.replace(i, j - i + 1, omitted);
+            i += sizeof(omitted) - 2;   // on its closing quote; the loop steps past it
+        }
     }
 }
 template <class F> void each_line(const std::string& text, F f) {

@@ -330,6 +330,10 @@ int main() {
                                     "],\"texture\":{\"a\":[1,2]},\"s\":\"x]\"}\r\n";
             check(rp::trimmed_log(big) == "{\"event\":\"runtime_counters\",\"frames\":5,\"entries\":\"<omitted>\",\"texture\":{\"a\":[1,2]},\"s\":\"x]\"}\r\n",
                   "big values omitted");
+            // two big values on one line (runtime_counters has entries and lifecycle)
+            const std::string two = "{\"entries\":[" + std::string(1100, '1') + "],\"k\":\"v\",\"lifecycle\":[{\"seq\":1}" +
+                                    std::string(1100, ' ') + "]}\r\n";
+            check(rp::trimmed_log(two) == "{\"entries\":\"<omitted>\",\"k\":\"v\",\"lifecycle\":\"<omitted>\"}\r\n", "two big values omitted");
         }
         check(rp::scrub("a C:\\\\Games\\\\U9\\\\static b C:\\Games\\U9 c", {fs::path(L"C:\\Games\\U9")}) == "a <folder>\\\\static b <folder> c", "scrub");
         check(rp::flags_text(s).find("text.flx:12\t") != std::string::npos, "flags text");
