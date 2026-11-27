@@ -1,39 +1,23 @@
-# U9-CHT Handoff（2026-11-24）
+# U9-CHT Handoff（2026-11-27）
 
 給下一個工作階段（人或 AI Agent）的交接。
 開工前仍須依 `AGENTS.md` 讀取 `AGENTS.md` 與 `ULTIMA_IX_CHT_MASTER_PLAN.md`。
 
-**這一波（2026-11-15～16）做完的事**，細節見第 3e 節：
-- 首頁「按鍵設定」頁，依 `u9.exe` 讀按鍵檔的規則重做，作弊鍵也能設定。
-- 遊戲中即時套用按鍵，加上 Ctrl+Shift+K 叫出設定頁、「回到遊戲」切回。
-- 啟動器在遊戲結束時自己還原遊戲檔（`--restore-backup`）。
-- **改用代理 `dsound.dll` 載入 runtime，不再注入**；Defender 不再攔截（這台電腦、一次）。
-- 跳躍鍵自動攀爬（首頁開關，預設關）。
+**2026-11-27：1.0.0 已在 GitHub Releases 正式發布**（https://github.com/pmanyeh/Ultima-9-for-zh/releases/tag/v1.0.0）。
+標籤 `v1.0.0` → `4fd09e2`；附件是 `U9CHT-1.0.0.zip` 和 8 張截圖。使用者的發布方針見第 2 節最後。
 
-**2026-11-16～17 追加**，細節見第 3f 節：
-- 幀率低的主因找到並修正：中文改經遊戲的 Direct3D 裝置繪製，不再每幀鎖定畫面緩衝區。
-- 評估了 U9GL（OpenGL 渲染器專案）：只當參考，目前不能和我們同時使用。
+**這一波（2026-11-24～27）做完的事**，細節見第 3k 節：
+- Mac：夥伴范綱維用 Wine 實測可以跑；合併他的 PR #1（macOS Wine 影片黑畫面、舊版 Wine 的 `CopyFile2`）；Mac 說明改推薦 Sikarugir Wine 10.0。
+- 首頁安卡圖示；「叫出按鍵設定頁」的鍵可以自訂（預設 Ctrl+Shift+K）。
+- **中文路標**：9 塊地名牌（Asylum 保留英文）。runtime 新增 `CreateFileA` hook（使用者授權），遊戲開 `bitmap16.flx` 時改開 `data\redirect\` 的中文版；首頁第一次開始遊戲時從玩家原檔產生，發布包只有文字圖層（`U9CS` 差異檔）。
+- **回報功能**：遊戲中按 Ctrl+Shift+T 標記畫面上的翻譯；閃退或標記後，首頁整理成 `logs\回報-….zip` 並開 GitHub 回報表單（`.github/ISSUE_TEMPLATE`）。
+- 第一次開始時顯示「正在產生」；回報檔的解析度改讀遊戲實際設定。
+- 版本號改成 **1.0.0**；新的 README（含致謝范綱維）；**MIT 授權**（`LICENSE`）。
+- 調查：長時間遊玩偶發閃退（未解，見 `docs/research/U9_KNOWN_ISSUES.md` 第 4 節）；視窗模式拖不動視窗（第 5 節，只記錄）。
 
-**2026-11-17～19 這一波**，細節見第 3g、3h 節：
-- 首頁與遊戲操作：副標「羽化昇天」、視窗化、對話字距行距、點擊跳過對白、Esc 開日誌目錄、加金幣密技、
-  解析度 1024×768／1280×960、商店清單用滾輪或 PageUp／PageDown 捲動。
-- 修好的錯誤：世界地圖放開 Ctrl 就關、游標停留顯示名稱打斷「走過去坐下」（新遊戲卡關）、
-  介面文字捲動幾次後變小點點。
-- 譯名：屬性統一為力量／機敏／智慧；背包的金幣物品名改「金幣」；自動譯文檢查工具。
-- **第一版內部測試包**：差異檔＋首頁套用，包裡沒有任何遊戲檔案（第 3h 節）。
-**2026-11-20～22**，細節見第 3j 節：
-- 新功能「按住按鍵標出可拿物品」：按住 F，附近可拿的東西上方顯示金色 ◆（預設開啟，首頁可關，按鍵可改）。
-- 研究：找到遊戲的物件記錄、鏡頭與鏡頭繪製清單（`docs/research/U9_OBJECT_PROBE.md`）。
+**下一個對話**：先問使用者有沒有玩家回報（Issues）。有閃退回報檔就整理共同點；沒有的話問要做什麼。
 
-**2026-11-23 Mac 版預先測試**，細節見第 7 節與 `docs/research/U9_WINE_MAC.md`：
-- 使用者沒有 Mac，由夥伴實機測試。先在這台電腦用 WSL2＋Wine 預先測（M1）。
-- 原版要用 GOG 包裝（DLL 覆寫 `ddraw=n`）；中文化還要 `dsound=n,b`。
-- 修了兩個只在 Wine 出現的問題，之後中文化在 Wine 下進得了遊戲，對話文本和影片字幕正常（介面操作、物品名稱提示、存讀檔沒測完）：
-  - 首頁中文顯示成方框 → 改用附帶的字型；
-  - runtime 初始化失敗（錯誤 9）→ 字寬誤差 1 像素時校正。
-- 已知 Wine 問題（原版也會）：切換視窗幾次後，遊戲收不到滑鼠。
-- 給夥伴的測試包 `U9CHT-0.1.1-internal.zip` 與說明 `docs/release/MAC_TEST_GUIDE.md` 已準備好。
-- **下一個對話：先問使用者夥伴有沒有回報。** 有的話看結果與 `logs`；沒有的話問要做什麼（例如回頭調整功能）。
+更早的工作（2026-11-11～23）見第 3a～3j 節與第 7 節。
 
 ---
 
@@ -47,67 +31,51 @@
    - 新增原始檔或測試檔後，要先執行 `cmake -S runtime -B .local/p10-misc/build`。
    - C++ 測試：在 `.local/p10-misc/build` 執行同一個資料夾裡的 `ctest.exe -C Release`（Git Bash 的 PATH 上沒有 `ctest`）。
 3. Python 測試：`python -m unittest discover -s tests`。
-4. 進遊戲測試用 Steam 私人副本，使用者說「準備好了」之後才執行：
+4. 進遊戲測試用 Steam 私人副本，使用者說「準備好了」之後才執行。最近都用**首頁**測（第 5 點）；session 工具仍可用：
    ```sh
-   python scripts/run_p8_0_session.py start --session .local/p10-misc/session-NN --label "..."      --game-dir .local/steam-game --build .local/p10-misc/out-m30 --runtime .local/p10-misc/build/Release      --config .local/p9-2/u9cht.ini --preserve-saves --seed-saves .local/p10-misc/session-29/final-savegame      --load proxy --keymap .local/p10-misc/keymap/U9CHT-TEST.kmp
+   python scripts/run_p8_0_session.py start --session .local/p10-misc/session-NN --label "..."      --game-dir .local/steam-game --build .local/p10-misc/out-m31 --runtime .local/p10-misc/build/Release      --config .local/p9-2/u9cht.ini --preserve-saves --seed-saves .local/p10-misc/session-29/final-savegame      --load proxy --keymap .local/p10-misc/keymap/U9CHT-TEST.kmp
    python scripts/run_p8_0_session.py finish --session .local/p10-misc/session-NN
    ```
    - 下一個 session 編號從 **66** 開始。
-   - 較新的測試存檔：`.local/p10-misc/saves/2026-11-17-front`（使用者 2026-11-17 從首頁玩到的進度，最新是 `u9game13.sav`；雜湊在 `saves/2026-11-17-front.sha256`）。要從這裡開始，把 `--seed-saves` 換成這個資料夾。
-   - `--load proxy`：用代理 `dsound.dll` 載入（和首頁相同）。不加就是舊的注入方式（啟動器的預設），留作對照。
-   - 不加 `--keymap` 就用 `Options.ini` 目前指定的按鍵檔（見第 1 節「私人副本」），沒有作弊鍵。
-   - 要關掉個別功能，就用另一個設定檔，加上 `[features]` 區段。範例：`.local/p10-misc/bisect/u9cht-newfeatures-off.ini`。
-   - session 工具會讓遊戲以視窗模式執行；經首頁啟動則是全螢幕。
-5. 首頁測試：`.local/p10-misc/front-release/U9Cht.exe`（使用者自己開）。
-   - 重新建置後，要把 `U9Cht.exe`、`U9ChtLauncher.exe`、`U9ChtRuntime.dll`、`U9ChtProxy.dll` 四個檔從 `build/Release` 複製過去。首頁開著時無法覆蓋 `U9Cht.exe`，先請使用者關掉。
-   - 首頁的記錄在 `front-release/logs/`。
-6. Runtime 版本號：
-   - 改 runtime 名稱時，三處要一起改：`runtime/common/version_manifest.h`、`u9cht/l10n/runtime_pack.py`、`runtime/CMakeLists.txt`。
-   - 改了以後要重建中文化資料，因為 pack 內嵌 runtime 名稱。
-   - 目前仍是 `0.2.45`。這幾波加的功能都沒有升版號；正式發佈前要決定是否升版。
-7. 打包內部測試包：見 `docs/release/RELEASE_PROCESS.md`（先 commit，再重建中文化資料，再執行 `scripts/package_release.py`）。
+   - 較新的測試存檔：`.local/p10-misc/saves/2026-11-17-front`。
+   - session 工具不會產生 `data\redirect`，所以看不到中文路標；要看路標請用首頁。
+5. 首頁測試：用解壓後的發布包，例如 `.local/release-test/U9CHT-1.0.0`（只多放一個指向私人副本的 `front.ini`）。
+   - 啟動前先確認沒有別的首頁開著（`Get-Process U9Cht`），避免同時開兩個。
+   - 換新程式時，把四個檔從 `build/Release` 複製過去；首頁開著時無法覆蓋 `U9Cht.exe`。
+   - 記錄在該資料夾的 `logs/`；回報檔 `logs/回報-….zip`。
+6. Runtime 版本號：目前 **`U9ChtRuntime/1.0.0`**。改版號時三處一起改：`runtime/common/version_manifest.h`、`u9cht/l10n/runtime_pack.py`、`runtime/CMakeLists.txt`，然後重建中文化資料。
+7. 發布：見 `docs/release/RELEASE_PROCESS.md`（先 commit，重建中文化資料，`scripts/package_release.py` 打包，解壓到新資料夾實測）。
+   - 發布到 GitHub：`gh release create`（需使用者明確說可以發布）。
+   - **推送到 `main` 會被權限檢查擋下**：請使用者自己執行 `git push origin p7-localization-pipeline:main`。
 
 ## 1. 目前狀態一覽
 
-- 分支：`p7-localization-pipeline`，已推送到 `origin`（2026-11-23，`8347557`；這份交接文件的更新在它之後另一筆）。
-  - 2026-11-23 的 commit：`9c6ec3f`（runtime 字寬校正、失敗原因記錄）、`48b9f19`（首頁附帶字型）、`7e029e0`、`8329d2a`、`8347557`（文件）。
+- 分支：`p7-localization-pipeline`。`origin` 上它和 `main` 都在 `4785571`（README、LICENSE）。
+  - 本機還有一筆沒推送：`5e6d29d`（打包時附上 `LICENSE.txt`），只影響下一次打包。
   - 本機備份分支 `backup/p7-before-gargish-rewrite` **不可推送**。這是 2026-11-11 改寫歷史前的備份。
-- 工作樹：只有不可加入的未追蹤檔：`.vscode/`、`83e7052b…png`、`tools/u9xsb6bt2a*`、`tools/uixtools.zip`。
+- 工作樹：只有不可加入的未追蹤檔：`.vscode/`、`83e7052b…png`、`tools/u9xsb6bt2a*`、`tools/uixtools.zip`、**`截圖/`**（使用者的遊戲截圖）。
   - `tools/u9xsb6bt2a/` 是第三方工具 Extended Setup（著作權屬原作者），不在 `.gitignore` 裡，**不可加入**。
-- 私人遊戲副本，沒有進行中的 session：
-  - Steam：`.local/steam-game`。最近的測試都用它。資源檔是原版，沒有殘留的 `dsound.dll`。
-    - **注意：`Options.ini` 目前是 `Current_Keymap=U9CHT.kmp`**，遊戲資料夾裡有使用者從首頁存的 `U9CHT.kmp`。這是使用者的首頁測試狀態，不要擅自改回。
-    - 使用者在首頁選了 1280×960 與視窗化，`Options.ini` 與 `dxcfg.ini` 是這個狀態。
-    - 因此 `session-56/backup/Options.ini` 不再是可用的比對基準。要比對時以 session 工具 start 時自己備份的 `backup/` 為準。
-  - GOG：`.local/runtime-game`。建置中文化資料時用它的原版檔。
-  - Wine 用的副本：`.local/wine-game`（2026-11-23 從 Steam 副本複製）。
-    - 解析度改過：`Options.ini` 與 `dxcfg.ini` 目前是 1280×960、視窗化；
-    - 資源檔已還原為原版，沒有殘留的 `dsound.dll`。
-- 測試（2026-11-23）：
-  - C++：16/16（`pixel_tests` 加了字寬校正與 hmtx 讀取）。
-  - Python：175 OK（3 skipped）。
-- Runtime：`U9ChtRuntime/0.2.45-p11`（版號沒變），建置在 `.local/p10-misc/build/Release`，是 2026-11-23 最新版（含 Wine 修正）。
-- 中文化資料最新建置：`.local/p10-misc/out-m30`（commit `ef0cb1e`，乾淨工作樹；藥劑改名）。首頁資料夾 `front-release/data` 就是它；舊的在 `front-release/data.old-m28`。
-- 測試存檔：`.local/p10-misc/session-29/final-savegame`（Steam 副本）。session 30～61 都從這裡開始，沒有寫回。
-- 首頁測試資料夾：`.local/p10-misc/front-release`。四個程式是 2026-11-22 版（含標出可拿物品），**還沒換成 2026-11-23 的 Wine 修正版**。
-  Windows 上兩個修正都不會改變行為（正黑體存在；字寬本來就一致），要換時照第 0 節第 5 點複製。
-  這個資料夾有現成的 `data/static`（雜湊相符時首頁不會重新產生）。`data/runtime` 裡**沒有**開發用標記檔
-  （`object_probe.on`、`take_marks.on` 都已拿掉）。
-- 內部測試包：
-  - **最新：`.local/release/U9CHT-0.1.1-internal.zip`**（2026-11-23，`out-m30`＋Wine 修正）。給 Mac 夥伴用的就是這一份。
-    - 四個程式的雜湊與 Wine 測試 w05 用的相同；
-    - zip 本身沒有另外解壓從頭測。
-  - 舊版：`.local/release/U9CHT-0.1.0-internal.zip`（2026-11-22），沒有 Wine 修正。
-  解壓測試用的資料夾 `.local/release-test/U9CHT-0.1.0-internal` 是**較舊**的一版，多放了指向私人副本的 `front.ini`。
-- 使用者也把測試包解壓到自己的資料夾，經 GOG Galaxy 指向 **GOG 正式安裝** 玩過（使用者自己的選擇；首頁離開遊戲時會還原檔案）。
-- Microsoft Defender：`.local/p10-misc` 的排除**已拿掉**（使用者 2026-11-16）。代理載入沒被攔截；舊的注入方式會被攔截。
+- 發布：
+  - **1.0.0**：`.local/release/U9CHT-1.0.0.zip`（`4fd09e2`，`out-m31`），已上傳 GitHub Releases。說明草稿 `.local/release/RELEASE_NOTES-1.0.0.md`，截圖 `.local/release/screens-1.0.0/`。
+  - 1.0.0 zip 沒有 `LICENSE.txt`（下一版會有）。
+  - 舊的內部測試包 0.1.0～0.1.4 都在 `.local/release/`，不再使用。
+- 私人遊戲副本，沒有進行中的遊戲：
+  - Steam：`.local/steam-game`。資源檔（含 `bitmap16.flx`，`3ec4ece8…`）是原版，沒有殘留的 `dsound.dll`。
+    - `Options.ini` 是 `Current_Keymap=U9CHT.kmp`（使用者從首頁存的按鍵檔），1600×1200；`dxcfg.ini` 是 `presentation=windowed`。
+  - GOG：`.local/runtime-game`。建置中文化資料和打包時用它的原版檔。
+  - Wine 用的副本：`.local/wine-game`（見第 7 節）。
+- 測試（2026-11-27）：C++ 18/18；Python 全部通過（略過 4 項需要遊戲檔的本機測試）。
+- Runtime：`U9ChtRuntime/1.0.0`，建置在 `.local/p10-misc/build/Release`。
+- 中文化資料最新建置：`.local/p10-misc/out-m31`（`7fb5443`，乾淨工作樹）。文字檔和 runtime pack 都和 `out-m30` 相同，只有合約雜湊跟著版號變。
+- 測試資料夾：`.local/release-test/U9CHT-1.0.0`（1.0.0 解壓＋`front.ini`，已有 `data\static` 和 `data\redirect`）。其他 `release-test/U9CHT-0.1.x` 是舊的。
+- Microsoft Defender：`.local/p10-misc` 的排除已拿掉（2026-11-16）。代理載入沒被攔截。
 
 ### 翻譯進度（全部是機器初稿 `draft`，尚未人工校稿）
 
 | 資源 | store 檔 | 筆數 | 遊戲內確認 |
 | --- | --- | --- | --- |
 | 對話 text.flx | `text.jsonl` | 7,368 / 7,390 | ✅ |
-| 物品名稱 TYPENAME | `typename.jsonl` | 2,026 / 2,032 | ✅ |
+| 物品名稱 TYPENAME | `typename.jsonl` | 2,029 / 2,032 | ✅ |
 | 書籍 BOOKS-EN（含 56 個商店檔） | `books.jsonl` | 447 | 書本與路牌 ✅；商店清單 ❌ 未測 |
 | 系統訊息 misctext.flx | `misctext.jsonl` | 242 / 340（刻意保留的英文見 3a） | 主要 UI ✅ |
 | 影片字幕 | `movies.jsonl` | 42（draft 34、review 8） | 檢視工具 ✅；遊戲內 ✅（開場動畫，session 17；Esc 跳過 session 24） |
@@ -129,6 +97,10 @@
 - 使用者沒有要求就不推送。
 - 改遊戲設定檔（`Options.ini`、`dxcfg.ini`、按鍵檔）不要用 Git Bash 的 `sed -i`：它會把 CRLF 改成 LF（2026-11-15 發生過）。要還原就從驗證過的備份複製，要修改就用 Python 二進位模式，改完用 `cmp` 或雜湊確認。
 - 首頁正在執行時不要關掉它；要覆蓋 `front-release` 的檔案前先請使用者關閉。
+- 推送 `main`：Claude 的指令會被權限檢查擋下，請使用者自己推（第 0 節第 7 點）。
+- 寫含反斜線的程式碼或文字時（C++ 字串跳脫、Windows 路徑），不要用 Bash heredoc 或 `python -`：反斜線常被吃掉或變成控制字元（2026-11-26 多次發生）。改用 Write 工具寫腳本檔，或用 Edit 工具。
+- `截圖/` 資料夾不可 commit。公開的截圖要先去掉本機路徑（首頁截圖的遊戲位置欄）。
+- 發布方針（使用者，2026-11-27）：免費提供；給同好的第一版用 1.0.0；放 GitHub Releases；不必等所有問題解決，靠玩家回報（閃退、校稿）。實際發布前仍要使用者說「可以發布」。
 - 原版比對測試的做法（2026-11-15 用過兩次）：
   1. 把私人 Steam 副本的 `savegame/`、`dxcfg.ini`、`Options.ini` 備份到 `.local/p10-misc/<名稱>/backup`。
   2. 放入 session-29 存檔；`dxcfg.ini` 改成 `presentation=windowed`、`display=1600x1200@120`。
@@ -384,6 +356,41 @@
   - 「力場」（3820）、箱子 1887、沒有名稱的類型 1222 被標成可拿，實際能不能拿未確認。
 - 紀錄工具 `probe_objects` 仍在程式裡（只有 `object_probe.on` 時跑），研究深度測試時可再用。
 
+### 3k. Mac、路標、回報功能與 1.0.0 發布（2026-11-24～27）
+
+**Mac**（第 7 節）
+- 夥伴**范綱維**（GitHub `IsleFan`）在 Mac M1、macOS 27 用 Wine 實測：可以跑，效能不佳（原版也一樣）。
+- PR #1 已合併（`f4b73ec`）：macOS Wine 下影片改用擁有者彈出視窗；`copy_verified` 改用 `CopyFileW`。Windows 上驗證過（0.1.2）。
+- `docs/release/MAC_TEST_GUIDE.md` 改推薦 Sikarugir Wine 10.0（`a109309`）；幾個選單名稱標「待確認」。
+
+**首頁與按鍵**
+- 安卡圖示（`scripts/make_icon.py` → `runtime/U9ChtFront/u9cht.ico`，`front.rc`）。
+- runtime 指令 `open_key_bindings`（「一般」分頁，預設 Ctrl+Shift+K）、`flag_translation`（預設 Ctrl+Shift+T）：沒有綁定時用預設鍵，除非該鍵已被別的指令使用（`keymap.h` `page_keys`、`flag_keys`、`fill_runtime_defaults`）。
+- 第一次開始時，首頁先顯示「正在產生中文化資料和中文路標」並換成等待游標。
+
+**中文路標**（`docs/formats/U9-BITMAP16-NOTES.md`）
+- 10 塊地名牌在 `bitmap16.flx` 4471～4478、4568、4569（64×32、RGB565、3 層 mipmap，各 5,612 bytes）；3381 是同一塊空白牌。4471 Asylum 保留英文（使用者決定）。
+- `u9cht/bitmap_flx.py`：讀寫、往返位元組相同、疊圖層、`U9CS` 差異檔（`make_sign_patch`／`apply_sign_patch`）。
+- 文字圖層：`translation/textures/signposts/*.png`（Noto Sans TC Bold 12 px，用 `scripts/make_signpost_layers.py` 畫，需要 Pillow，只在開發機）。
+- `runtime/common/sign_patch.h`（C++）與 Python 共用同一組黃金測試值。
+- `front::prepare_redirect`：從玩家的 `bitmap16.flx` 產生 `data\redirect\bitmap16.flx`（約 320 MB）並寫雜湊戳記；不符時維持英文，不擋遊戲。
+- runtime `file_redirect.h`：`CreateFileA` IAT `0x7400CC` hook（使用者 2026-11-26 授權）。遊戲用 `GENERIC_READ`＋`OPEN_ALWAYS` 開檔；只導向 `static\bitmap16.flx` 的唯讀開啟。開發用標記 `data\runtime\file_probe.on` 會記錄前 300 個開檔名稱。
+- 未處理：`bitmapC.flx`、`bitmapsh.flx`（玩家改用壓縮或 8 位元貼圖時路標是英文）。
+
+**回報功能**（`runtime/U9ChtFront/report.h`）
+- runtime：按標記鍵後的下一格畫面，把畫面上所有中文化文字的翻譯鍵和譯文記成 `translation_flag`，畫面上方顯示「已標記畫面上的翻譯」。
+- 首頁：遊戲結束後讀記錄；有閃退或標記時詢問，產生 `logs\回報-<時間>.zip`（`環境.txt`、精簡記錄、啟動器記錄、`翻譯標記.txt`），開檔案總管和 GitHub 表單（`crash.yml`、`translation.yml`，只在 `main` 上有效）。「回報問題」按鈕整理最近一次。
+- 精簡記錄：拿掉 `glyph_cache_warm`、`flow_text`／`book_flow` 的英文片段、超過 1,000 字元的陣列／物件；一場約 3 萬 bytes。
+- 限制：日誌、書本、背包畫面的文字標記不到（記到 0 句）。
+
+**調查**
+- 長時間遊玩偶發閃退：中文化 6 輪閃 3 輪（位置都不同：`0x59CEAC`、`0x44E516`、`0x494A19`），原版 2 輪都沒閃；關掉戰鬥三功能仍閃；位址空間只用到約 1.3 GB，不是原因。未解。
+- 視窗模式拖不動視窗：GOG ddraw 包裝在遊戲在前景時把游標 `ClipCursor` 在畫面內（遊戲自己的 `0x49E110` 被 GOG 改成 `ret`）。使用者決定只記錄。
+
+**發布**
+- 版本 1.0.0（`7fb5443`）、`說明.txt`（`53a0a42`）、回報精簡修正（`da70d0a`、`4fd09e2`）、README 與 MIT 授權（`9f498ce`、`4785571`）。
+- 1.0.0 在新資料夾從頭實測通過（版本顯示、說明、產生提示、路標、標記、回報表單）。
+
 ## 4. 用中文手冊校對文本（2026-11-11 完成）
 
 ### 4.0 結果
@@ -447,25 +454,34 @@
 
 ## 5. 尚未進遊戲測試的項目（需要使用者說「準備好了」）
 
-用第 0 節的指令（Steam 副本、`out-m30`）。
+用首頁（`.local/release-test/U9CHT-1.0.0`）或第 0 節的 session 工具。
 
-- 翻譯畫面還沒確認（商店買清單已確認；賣的清單還沒看）：
-  - 存讀檔頁；
-  - 法術書：儀式清單的長標籤，例如「重聚肉體與靈魂儀式」，看會不會超出；
-  - 狀態頁：新用語，例如機敏、神力、長程武器、生命力。
-- 新的首頁（含「從差異檔產生資料」）由使用者在自己的資料夾、經 GOG Galaxy 用過，可以進遊戲；還沒有專門檢查首次產生的訊息。
-- **新的繪製路徑在全螢幕（經首頁啟動）和 800×600 下是否正常**：字形、游標、遊戲畫面、切換視窗後回來（貼圖遺失後的復原沒實測過）。
-- 首頁版面：強化功能現在有 10 個勾選框（列距 30），視窗高 914，截圖檢查過、使用者也用過，但還沒在高 DPI 螢幕上看過。
-- 這一波的功能，還沒測到的部分：
-  - **遊戲中經首頁「儲存按鍵」後即時生效**（Ctrl+Shift+K → 改鍵 → 儲存 → 回到遊戲 → 新鍵有效）。
-  - 跳躍鍵自動攀爬：移動中起跳、較長時間遊玩；以及「跳躍被拒絕但攀爬允許」的那一種情況（`0x51C0F0`）。
-  - A 鍵（`abort_targeting`）：靜態分析顯示 `u9.exe` 沒有這個指令，鎖定目標時按 A 很可能沒作用。確認後要改 `docs/testing/KEYS_zh-TW.md` 和說明檔的「T 或 A」。
-- 「不能移動」（原因 UNKNOWN，至今兩次，都是開新遊戲之後）：見 `docs/research/U9_NEW_GAME_AFTER_LOAD.md`。按鍵檔已排除（session 57、58）。再發生時請使用者先按一下 X 再放開，看能不能恢復（測游標停留功能的假設）。
-- 體力／法力數值和敵人血條：開啟對話、背包、日誌、選單時，會不會跟著橫條一起隱藏，還沒專門確認。
-- 飛行作弊開了再關就無法移動：用原版 exe 加同一份按鍵檔確認是不是原版行為（作法見第 2 節）。
-- session 11 播放影片時截圖閃退（0xC0000005，原因 UNKNOWN）：還沒和原版比對。
+- **1.0.0 新功能**：
+  - 另外 7 塊路標（小灣鎮、昇月城、獸爪村、特林希克、瓦羅尼亞、紫杉城、巨大石柱）只看過預覽圖，遊戲裡只看過不列顛城和石門。
+  - 真的閃退時的回報流程（只用合成資料和正常結束的記錄測過）。
+  - 最終版 `U9Cht.exe`（回報精簡修正）沒有再進遊戲跑一次；用真實記錄驗證過。
+  - 「叫出按鍵設定頁」改成別的鍵之後是否有效，使用者沒有明確回報。
+- 翻譯畫面還沒確認：存讀檔頁；法術書儀式清單的長標籤；狀態頁新用語；商店的賣出清單。
+- 新的繪製路徑在全螢幕和 800×600 下是否正常（切換視窗回來後的貼圖復原沒實測過）。
+- 首頁版面在高 DPI 螢幕上還沒看過。
+- 跳躍鍵自動攀爬：移動中起跳、較長時間遊玩。
+- A 鍵（`abort_targeting`）：靜態分析顯示 `u9.exe` 沒有這個指令，確認後要改 `docs/testing/KEYS_zh-TW.md`。
+- 「不能移動」（兩次，都是開新遊戲之後）：見 `docs/research/U9_NEW_GAME_AFTER_LOAD.md`。
+- 體力／法力數值和敵人血條：開對話、背包、日誌時會不會一起隱藏。
+- 飛行作弊開了再關就無法移動：用原版 exe 比對。
 
 ## 6. 其他待辦
+
+**1.0.0 之後（依玩家回報決定優先順序）：**
+- 閃退調查：收集玩家回報檔找共同點；再跑幾輪原版確認原版的閃退率；原版穩定的話，再逐一關掉功能找原因（`docs/research/U9_KNOWN_ISSUES.md` 第 4 節）。
+- 翻譯標記支援日誌、書本、背包畫面（先研究這些畫面的文字走哪條繪製路徑）。
+- 視窗模式移動視窗：首頁加「置中／靠左／靠右」按鈕（不需 hook），或按住鍵暫時放開 `ClipCursor`（需 hook 授權）。
+- 路標：`bitmapC.flx`、`bitmapsh.flx`；Asylum 若之後有譯名再加。
+- 對話自動重新斷行（約 70 句超過兩行）。
+- 下一版打包會附 `LICENSE.txt`（`5e6d29d` 還沒推送）。
+- 可在 GitHub 新增 `crash`、`translation` 標籤（目前閃退範本用 `bug`，翻譯範本沒有標籤）；新增標籤要使用者同意。
+
+**較早的待辦：**
 
 - **防毒**：
   - 2026-11-15 Defender 把用注入方式啟動的首頁判為 `Behavior:Win32/DefenseEvasion.A!ml` 並隔離。
@@ -478,7 +494,7 @@
   包裡沒有 FLX；首頁第一次開始遊戲時從玩家的原檔產生 `data/static/`。說明檔 `release/說明.txt`。
 - 說明檔 `說明.txt`（已寫，`release/說明.txt`）：已含「開新遊戲前請先重新啟動遊戲」（原版 bug）與防毒說明。
   - 可以考慮再寫：「鎖定敵人時死亡，讀檔前先解除鎖定（T）」（原版 bug）。runtime 已有繞過方法，這段提醒可視情況省略。
-- 發佈前還要決定：測試包給誰、怎麼傳；是否升 runtime 版號；是否上傳 GitHub Releases（對外公開，需另外確認）。
+- 發佈：已在 2026-11-27 發布 1.0.0（GitHub Releases）。
 
 - 效能（2026-11-12 使用者提出）：主因已修正，見第 3f 節。以下是當時的記錄，其中「診斷記錄可能有負擔」已排除。剩下的幀率起伏（30～120 fps 隨場景）要先量原版才知道是不是遊戲本身。
   - GitHub 上沒找到 U9 專用的效能專案；社群建議都是 `Options.ini` 調整（`StreamDuration=3000`、`DeadPoolSize=3200`、裁切距離），未驗證。
@@ -514,14 +530,20 @@
 - 商店清單 QA：還有 14 個物品和 7 個註解的加註警告（見 P10 文件）。
 - 本機翻譯工作檔：`.local/translation-work/`（p10-misc、p10-shops、p9-books）。
 
-## 7. Mac 版（夥伴初步實測可以跑，2026-11-25）
+## 7. Mac 版（可以用 Wine 執行，2026-11-27）
+
+**現況**：夥伴范綱維在 Mac M1（macOS 27）用 Wine 實測可以玩，效能不佳但原版也一樣。PR #1 的兩個修正已在 1.0.0。
+建議用 **Sikarugir Wine 10.0**：官方 Wine 在 Apple 晶片上約一半機率隨機當機（原版也會，WineHQ bug 60494）。
+說明 `docs/release/MAC_TEST_GUIDE.md` 已改成 Sikarugir，但 Sikarugir 的選單名稱標了「待確認」，要請夥伴核對。CrossOver、Intel Mac 沒人試過。
+
+以下是過程紀錄。
 
 **2026-11-25 夥伴回報（使用者轉述）**：初步跑得起來，沒有太大的問題；效能不佳，但直接跑英文版也一樣，不是中文化的問題。環境是 Mac M1、macOS 27、用 Wine 執行（不是 CrossOver）。Wine 版本、逐項結果和記錄檔還沒取得。
 
 **2026-11-26 合併夥伴的 PR #1**（`f4b73ec`，細節見 `docs/research/U9_WINE_MAC.md` 問題 4～6）：
 - macOS 的 Wine 下，字幕開啟時影片只有聲音：播放器改用遊戲視窗擁有的彈出視窗，只在偵測到 macOS 上的 Wine 時才這樣做。
 - 舊版 Wine 沒有 `CopyFile2`，首頁按「開始遊戲」會中止：`copy_verified` 改用 `CopyFileW`。這個改動在 Windows 上也生效，還沒在 Windows 進遊戲驗證。
-- Apple Silicon 上官方 Wine 約半數隨機當機（原版也會，WineHQ bug 60494）；Sikarugir Wine 10.0 沒有。Mac 說明要改成推薦 Sikarugir（`MAC_TEST_GUIDE.md` 還沒改）。
+- Apple Silicon 上官方 Wine 約半數隨機當機（原版也會，WineHQ bug 60494）；Sikarugir Wine 10.0 沒有。Mac 說明已改成推薦 Sikarugir（`a109309`）。
 - 同日：首頁加了安卡圖示（`scripts/make_icon.py`）；Windows 解壓 0.1.1 zip 進遊戲驗證三輪，正常結束、檔案還原。
 - 同日：打包 `.local/release/U9CHT-0.1.2-internal.zip`（`b5cefb5`）並在 Windows 驗證：圖示、開始遊戲、影片字幕、對話、介面、日誌正常，檔案正常還原。
 - 同日：「叫出按鍵設定頁」改成可自訂（`73ddef6`，runtime 指令 `open_key_bindings`，「一般」分頁，預設 Ctrl+Shift+K）。測試資料夾 `release-test/U9CHT-0.1.2-internal` 的四個程式已換成這一版，和 0.1.2 zip 不同。遊戲中叫出 4 次、即時重新載入成功；改成別的鍵之後是否有效，使用者沒有明確回報。
