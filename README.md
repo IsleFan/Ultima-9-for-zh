@@ -95,7 +95,9 @@ python -m unittest discover -s tests
 - 字型：[jf open 粉圓](https://github.com/justfont/open-huninn-font)（justfont），路標使用 Noto Sans TC（Google），皆為 SIL Open Font License 1.1。
 - 所有回報問題、幫忙校稿的玩家。
 
-第三方授權的完整說明見 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+## 授權
+
+本專案的程式碼、譯文與文件以 [MIT 授權](LICENSE)釋出。第三方元件（內附的 TITAN 讀取程式、字型等）依各自的授權，完整說明見 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。遊戲本身與其內容的權利屬於 Electronic Arts，不在本授權範圍內。
 
 ## 聲明
 
