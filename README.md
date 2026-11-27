@@ -1,106 +1,102 @@
-# U9-CHT — Ultima IX 繁體中文化
+# 創世紀 IX：羽化昇天　繁體中文化（U9-CHT）
 
-執行依據為 [AGENTS.md](AGENTS.md) 與 [Master Plan](ULTIMA_IX_CHT_MASTER_PLAN.md)。
-初始批次為 P0、P1、P2（限 `text.flx`）；後續已明確授權 P3、P4 診斷及
-P5-0 日文執行檔重建／靜態差異研究，以及 P5 高解析度 Unicode PoC。
-2026-10-31 已明確授權 **P5.1 — Persistent High-Resolution Unicode Renderer
-Integration**；**P6 仍未授權**，各階段須通過 Gate。
+**Ultima IX: Ascension** 的非官方繁體中文化，免費提供。
 
-**最新：P7 — Localization Data Pipeline 為 PASS WITH LIMITATIONS（2026-11-03）。**
-唯一翻譯主檔為 `translation/zh-TW/*.jsonl`，流程與指令見
-[translation/qa/README.md](translation/qa/README.md)，結果見
-[P7 報告](reports/P7_LOCALIZATION_PIPELINE.md)。P8 大量翻譯尚未授權。
+這個中文化不含任何遊戲檔案：玩家用自己的正版遊戲（GOG 版或 Steam 版），中文化在你的電腦上從原檔產生中文資料，遊戲執行時才把中文顯示出來，離開遊戲就恢復原狀。
+
+**[下載最新版本（GitHub Releases）](https://github.com/pmanyeh/Ultima-9-for-zh/releases/latest)**
+
+| | |
+| --- | --- |
+| ![開場影片的中文字幕](https://github.com/pmanyeh/Ultima-9-for-zh/releases/download/v1.0.0/01-movie-subtitles.jpg) | ![角色對白](https://github.com/pmanyeh/Ultima-9-for-zh/releases/download/v1.0.0/02-dialogue.jpg) |
+| ![日誌](https://github.com/pmanyeh/Ultima-9-for-zh/releases/download/v1.0.0/05-journal.jpg) | ![路標與物品名稱](https://github.com/pmanyeh/Ultima-9-for-zh/releases/download/v1.0.0/07-signpost.jpg) |
+
+---
+
+## 中文化了什麼
+
+- **文字**：對話（約 7,400 句）、物品名稱（約 2,000 個）、書本與日誌、商店清單、介面與系統訊息。
+- **影片字幕**：開場與劇情影片加上中文字幕。
+- **路標**：路上的地名牌畫成中文。
+- **譯名**：以台灣出版的中文手冊為第一依據，其次延續系列作的台灣譯名，整理成[譯名表](translation/glossary/U9_TERMS.csv)。
+
+譯文目前是**初稿**，還沒有逐句人工校對。文本很多，需要大家一起幫忙（見[一起讓中文化更好](#一起讓中文化更好)）。
+
+## 強化功能
+
+原版沒有、可以在中文化首頁逐項開關的功能：
+
+- 游標停在物品上就顯示名稱，不必按住 X
+- 滑鼠滾輪翻書、捲動商店清單；Ctrl＋滾輪縮放鏡頭
+- 體力／法力數值、傷害飄字、鎖定敵人的血條
+- 點畫面任何地方跳過對白；Esc 直接開日誌目錄
+- 按住 F 標出附近可以拿的東西
+- 跳躍鍵自動攀爬（預設關閉）
+- 按鍵設定頁：所有遊戲按鍵都能在首頁修改，遊戲中按 Ctrl+Shift+K 也能叫出來
+- 支援 800×600 到 1600×1200 的 4:3 解析度與視窗模式
+
+## 怎麼玩
+
+需要：正版 Ultima IX: Ascension（GOG 或 Steam，遊戲版本 1.19f）、Windows 10／11、約 400 MB 硬碟空間。
+
+1. 從 [Releases](https://github.com/pmanyeh/Ultima-9-for-zh/releases/latest) 下載 zip，解壓到任何地方（不要放進遊戲資料夾）。
+2. 執行 `U9Cht.exe`（中文化首頁），它會自動找到遊戲。
+3. 按「開始遊戲」。
+
+每次都從首頁進入遊戲；直接執行 `u9.exe` 會是英文原版。存檔和英文版共用。詳細說明見 zip 裡的 [`說明.txt`](release/說明.txt)。
+
+**Mac**：遊戲只有 Windows 版，但可以用 Wine 執行（建議 Sikarugir 的 Wine 10.0），步驟見 [Mac 說明](docs/release/MAC_TEST_GUIDE.md)。目前只有少數玩家試過，歡迎回報結果。
+
+## 一起讓中文化更好
+
+- **翻譯有問題**：遊戲中按 **Ctrl+Shift+T**，中文化會記下畫面上的翻譯。離開遊戲後，首頁會幫你整理成回報檔，裡面列出每一句的編號與譯文。
+- **閃退**：首頁會詢問是否建立回報檔。閃退的原因還在調查，每一份回報都很有幫助。
+- **其他問題**：按首頁的「回報問題」。
+
+回報檔只有中文化的記錄、設定和系統版本，不含個人資料。請到 [Issues](https://github.com/pmanyeh/Ultima-9-for-zh/issues/new/choose) 選擇「翻譯問題」或「閃退或錯誤」，把回報檔拖進說明欄。
+
+目前已知的問題列在 [`說明.txt`](release/說明.txt) 的「已知的問題」一節。
+
+## 運作方式
+
+- **不散布遊戲檔案**：發布包只有中文化程式、中文譯文與「差異檔」。第一次開始遊戲時，首頁從玩家自己的遊戲檔產生中文資料，放在中文化資料夾裡。路標用的是我們自己畫的文字圖層，疊在玩家遊戲裡的空白木牌上。
+- **不永久修改遊戲**：開始遊戲時才換上中文文字檔，離開時換回，並以雜湊檢查每一個檔案。路標的貼圖從中文化資料夾讀取，完全不寫入遊戲資料夾。
+- **顯示中文**：原版只能顯示英文字母。中文化在遊戲執行期間載入一個小程式（以 `dsound.dll` 的身分放在遊戲資料夾，離開時移除），攔下遊戲的文字繪製，改用中文字型畫出。
+
+## 給開發者
+
+主要目錄：
+
+| 目錄 | 內容 |
+| --- | --- |
+| `runtime/` | C++（MSVC，Win32）：中文化首頁、啟動器、執行期 DLL、影片播放器與測試 |
+| `u9cht/`、`scripts/` | Python：FLX 讀寫、翻譯資料建置、打包 |
+| `translation/` | 譯文主檔（`zh-TW/*.jsonl`）、譯名表、翻譯規範、路標文字圖層 |
+| `docs/` | 格式與逆向研究（`formats/`、`research/`）、發布流程（`release/`） |
+| `reports/` | 各開發階段的報告 |
+
+建置與測試（需要 Visual Studio 2022 以上、Python 3.12 以上）：
 
 ```powershell
-python scripts/validate_translation.py --game-dir $env:U9_GAME_DIR --font $env:U9_CJK_FONT
-python scripts/build_localization.py --game-dir $env:U9_GAME_DIR --font $env:U9_CJK_FONT --output .local/build/zh-TW
+cmake -S runtime -B build -A Win32
+cmake --build build --config Release
+ctest --test-dir build -C Release
+python -m unittest discover -s tests
 ```
 
-**P8-0 — Runtime Capacity 為 PASS WITH LIMITATIONS（2026-11-04）**：容量已放寬至
-16,384 plans／8,192 字元；人工實玩三輪皆正常結束，已繪製 33／60 筆。三個既有顯示問題
-（游標被蓋住、無 hover 效果、選項顏色不固定）已於 runtime 0.2.8 修正並經實機確認。P8 翻譯批次尚未授權。
-見 [P8-0 報告](reports/P8_0_RUNTIME_CAPACITY.md)。
+建置中文化資料與打包需要你自己的遊戲檔，見 [發布流程](docs/release/RELEASE_PROCESS.md)。翻譯的規則見 [翻譯規範](translation/TRANSLATION_GUIDE.md)。
 
-**P8-A — Terminology Authority 為 PASS WITH LIMITATIONS（2026-11-08）**：建立翻譯規範
-[`translation/TRANSLATION_GUIDE.md`](translation/TRANSLATION_GUIDE.md) 與譯名權威檔
-`translation/glossary/U9_TERMS.csv`（1,457 個詞，負責人核准 768 個）。系列譯名以 U8 為準；
-專有名詞以「譯名(English)」加註；稱呼用你／妳／您。見
-[P8-A 報告](reports/P8A_TERMINOLOGY_AUTHORITY.md)。
+參與開發前請先讀 [AGENTS.md](AGENTS.md)，最重要的規則是：**絕對不要提交任何遊戲檔案、從遊戲抽出的英文原文，或含本機路徑的設定**。
 
-**P8 對話翻譯（2026-11-08）**：`text.flx` 7,368／7,390 句已譯為草稿（22 句玩家輸入的真言與口令保留英文），`validate` 0 錯誤。見 [P8 進度](reports/P8_PROGRESS.md)。
+## 致謝
 
-以下為較早階段的歷史狀態。
+- **范綱維**：在 Mac 上實機測試中文化，找出並修正了 macOS 版 Wine 上影片黑畫面、舊版 Wine 無法開始遊戲的問題（[#1](https://github.com/pmanyeh/Ultima-9-for-zh/pull/1)），也整理了 Apple 晶片上各版本 Wine 的穩定度，讓 Mac 玩家也能玩到中文版。
+- [tgwUltima／TITAN](https://github.com/theGreyWanderer-uc/tgwUltima)（theGreyWanderer）：FLX 格式的研究與讀取程式（MIT 授權）。同作者的 [tgwUltima9GL](https://github.com/theGreyWanderer-uc/tgwUltima9GL) 是遊戲程式位址、原版問題與貼圖格式的參考（只參考，未使用其程式碼）。
+- 字型：[jf open 粉圓](https://github.com/justfont/open-huninn-font)（justfont），路標使用 Noto Sans TC（Google），皆為 SIL Open Font License 1.1。
+- 所有回報問題、幫忙校稿的玩家。
 
-目前狀態：**P5-0 PASS（靜態 CJK 機制確認；原報告為 PASS WITH LIMITATIONS）**，
-**P5 HIGH-RES UNICODE POC PASS（受控單幀）**。P5 已驗證保留 UTF-16 身分、
-原生英文與高解析度中文字形混排，並完成 800×600／1600×1200 比較；它仍是
-debugger-driven、有界單幀實驗，**不是持續執行的可遊玩 renderer**。
-P5.1 的工作是將既有成果整合為正常啟動、持續運作、可還原的 x86 runtime，
-不重做 P0～P5 研究，也不展開中文換行、排版或翻譯覆蓋。
-詳見 [P5 報告](reports/P5_HIGHRES_UNICODE_POC.md) 與
-[P5.1 Gate](ULTIMA_IX_CHT_MASTER_PLAN.md#121-p51--persistent-high-resolution-unicode-renderer-integration)。
+第三方授權的完整說明見 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
-2026-11-01 P5.1 checkpoint：持續 renderer 已實作，Python72/72、native5/5
-通過；六筆字幕、兩種解析度與超過15分鐘的實際合成活動已有證據。
-依使用者指示暫緩其餘長測、完整啟閉輪次及全螢幕驗證，狀態為
-**PASS WITH LIMITATIONS；Gate 尚未完整通過，P6 未授權**。
-詳見 [P5.1 實作及驗證報告](reports/P5_1_PERSISTENT_RENDERER.md)。
+## 聲明
 
-後續已重新授權 event-driven validation，取代時間型 soak：兩次短啟閉覆蓋
-800×600／1600×1200，另加必要 lifecycle／fullscreen smoke。
-目前兩個解析度的 final-build 正常退出及清理皆通過，Python78/78、native5/5
-通過；剩餘本輪第二次字幕重現及 fullscreen lifecycle smoke 受桌面連線失效
-阻擋。本機測試資源與設定已還原；時間型 soak 不再是待補項。
-完整事件矩陣通過前，仍不將 P5.1 列為完整 PASS，也不執行 P6。
-
-初始批次狀態（2026-10-29）：P0～P2 **PASS WITH LIMITATIONS**。
-英文 `text.flx` 未修改往返為 **BYTE-PERFECT PASS**，獨立遊戲副本的開場
-runtime 冒煙測試通過。後續 P3 已完成單筆 ASCII／BMP 診斷：ASCII `TEST!!`
-正常顯示；U+4E2D「中」顯示錯誤符號，分類為 **ENCODING / MAPPING FAILURE**。
-該 P3 批次依停止條件未執行 changed-length runtime 測試，也未進入 P4。
-私人副本已還原。
-詳見 [P0](reports/P0_PRECHECK.md)、[P1](reports/P1_ASSET_INVENTORY.md)、
-[P2](reports/P2_ROUNDTRIP_DIFF.md)、[P3 報告](reports/P3_FIRST_CHT_POC.md)。
-
-P4-C2 已於 2026-10-30 完成：`WideCharToMultiByte(CP_ACP)` 的容量不足問題，
-以及後續將 `A4 A4` 分別做 byte-width／bitmap lookup 的路徑均已確認。
-詳見 [P4 報告](reports/P4_RENDER_PATH.md)。私人資源副本已還原，追蹤工具
-會檢查已驗證的視窗模式設定。
-
-P5-0 已完成 **JP CJK PATH CONFIRMED（靜態）**：固定版 Octodiff 在保留
-hash validation 下接受現有英文 basis，於忽略目錄重建日文執行檔。已定位
-容量查詢、Shift-JIS 配對、GDI 字形快取及原生 bitmap 分流；分類為 J2，
-不能只改 CP932→CP950。該批次未啟動日文執行檔、下載語言包或實作 renderer。
-詳見 [重建報告](reports/P5_JP_PATCH_RECONSTRUCTION.md)、
-[差異報告](reports/P5_JP_BINARY_DIFF.md)、
-[CJK 機制](docs/research/U9_JP_CJK_IMPLEMENTATION.md)。
-
-需要 Python 3.12 以上與 Git。工具使用 Python 標準函式庫及一份附 MIT 授權的
-TITAN reader 原始碼，不需安裝 TITAN 的其他套件。
-
-```powershell
-python -m unittest discover -s tests -v
-# 先在目前終端設定 U9_GAME_DIR 為合法安裝資料夾，再執行：
-python scripts/preflight.py --baseline reports/P0_HASHES.json --output .local/preflight-new.json
-python -m u9cht inspect "$env:U9_GAME_DIR/static/text.flx"
-python -m u9cht text export "$env:U9_GAME_DIR/static/text.flx" --output .local/working/text-new.json
-python -m u9cht text import "$env:U9_GAME_DIR/static/text.flx" --input .local/working/text-new.json --output .local/output/text-new.flx
-python -m u9cht verify-roundtrip "$env:U9_GAME_DIR/static/text.flx" .local/output/text-new.flx
-```
-
-也可使用 `--game-dir` 指定路徑。預設輸出 `.local/preflight.json`；重跑請以
-`--output .local/preflight-next.json` 指定新檔，工具拒絕覆寫既有檔案。
-輸出僅包含相對檔名、大小、SHA-256 與狀態，不匯出遊戲文字。
-未設定路徑、未提供基準或雜湊不同時，preflight 回傳碼為 **2（BLOCKED）**。
-指定的本機基準匹配時回傳 0；這只證明檔案與本批次相同，不認證官方修補版本。
-實際 patch 名稱目前 UNKNOWN；請勿直接推定為 1.19f／1.19h。
-未設定 `U9_GAME_DIR` 時，測試套件會明確略過本機素材整合測試。
-
-遊戲與研究素材留在外部安裝路徑或 `.local/`、`game/`、`oracle/`、
-`research-private/`、`private-data/`。以上目錄及本機設定均已忽略。
-`config.example.json` 只示範欄位，檢查工具目前只讀取 CLI／環境變數。
-請勿提交官方資源、完整抽取文字或含本機絕對路徑的設定。
-
-上游採 **固定 commit 的本機參考 clone**，只 vendor 一份 MIT container reader，
-保留原文授權。writer 另加保留原始佈局的實作與測試，不安裝整套依賴。
-版本與重現方式見 [上游參考](docs/research/reference-projects.md)。
+本專案是玩家自製的非官方中文化，與 Electronic Arts、Origin Systems、GOG、Valve 無關。Ultima 為 Electronic Arts 的商標。請使用正版遊戲。
