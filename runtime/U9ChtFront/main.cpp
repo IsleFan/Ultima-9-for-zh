@@ -479,6 +479,11 @@ std::wstring system_text() {
     return out;
 }
 std::string read_text(const fs::path& p) { std::string s; read_bytes(p, s); return s; }
+std::wstring widen_ascii(const std::string& s) {
+    std::wstring out;
+    for (const char c : s) out += (c > 0x20 && c < 0x7F) ? wchar_t(c) : L'?';
+    return out.substr(0, 40);
+}
 fs::path profile_folder() {
     wchar_t buf[MAX_PATH]{};
     const DWORD n = GetEnvironmentVariableW(L"USERPROFILE", buf, MAX_PATH);
@@ -488,9 +493,15 @@ fs::path profile_folder() {
 fs::path make_report(const fs::path& log, const fs::path& err, const report::Session& s) {
     std::error_code ec;
     const std::vector<fs::path> folders{app.s.game_dir, app.base, app.data, app.runtime, profile_folder()};
+    // What the game ran with: the size in Options.ini and presentation= in dxcfg.ini (both written at start).
+    const auto size = game_resolution(app.s.game_dir);
+    std::string presentation = read_text(fs::path(app.s.game_dir) / L"dxcfg.ini");
+    if (const auto at = presentation.find("presentation="); at != std::string::npos) {
+        presentation = presentation.substr(at + 13, presentation.find_first_of("\r\n", at) - at - 13);
+    } else presentation = "?";
     std::wstring env = L"中文化版本：" + version_text() + L"\r\n遊戲版本：" + (app.edition.empty() ? L"不明" : app.edition) +
-        L"\r\n解析度：" + (app.s.width ? std::to_wstring(app.s.width) + L"×" + std::to_wstring(app.s.height) : std::wstring(L"沿用遊戲設定")) +
-        (app.s.windowed ? L"，視窗化" : L"，全螢幕") + L"\r\n系統：" + system_text() + L"\r\n";
+        L"\r\n解析度：" + (size.width ? std::to_wstring(size.width) + L"×" + std::to_wstring(size.height) : std::wstring(L"不明")) +
+        L"，presentation=" + widen_ascii(presentation) + L"\r\n系統：" + system_text() + L"\r\n";
     if (s.crashed) env += L"這次遊戲：異常結束，結束代碼 " + std::to_wstring(s.exit_code) +
                           (s.where.empty() ? L"" : L"，位置 " + std::wstring(s.where.begin(), s.where.end())) + L"\r\n";
     std::string features;
