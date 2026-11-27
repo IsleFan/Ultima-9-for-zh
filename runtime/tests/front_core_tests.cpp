@@ -325,6 +325,12 @@ int main() {
         const auto t = rp::trimmed_log(log);
         check(t.find("glyph_cache_warm") == std::string::npos && t.find("Hello") == std::string::npos &&
               t.find("\"head\":\"\"") != std::string::npos && t.find("translation_flag") != std::string::npos, "trimmed log");
+        {   // a long array becomes "<omitted>", short values stay
+            const std::string big = "{\"event\":\"runtime_counters\",\"frames\":5,\"entries\":[" + std::string(1200, '1') +
+                                    "],\"texture\":{\"a\":[1,2]},\"s\":\"x]\"}\r\n";
+            check(rp::trimmed_log(big) == "{\"event\":\"runtime_counters\",\"frames\":5,\"entries\":\"<omitted>\",\"texture\":{\"a\":[1,2]},\"s\":\"x]\"}\r\n",
+                  "big values omitted");
+        }
         check(rp::scrub("a C:\\\\Games\\\\U9\\\\static b C:\\Games\\U9 c", {fs::path(L"C:\\Games\\U9")}) == "a <folder>\\\\static b <folder> c", "scrub");
         check(rp::flags_text(s).find("text.flx:12\t") != std::string::npos, "flags text");
         const auto zip = root / L"report.zip";

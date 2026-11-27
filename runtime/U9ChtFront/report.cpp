@@ -48,6 +48,22 @@ void empty_field(std::string& line, const char* name) {
         line.erase(start, end - start);
     }
 }
+// Arrays and objects longer than `limit` characters (the per-plan statistics of runtime_counters) become
+// "<omitted>"; the line stays valid JSON.
+void omit_big_values(std::string& line, size_t limit) {
+    for (size_t i = 1; i < line.size(); ++i) {
+        if (line[i] == '"') { const auto e = string_end(line, i + 1); if (e == std::string::npos) return; i = e; continue; }
+        if ((line[i] != '[' && line[i] != '{') || line[i - 1] != ':') continue;
+        int depth = 0; size_t j = i;
+        for (; j < line.size(); ++j) {
+            if (line[j] == '"') { const auto e = string_end(line, j + 1); if (e == std::string::npos) return; j = e; continue; }
+            if (line[j] == '[' || line[j] == '{') ++depth;
+            else if ((line[j] == ']' || line[j] == '}') && --depth == 0) break;
+        }
+        if (j >= line.size()) return;
+        if (j - i + 1 > limit) line.replace(i, j - i + 1, "\"<omitted>\"");
+    }
+}
 template <class F> void each_line(const std::string& text, F f) {
     size_t at = 0;
     while (at < text.size()) {
@@ -96,6 +112,7 @@ std::string trimmed_log(const std::string& jsonl) {
         if (line.empty() || has(line, "\"event\":\"glyph_cache_warm\"")) return;
         if (has(line, "\"event\":\"flow_text\"") || has(line, "\"event\":\"book_flow\"")) empty_field(line, "head");
         if (has(line, "\"event\":\"file_probe\"")) empty_field(line, "name");
+        if (line.size() > 1000) omit_big_values(line, 1000);
         out += line; out += "\r\n";
     });
     return out;
