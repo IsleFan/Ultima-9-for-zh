@@ -11,12 +11,12 @@
 **宣傳稿**：`.local/release/promo-1.0.0/`（`PROMO.md`：兩篇 FB 貼文、YouTube 標題／說明欄／分鏡；`cues.txt` → `U9CHT-1.0.0-字幕.srt`，65 句、10 分鐘、無旁白）。使用者還沒發文、還沒錄影片。
 
 **這一波（2026-11-24～27）做完的事**，細節見第 3k 節：
-- Mac：夥伴范綱維用 Wine 實測可以跑；合併他的 PR #1（macOS Wine 影片黑畫面、舊版 Wine 的 `CopyFile2`）；Mac 說明改推薦 Sikarugir Wine 10.0。
+- Mac：夥伴范剛維用 Wine 實測可以跑；合併他的 PR #1（macOS Wine 影片黑畫面、舊版 Wine 的 `CopyFile2`）；Mac 說明改推薦 Sikarugir Wine 10.0。
 - 首頁安卡圖示；「叫出按鍵設定頁」的鍵可以自訂（預設 Ctrl+Shift+K）。
 - **中文路標**：9 塊地名牌（Asylum 保留英文）。runtime 新增 `CreateFileA` hook（使用者授權），遊戲開 `bitmap16.flx` 時改開 `data\redirect\` 的中文版；首頁第一次開始遊戲時從玩家原檔產生，發布包只有文字圖層（`U9CS` 差異檔）。
 - **回報功能**：遊戲中按 Ctrl+Shift+T 標記畫面上的翻譯；閃退或標記後，首頁整理成 `logs\回報-….zip` 並開 GitHub 回報表單（`.github/ISSUE_TEMPLATE`）。
 - 第一次開始時顯示「正在產生」；回報檔的解析度改讀遊戲實際設定。
-- 版本號改成 **1.0.0**；新的 README（含致謝范綱維）；**MIT 授權**（`LICENSE`）。
+- 版本號改成 **1.0.0**；新的 README（含致謝范剛維）；**MIT 授權**（`LICENSE`）。
 - 調查：長時間遊玩偶發閃退（未解，見 `docs/research/U9_KNOWN_ISSUES.md` 第 4 節）；視窗模式拖不動視窗（第 5 節，只記錄）。
 
 **下一個對話**：先問使用者有沒有玩家回報（Issues）。有閃退回報檔就整理共同點；沒有的話問要做什麼。
@@ -362,7 +362,7 @@
 ### 3k. Mac、路標、回報功能與 1.0.0 發布（2026-11-24～27）
 
 **Mac**（第 7 節）
-- 夥伴**范綱維**（GitHub `IsleFan`）在 Mac M1、macOS 27 用 Wine 實測：可以跑，效能不佳（原版也一樣）。
+- 夥伴**范剛維**（GitHub `IsleFan`）在 Mac M1、macOS 27 用 Wine 實測：可以跑，效能不佳（原版也一樣）。
 - PR #1 已合併（`f4b73ec`）：macOS Wine 下影片改用擁有者彈出視窗；`copy_verified` 改用 `CopyFileW`。Windows 上驗證過（0.1.2）。
 - `docs/release/MAC_TEST_GUIDE.md` 改推薦 Sikarugir Wine 10.0（`a109309`）；幾個選單名稱標「待確認」。
 
@@ -535,7 +535,7 @@
 
 ## 7. Mac 版（可以用 Wine 執行，2026-11-27）
 
-**現況**：夥伴范綱維在 Mac M1（macOS 27）用 Wine 實測可以玩，效能不佳但原版也一樣。PR #1 的兩個修正已在 1.0.0。
+**現況**：夥伴范剛維在 Mac M1（macOS 27）用 Wine 實測可以玩，效能不佳但原版也一樣。PR #1 的兩個修正已在 1.0.0。
 建議用 **Sikarugir Wine 10.0**：官方 Wine 在 Apple 晶片上約一半機率隨機當機（原版也會，WineHQ bug 60494）。
 說明 `docs/release/MAC_TEST_GUIDE.md` 已改成 Sikarugir，但 Sikarugir 的選單名稱標了「待確認」，要請夥伴核對。CrossOver、Intel Mac 沒人試過。
 

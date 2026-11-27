@@ -90,7 +90,7 @@ python -m unittest discover -s tests
 
 ## 致謝
 
-- **范綱維**：在 Mac 上實機測試中文化，找出並修正了 macOS 版 Wine 上影片黑畫面、舊版 Wine 無法開始遊戲的問題（[#1](https://github.com/pmanyeh/Ultima-9-for-zh/pull/1)），也整理了 Apple 晶片上各版本 Wine 的穩定度，讓 Mac 玩家也能玩到中文版。
+- **范剛維**：在 Mac 上實機測試中文化，找出並修正了 macOS 版 Wine 上影片黑畫面、舊版 Wine 無法開始遊戲的問題（[#1](https://github.com/pmanyeh/Ultima-9-for-zh/pull/1)），也整理了 Apple 晶片上各版本 Wine 的穩定度，讓 Mac 玩家也能玩到中文版。
 - [tgwUltima／TITAN](https://github.com/theGreyWanderer-uc/tgwUltima)（theGreyWanderer）：FLX 格式的研究與讀取程式（MIT 授權）。同作者的 [tgwUltima9GL](https://github.com/theGreyWanderer-uc/tgwUltima9GL) 是遊戲程式位址、原版問題與貼圖格式的參考（只參考，未使用其程式碼）。
 - 字型：[jf open 粉圓](https://github.com/justfont/open-huninn-font)（justfont），路標使用 Noto Sans TC（Google），皆為 SIL Open Font License 1.1。
 - 所有回報問題、幫忙校稿的玩家。
