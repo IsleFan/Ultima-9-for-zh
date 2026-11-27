@@ -5,7 +5,7 @@ The release holds no game file and nothing that carries the game's English text:
   data/build-manifest.json, data/runtime/allowlist.u9ct, data/runtime/movies.tsv   (--build)
   data/patches/<name>.u9cp   made here from the local originals (--game-dir) and the built FLX
   data/patches/bitmap16.u9cs the signpost text layers (translation/textures/signposts) and the hashes to check
-  fonts/<font> and its license, 說明.txt, THIRD_PARTY_NOTICES.md
+  fonts/<font> and its license, 說明.txt, THIRD_PARTY_NOTICES.md, LICENSE.txt
 Every patch is applied again and must give the built file. The folder is then scanned: no FLX, no local path,
 no 16+ character Latin run in any patch's added bytes. Output goes under .local/ only (it is never tracked).
 """
@@ -110,6 +110,7 @@ def main(argv=None):
     shutil.copy2(ROOT / "release" / "jf-openhuninn-LICENSE.txt", folder / "fonts" / "jf-openhuninn-LICENSE.txt")
     shutil.copy2(ROOT / "release" / "說明.txt", folder / "說明.txt")
     shutil.copy2(ROOT / "THIRD_PARTY_NOTICES.md", folder / "THIRD_PARTY_NOTICES.md")
+    shutil.copy2(ROOT / "LICENSE", folder / "LICENSE.txt")
 
     # Scans of the finished folder.
     local_path = re.compile(rb"[A-Za-z]:\\\\?(?:Users|git|Program Files)|/Users/|\.local[\\/]", re.I)

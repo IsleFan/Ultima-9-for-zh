@@ -28,6 +28,7 @@ Contents of a release:
 | `fonts/jf-openhuninn-2.1.ttf`, `fonts/jf-openhuninn-LICENSE.txt` | jf open huninn 2.1 (OFL 1.1) |
 | `說明.txt` | `release/說明.txt` |
 | `THIRD_PARTY_NOTICES.md` | repository |
+| `LICENSE.txt` | `LICENSE` (MIT) |
 
 The front page writes `u9cht.ini`, `front.ini`, `logs/`, `backup/`, `data/static/` and `data/redirect/` (the signpost copy of
 `bitmap16.flx`, about 320 MB) beside itself at run time.
